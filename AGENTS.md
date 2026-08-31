@@ -69,6 +69,41 @@ subject needs an unavailable capability, fail with the capability name.
 Run each scenario in a fresh process until tests prove that the selected viewer
 can reset every relevant singleton and callback registry.
 
+## Use the newest C++ supported by the selected fork
+
+Read the selected fork's `CMAKE_CXX_STANDARD` before writing C++. Alchemy
+currently requires C++20. Use C++20 language and library features in Alchemy
+code when its supported compilers and standard libraries implement them. A fork
+that enables a newer standard may use that standard in its adapter and binary.
+
+Do not preserve C++11 or C++14 patterns in new code. Prefer standard-library
+types and algorithms over local replacements. Useful C++20 tools include
+`std::span`, `std::string_view`, `std::optional`, `std::variant`, scoped enums,
+ranges, concepts, structured bindings, designated initializers, `constexpr`,
+and `[[nodiscard]]`.
+
+Use RAII and value semantics. A raw pointer may express a non-owning reference
+when that matches the surrounding viewer API. Do not use raw `new` or `delete`
+for ownership. Keep fork-specific ownership types such as `LLPointer` when the
+production API requires them; do not wrap them in a second smart pointer.
+
+Model finite states with scoped enums or variants instead of groups of Boolean
+flags. Give semantically different identifiers different types when confusing
+them would produce a valid but wrong call. Parse JSON, command-line values, and
+environment variables once at the process boundary, then pass typed values.
+Handle every state variant explicitly. Do not use a cast, nullable fallback, or
+default branch only to silence the compiler.
+
+Use `auto` when the initializer makes the type clear or when an iterator type
+would obscure the operation. Spell out domain types when the type carries
+meaning for the reader. Follow the selected fork's local formatting and naming
+style in adapter code.
+
+Do not raise a fork's global language level as a side effect of lab work. If a
+needed standard feature is unavailable on one supported platform, either choose
+an equally clear supported feature or make the language-level change a separate
+viewer decision with its own build verification.
+
 ## Use the selected fork's build driver
 
 Never assume that all forks use Alchemy's commands. Read the `buildDriver` and

@@ -28,6 +28,7 @@ REQUIRED_AGENT_TEXT = (
     "forks.json",
     "python3 tools/check.py",
     ".gwigz/remote-build",
+    "CMAKE_CXX_STANDARD",
     "Do not push",
 )
 FORK_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_-]*$")
