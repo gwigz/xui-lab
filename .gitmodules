@@ -1,0 +1,3 @@
+[submodule "viewers/alchemy"]
+	path = viewers/alchemy
+	url = https://github.com/AlchemyViewer/Alchemy.git

@@ -1,0 +1,18 @@
+{
+  "$schema": "schemas/forks.schema.json",
+  "schemaVersion": 1,
+  "defaultFork": "alchemy",
+  "forks": [
+    {
+      "id": "alchemy",
+      "displayName": "Alchemy",
+      "source": {
+        "type": "submodule",
+        "path": "viewers/alchemy"
+      },
+      "adapter": "adapters/alchemy",
+      "buildDriver": "gwigz",
+      "resourceRoot": "indra/newview"
+    }
+  ]
+}
