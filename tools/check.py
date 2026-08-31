@@ -23,6 +23,13 @@ REQUIRED_SPEC_HEADINGS = (
     "## Out of Scope",
     "## Further Notes",
 )
+REQUIRED_AGENT_TEXT = (
+    "SPEC.md",
+    "forks.json",
+    "python3 tools/check.py",
+    ".gwigz/remote-build",
+    "Do not push",
+)
 FORK_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_-]*$")
 ROOT_KEYS = {"$schema", "schemaVersion", "defaultFork", "forks"}
 FORK_KEYS = {
@@ -180,6 +187,19 @@ def check_spec() -> None:
         raise CheckError("SPEC.md must contain at least 20 formatted user stories")
 
 
+def check_agent_guidance() -> None:
+    guidance_path = REPO_ROOT / "AGENTS.md"
+    try:
+        text = guidance_path.read_text()
+    except OSError as error:
+        raise CheckError(f"cannot read {guidance_path.name}: {error}") from error
+    missing = [value for value in REQUIRED_AGENT_TEXT if value not in text]
+    if missing:
+        raise CheckError(
+            f"AGENTS.md is missing required guidance: {', '.join(missing)}"
+        )
+
+
 def check_fork(fork: Fork, source: Path, submodule_paths: set[Path], overridden: bool) -> None:
     if not fork.adapter_path.is_dir():
         raise CheckError(f"adapter directory is missing for {fork.id}")
@@ -218,6 +238,7 @@ def main() -> int:
         overrides = parse_overrides(args.viewer_source, {fork.id for fork in forks})
         submodule_paths = load_submodule_paths()
         check_spec()
+        check_agent_guidance()
         for fork in forks:
             check_fork(
                 fork,

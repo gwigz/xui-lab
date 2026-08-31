@@ -34,6 +34,7 @@ or the submodule commit.
 
 ## Repository contents
 
+- `AGENTS.md` defines the working rules for local and remote coding agents.
 - `forks.json` lists the supported viewer forks and their build adapters.
 - `schemas/forks.schema.json` defines the fork manifest format.
 - `adapters/` contains the fork-specific build and runtime contracts.
