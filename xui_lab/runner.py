@@ -100,12 +100,27 @@ class ScenarioRunner:
             initialize_result = hello.get("result")
             if not isinstance(initialize_result, dict):
                 raise RuntimeFailure("initialize response result must be an object")
-            capabilities = initialize_result.get("capabilities")
-            if not isinstance(capabilities, list) or any(not isinstance(value, str) for value in capabilities):
-                raise RuntimeFailure("initialize response has invalid capabilities")
-            missing = sorted(str(value) for value in scenario.required_capabilities - set(capabilities))
+            supported = initialize_result.get("supportedCapabilities")
+            if not isinstance(supported, list) or any(not isinstance(value, str) for value in supported):
+                raise RuntimeFailure("initialize response has invalid supportedCapabilities")
+            missing = sorted(str(value) for value in scenario.required_capabilities - set(supported))
             if missing:
                 raise CapabilityError(f"runtime is missing capabilities: {', '.join(missing)}")
+            install = {"op": "installCapabilities", "capabilities": sorted(scenario.required_capabilities)}
+            installed_response = runtime.request(install)
+            trace.append({"command": install, "response": installed_response})
+            installed_result = installed_response.get("result")
+            if not isinstance(installed_result, dict):
+                raise RuntimeFailure("installCapabilities response result must be an object")
+            capabilities = installed_result.get("capabilities")
+            event_apis = installed_result.get("eventApis")
+            if not isinstance(capabilities, list) or any(not isinstance(value, str) for value in capabilities):
+                raise RuntimeFailure("installCapabilities response has invalid capabilities")
+            if not isinstance(event_apis, dict):
+                raise RuntimeFailure("installCapabilities response has invalid eventApis")
+            missing = sorted(str(value) for value in scenario.required_capabilities - set(capabilities))
+            if missing:
+                raise CapabilityError(f"runtime did not install capabilities: {', '.join(missing)}")
             for index, step in enumerate(scenario.steps):
                 if isinstance(step, AssertionStep):
                     check_assertion(step, saved)

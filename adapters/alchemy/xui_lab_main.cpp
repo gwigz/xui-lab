@@ -11,6 +11,7 @@
 #include "lldir.h"
 #include "llerrorcontrol.h"
 #include "lleventapi.h"
+#include "llevents.h"
 #include "llfloater.h"
 #include "llfloaterreg.h"
 #include "llfontfreetype.h"
@@ -30,6 +31,7 @@
 #include "llinventorymodel.h"
 #include "llinventoryobserver.h"
 #include "llinventorypanel.h"
+#include "llkeyboard.h"
 #include "lllayoutstack.h"
 #include "llmenugl.h"
 #include "llnotifications.h"
@@ -37,6 +39,7 @@
 #include "llrender.h"
 #include "llrender2dutils.h"
 #include "llsdjson.h"
+#include "llsdutil.h"
 #include "llshadermgr.h"
 #include "lltrans.h"
 #include "lltransutil.h"
@@ -55,6 +58,7 @@
 #include "llwearabletype.h"
 #include "llwindow.h"
 #include "llwindowcallbacks.h"
+#include "llwindowlistener.h"
 #include "llxmlnode.h"
 
 #include <algorithm>
@@ -293,8 +297,64 @@ public:
 
     LLWindow* get() const noexcept { return mWindow; }
 
+    void setRoot(LLView* root) noexcept { mRoot = root; }
+
+    bool handleMouseDown(LLWindow*, LLCoordGL position, MASK mask) override
+    {
+        setMousePosition(position);
+        return mRoot->handleMouseDown(position.mX, position.mY, mask);
+    }
+
+    bool handleMouseUp(LLWindow*, LLCoordGL position, MASK mask) override
+    {
+        setMousePosition(position);
+        return mRoot->handleMouseUp(position.mX, position.mY, mask);
+    }
+
+    bool handleRightMouseDown(LLWindow*, LLCoordGL position, MASK mask) override
+    {
+        setMousePosition(position);
+        return mRoot->handleRightMouseDown(position.mX, position.mY, mask);
+    }
+
+    bool handleRightMouseUp(LLWindow*, LLCoordGL position, MASK mask) override
+    {
+        setMousePosition(position);
+        return mRoot->handleRightMouseUp(position.mX, position.mY, mask);
+    }
+
+    bool handleMiddleMouseDown(LLWindow*, LLCoordGL position, MASK mask) override
+    {
+        setMousePosition(position);
+        return mRoot->handleMiddleMouseDown(position.mX, position.mY, mask);
+    }
+
+    bool handleMiddleMouseUp(LLWindow*, LLCoordGL position, MASK mask) override
+    {
+        setMousePosition(position);
+        return mRoot->handleMiddleMouseUp(position.mX, position.mY, mask);
+    }
+
+    bool handleDoubleClick(LLWindow*, LLCoordGL position, MASK mask) override
+    {
+        setMousePosition(position);
+        return mRoot->handleDoubleClick(position.mX, position.mY, mask);
+    }
+
+    void handleMouseMove(LLWindow*, LLCoordGL position, MASK mask) override
+    {
+        setMousePosition(position);
+        mRoot->handleHover(position.mX, position.mY, mask);
+    }
+
 private:
+    void setMousePosition(LLCoordGL position)
+    {
+        LLUI::getInstance()->setMousePositionScreen(position.mX, position.mY);
+    }
+
     LLWindow* mWindow = nullptr;
+    LLView* mRoot = nullptr;
 };
 
 void addFolderState(LLSD& node, LLFolderViewItem* item)
@@ -377,29 +437,69 @@ LLSD buildTree(LLView* view)
     return node;
 }
 
-class Runtime final
+LLSD callEventApi(std::string_view api_name, const LLSD& command)
+{
+    LLEventStream reply_pump("xui-lab-event-reply", true);
+    LLSD reply;
+    bool received = false;
+    LLTempBoundListener connection = reply_pump.listen(
+        "capture", [&reply, &received](const LLSD& event)
+        {
+            reply = event;
+            received = true;
+            return true;
+        });
+
+    LLSD request = command;
+    request["reply"] = reply_pump.getName();
+    LLEventPumps::instance().obtain(std::string(api_name)).post(request);
+    if (!received)
+    {
+        throw LabError("event_api", "event API did not reply: " + std::string(api_name));
+    }
+    if (reply["error"].isDefined())
+    {
+        throw LabError("event_api", reply["error"].asString());
+    }
+    return reply;
+}
+
+void postEventApi(std::string_view api_name, const LLSD& command)
+{
+    LLEventPumps::instance().obtain(std::string(api_name)).post(command);
+}
+
+class Runtime final : public LLEventAPI
 {
 public:
-    ~Runtime() { shutdown(); }
-
-    LLSD dispatch(const LLSD& command)
+    Runtime()
+        : LLEventAPI("XUILab", "Lifecycle operations for the standalone production UI host")
     {
-        const std::string op = command["op"].asString();
-        if (op == "initialize") return initialize(command);
-        requireInitialized();
-        if (op == "frames") return advanceFrames(command["count"].asInteger());
-        if (op == "stable") return stabilize(command);
-        if (op == "query") return query(command);
-        if (op == "input") return input(command);
-        if (op == "capture") return capture(command);
-        if (op == "diagnostics") return diagnostics();
-        if (op == "shutdown")
-        {
-            mDone = true;
-            return LLSDMap("shutdown", true);
-        }
-        throw LabError("unsupported_operation", "operation is not in the proven runtime slice: " + op);
+        add("initialize", "Initialize the selected fork, resources, window, and subject.",
+            &Runtime::initialize);
+        add("installCapabilities", "Install the capabilities requested by the scenario.",
+            &Runtime::installCapabilities);
+        add("frames", "Advance an exact number of UI frames.",
+            [this](const LLSD& command) { requireInitialized(); return advanceFrames(command["count"].asInteger()); });
+        add("stable", "Advance frames until the production UI tree stops changing.",
+            &Runtime::stabilize);
+        add("resize", "Resize the host viewport and production LLUI root.",
+            &Runtime::resize);
+        add("capture", "Capture the production UI framebuffer.",
+            &Runtime::capture);
+        add("reload", "Destroy and recreate the registered subject from source XUI.",
+            &Runtime::reload);
+        add("diagnostics", "Report runtime, subject, viewport, focus, and graphics state.",
+            [this](const LLSD&) { requireInitialized(); return diagnostics(); });
+        add("shutdown", "Acknowledge shutdown so the parent can collect the process.",
+            &Runtime::requestShutdown);
+        add("query", "Translate high-level inspection requests to production event APIs.",
+            &Runtime::query);
+        add("input", "Translate high-level input requests to the production LLWindow event API.",
+            &Runtime::input);
     }
+
+    ~Runtime() override { shutdown(); }
 
     bool done() const noexcept { return mDone; }
 
@@ -636,6 +736,14 @@ private:
         mInitialized = true;
         advanceFrames(2);
 
+        return LLSDMap("supportedCapabilities", supportedCapabilities())
+            ("fork", std::string(kFork))
+            ("forkCommit", std::string(kForkCommit))
+            ("subject", std::string(subjectName()));
+    }
+
+    LLSD supportedCapabilities() const
+    {
         LLSD capabilities = LLSD::emptyArray();
         capabilities.append("input");
         capabilities.append("inspection");
@@ -645,10 +753,35 @@ private:
             capabilities.append("agent_identity");
             capabilities.append("menus");
         }
-        return LLSDMap("capabilities", capabilities)
-            ("fork", std::string(kFork))
-            ("forkCommit", std::string(kForkCommit))
-            ("subject", std::string(subjectName()));
+        return capabilities;
+    }
+
+    LLSD installCapabilities(const LLSD& command)
+    {
+        requireInitialized();
+        const LLSD requested = command["capabilities"];
+        if (!requested.isArray())
+        {
+            throw LabError("capabilities", "capabilities must be an array");
+        }
+
+        std::set<std::string> supported;
+        for (const LLSD& capability : llsd::inArray(supportedCapabilities()))
+        {
+            supported.insert(capability.asString());
+        }
+        for (const LLSD& capability : llsd::inArray(requested))
+        {
+            if (!capability.isString() || !supported.contains(capability.asString()))
+            {
+                throw LabError("missing_capability", "subject does not support capability: " + capability.asString());
+            }
+            mCapabilities.insert(capability.asString());
+        }
+
+        LLSD installed = LLSD::emptyArray();
+        for (const std::string& capability : mCapabilities) installed.append(capability);
+        return LLSDMap("capabilities", installed)("eventApis", exposedEventApiMetadata());
     }
 
     void initializeUI()
@@ -725,6 +858,8 @@ private:
         root_params.follows.flags(FOLLOWS_ALL);
         mRoot = LLUICtrlFactory::create<LLPanel>(root_params);
         LLUI::getInstance()->setRootView(mRoot);
+        mWindow->setRoot(mRoot);
+        mWindowListener = std::make_unique<LLWindowListener>(mWindow.get(), []() { return gKeyboard; });
 
         LLFloaterView::Params floater_view_params;
         floater_view_params.name("Floater View");
@@ -755,7 +890,10 @@ private:
                 "inventory_explorer", "floater_al_inventory_explorer.xml",
                 &LLFloaterReg::build<ALFloaterInventoryExplorer>);
         }
-        mFloater = LLFloaterReg::showInstance(std::string(subjectName()), LLSD(), true);
+        postEventApi(
+            "LLFloaterReg",
+            LLSDMap("op", "showInstance")("name", std::string(subjectName()))("focus", true));
+        mFloater = LLFloaterReg::findInstance(std::string(subjectName()));
         if (!mFloater) throw LabError("subject", "registered floater failed to instantiate: " + std::string(subjectName()));
         mFloater->center();
     }
@@ -803,6 +941,7 @@ private:
 
     LLSD stabilize(const LLSD& command)
     {
+        requireInitialized();
         const S32 required = command["consecutiveFrames"].asInteger();
         const S32 maximum = command["maximumFrames"].asInteger();
         if (required <= 0 || maximum < required) throw LabError("stable", "invalid stabilization frame counts");
@@ -812,7 +951,8 @@ private:
         for (S32 frame = 1; frame <= maximum; ++frame)
         {
             renderFrame(true);
-            const std::string current = LlsdToJson(buildTree(mRoot));
+            const std::string current = LlsdToJson(
+                callEventApi("LLWindow", LLSDMap("op", "getSubtree")));
             consecutive = current == previous ? consecutive + 1 : 1;
             previous = current;
             if (consecutive >= required) return LLSDMap("stable", true)("frames", frame);
@@ -820,11 +960,62 @@ private:
         return LLSDMap("stable", false)("frames", maximum);
     }
 
+    LLSD resize(const LLSD& command)
+    {
+        requireInitialized();
+        const S32 width = command["width"].asInteger();
+        const S32 height = command["height"].asInteger();
+        const F64 ui_scale = command.has("uiScale") ? command["uiScale"].asReal() : mUIScale;
+        if (width <= 0 || height <= 0 || ui_scale <= 0.0)
+        {
+            throw LabError("viewport", "resize width, height, and uiScale must be positive");
+        }
+
+        mWidth = width;
+        mHeight = height;
+        mUIScale = ui_scale;
+        LLUI::setScaleFactor(LLVector2(static_cast<F32>(mUIScale), static_cast<F32>(mUIScale)));
+        mWindow->get()->setSize(LLCoordWindow(mWidth, mHeight));
+        mRoot->reshape(ll_round(mWidth / mUIScale), ll_round(mHeight / mUIScale));
+        renderFrame(true);
+        return diagnostics()["viewport"];
+    }
+
+    LLSD reload(const LLSD&)
+    {
+        requireInitialized();
+        gFocusMgr.setKeyboardFocus(nullptr);
+        postEventApi(
+            "LLFloaterReg",
+            LLSDMap("op", "hideInstance")("name", std::string(subjectName())));
+        mFloater = nullptr;
+        LLFloaterReg::destroyInstance(std::string(subjectName()));
+        postEventApi(
+            "LLFloaterReg",
+            LLSDMap("op", "showInstance")("name", std::string(subjectName()))("focus", true));
+        mFloater = LLFloaterReg::findInstance(std::string(subjectName()));
+        if (!mFloater)
+        {
+            throw LabError("subject", "registered floater failed to reload: " + std::string(subjectName()));
+        }
+        mFloater->center();
+        advanceFrames(2);
+        return LLSDMap("subject", std::string(subjectName()))("view", mFloater->getInfo());
+    }
+
+    LLSD requestShutdown(const LLSD&)
+    {
+        mDone = true;
+        return LLSDMap("shutdown", true);
+    }
+
     LLSD query(const LLSD& command)
     {
+        requireInitialized();
         const std::string kind = command["kind"].asString();
         if (kind == "menus")
         {
+            requireCapability("menus");
             LLSD result = LLSDMap("visible", gMenuHolder && gMenuHolder->hasVisibleMenu());
             LLSD menus = LLSD::emptyArray();
             if (gMenuHolder)
@@ -843,10 +1034,7 @@ private:
         }
         if (kind == "inventory")
         {
-            if (mSubject != Subject::InventoryExplorer)
-            {
-                throw LabError("missing_capability", "inventory_model is unavailable for this subject");
-            }
+            requireCapability("inventory_model");
             LLSD objects = LLSD::emptyArray();
             for (const LLUUID& id : mFixtureObjectIds)
             {
@@ -878,10 +1066,17 @@ private:
                 ("itemCount", gInventory.getItemCount())
                 ("objects", objects);
         }
+        requireCapability("inspection");
+        if (kind == "value")
+        {
+            if (!command["path"].isString()) throw LabError("path", "control path must be a string");
+            return callEventApi(
+                "UI", LLSDMap("op", "getValue")("path", command["path"]));
+        }
         if (kind != "tree") throw LabError("query", "unsupported query kind: " + kind);
-        LLView* target = mRoot;
-        if (command.has("path")) target = resolveTarget(command);
-        return buildTree(target);
+        LLSD request = LLSDMap("op", "getSubtree");
+        if (command.has("path")) request["under"] = command["path"];
+        return callEventApi("LLWindow", request);
     }
 
     static LLSD describeView(LLView* view)
@@ -914,26 +1109,65 @@ private:
                 ("lluiHeight", llui_rect.getHeight())
                 ("uiScale", mUIScale))
             ("graphics", graphics)
-            ("eventApis", eventApiMetadata());
+            ("eventApis", exposedEventApiMetadata());
     }
 
-    static LLSD eventApiMetadata()
+    [[nodiscard]] bool hasCapability(std::string_view capability) const
+    {
+        return mCapabilities.contains(std::string(capability));
+    }
+
+    void requireCapability(std::string_view capability) const
+    {
+        if (!hasCapability(capability))
+        {
+            throw LabError(
+                "missing_capability", "operation requires installed capability: " + std::string(capability));
+        }
+    }
+
+    static void addEventApiMetadata(
+        LLSD& result, std::string_view api_name, std::initializer_list<std::string_view> allowed_operations)
+    {
+        const auto api = LLEventAPI::getInstance(std::string(api_name));
+        if (!api) return;
+
+        LLSD operations = result.has(std::string(api_name))
+            ? result[std::string(api_name)]["operations"]
+            : LLSD::emptyArray();
+        for (const std::string_view operation_name : allowed_operations)
+        {
+            LLSD operation = api->getMetadata(std::string(operation_name));
+            if (operation.isDefined()) operations.append(operation);
+        }
+        if (operations.size() == 0) return;
+        result[std::string(api_name)] = LLSDMap
+            ("description", api->getDesc())
+            ("dispatchKey", api->getDispatchKey())
+            ("operations", operations);
+    }
+
+    LLSD exposedEventApiMetadata() const
     {
         LLSD result = LLSD::emptyMap();
-        for (auto& api : LLEventAPI::instance_snapshot())
+        addEventApiMetadata(result, "XUILab", {
+            "initialize", "installCapabilities", "frames", "stable", "resize",
+            "capture", "reload", "diagnostics", "shutdown"});
+        addEventApiMetadata(result, "LLFloaterReg", {
+            "getBuildMap", "showInstance", "hideInstance", "toggleInstance",
+            "toggleInstanceOrBringToFront", "instanceVisible", "clickButton"});
+        if (hasCapability("inspection"))
         {
-            LLSD operations = LLSD::emptyArray();
-            for (const auto& [name, description] : api)
-            {
-                LLSD operation = api.getMetadata(name);
-                operation["name"] = name;
-                operation["description"] = description;
-                operations.append(operation);
-            }
-            result[api.getName()] = LLSDMap
-                ("description", api.getDesc())
-                ("dispatchKey", api.getDispatchKey())
-                ("operations", operations);
+            addEventApiMetadata(result, "XUILab", {"query"});
+            addEventApiMetadata(result, "LLWindow", {"getInfo", "getPaths", "getSubtree"});
+            addEventApiMetadata(result, "UI", {"getValue"});
+        }
+        if (hasCapability("input"))
+        {
+            addEventApiMetadata(result, "XUILab", {"input"});
+            addEventApiMetadata(result, "LLWindow", {
+                "mouseDown", "mouseDoubleClick", "mouseUp", "mouseMove", "mouseScroll"});
+            addEventApiMetadata(result, "UI", {"setSelectedByValue"});
         }
         return result;
     }
@@ -942,6 +1176,7 @@ private:
     {
         if (command.has("modelId"))
         {
+            requireCapability("inventory_model");
             const LLUUID id = requireUuid(command, "modelId", "input");
             LLFolderViewItem* fallback = nullptr;
             for (const std::string_view panel_name : inventoryPanelNames())
@@ -965,6 +1200,8 @@ private:
 
     LLSD input(const LLSD& command)
     {
+        requireInitialized();
+        requireCapability("input");
         const std::string event = command["event"].asString();
         if (event != "click" && event != "doubleClick")
         {
@@ -978,41 +1215,27 @@ private:
             throw LabError("input", "doubleClick supports only the left button");
         }
 
-        const LLRect rect = target->calcScreenRect();
-        const S32 target_screen_x = rect.getCenterX();
-        const S32 target_screen_y = rect.getCenterY();
-        LLUI::getInstance()->mWindow = mWindow->get();
-        LLUI::getInstance()->setMousePositionScreen(target_screen_x, target_screen_y);
-        S32 screen_x = 0;
-        S32 screen_y = 0;
-        LLUI::getInstance()->getMousePositionScreen(&screen_x, &screen_y);
-        S32 root_x = 0;
-        S32 root_y = 0;
-        mRoot->screenPointToLocal(screen_x, screen_y, &root_x, &root_y);
-        const bool down_handled = event == "doubleClick"
-            ? mRoot->handleDoubleClick(root_x, root_y, MASK_NONE)
-            : button == "left"
-                ? mRoot->handleMouseDown(root_x, root_y, MASK_NONE)
-                : mRoot->handleRightMouseDown(root_x, root_y, MASK_NONE);
+        const std::string path = target->getPathname();
+        const std::string production_button = button == "left" ? "LEFT" : "RIGHT";
+        const std::string down_operation = event == "doubleClick" ? "mouseDoubleClick" : "mouseDown";
+        const LLSD down = callEventApi(
+            "LLWindow", LLSDMap("op", down_operation)("button", production_button)("path", path));
         const bool menu_visible_after_down = gMenuHolder && gMenuHolder->hasVisibleMenu();
-        const bool up_handled = event == "doubleClick"
-            ? mRoot->handleMouseUp(root_x, root_y, MASK_NONE)
-            : button == "left"
-                ? mRoot->handleMouseUp(root_x, root_y, MASK_NONE)
-                : mRoot->handleRightMouseUp(root_x, root_y, MASK_NONE);
+        const LLSD up = callEventApi(
+            "LLWindow", LLSDMap("op", "mouseUp")("button", production_button)("path", path));
         renderFrame(true);
 
-        return LLSDMap("path", target->getPathname())
+        return LLSDMap("path", path)
             ("modelId", command["modelId"])
             ("event", event)
             ("button", button)
-            ("handled", down_handled || up_handled)
-            ("downHandled", down_handled)
-            ("upHandled", up_handled)
+            ("handled", down["handled"].asBoolean() || up["handled"].asBoolean())
+            ("downHandled", down["handled"])
+            ("upHandled", up["handled"])
             ("menuVisibleAfterDown", menu_visible_after_down)
             ("menuVisibleAfterUp", gMenuHolder && gMenuHolder->hasVisibleMenu())
-            ("screen", LLSDMap("x", screen_x)("y", screen_y))
-            ("targetScreen", LLSDMap("x", target_screen_x)("y", target_screen_y));
+            ("down", down)
+            ("up", up);
     }
 
     void drawHighlight(LLView* target)
@@ -1037,6 +1260,7 @@ private:
 
     LLSD capture(const LLSD& command)
     {
+        requireInitialized();
         std::filesystem::path path;
         if (command.has("path"))
         {
@@ -1110,7 +1334,10 @@ private:
     void shutdown()
     {
         if (!mInitialized) return;
-        LLFloaterReg::hideInstance(std::string(subjectName()));
+        postEventApi(
+            "LLFloaterReg",
+            LLSDMap("op", "hideInstance")("name", std::string(subjectName())));
+        mWindowListener.reset();
         LLUI::getInstance()->setRootView(nullptr);
         delete mRoot;
         mRoot = nullptr;
@@ -1142,6 +1369,7 @@ private:
     }
 
     std::unique_ptr<LabWindow> mWindow;
+    std::unique_ptr<LLWindowListener> mWindowListener;
     std::unique_ptr<LabShaderMgr> mShaderMgr;
     std::unique_ptr<LabImageProvider> mImages;
     LLPanel* mRoot = nullptr;
@@ -1157,6 +1385,7 @@ private:
     F64 mUIScale = 1.0;
     bool mInitialized = false;
     bool mDone = false;
+    std::set<std::string> mCapabilities;
     Subject mSubject = Subject::TestWidgets;
 };
 
@@ -1180,7 +1409,8 @@ int scenarioMain()
         }
         try
         {
-            std::cout << LlsdToJson(LLSDMap("ok", true)("result", runtime.dispatch(command))) << std::endl;
+            std::cout << LlsdToJson(
+                LLSDMap("ok", true)("result", callEventApi("XUILab", command))) << std::endl;
         }
         catch (const LabError& error)
         {

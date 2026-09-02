@@ -99,7 +99,12 @@ class ScenarioRunnerTests(unittest.TestCase):
                     print(json.dumps({{"pid": os.getpid(), "parentPid": os.getppid()}}), file=stream)
                 for line in sys.stdin:
                     command = json.loads(line)
-                    result = {{"capabilities": ["inspection"]}} if command["op"] == "initialize" else {{}}
+                    if command["op"] == "initialize":
+                        result = {{"supportedCapabilities": ["inspection"]}}
+                    elif command["op"] == "installCapabilities":
+                        result = {{"capabilities": command["capabilities"], "eventApis": {{}}}}
+                    else:
+                        result = {{}}
                     print(json.dumps({{"ok": True, "result": result}}), flush=True)
                     if command["op"] == "shutdown":
                         break

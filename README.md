@@ -1,8 +1,8 @@
 # xui-lab
 
-`xui-lab` will run production LLUI and LLXUI controls without starting a full
-viewer session. It is currently a specification-stage repository. The binary
-has not been implemented.
+`xui-lab` runs production LLUI and LLXUI controls without starting a full
+viewer session. The Alchemy adapter provides the first runnable subject host
+and a parent-controlled scenario runner.
 
 The repository pins supported viewer forks as Git submodules. A local source
 override can select an existing checkout, including a branch that has not been
@@ -39,10 +39,10 @@ or the submodule commit.
 - `schemas/forks.schema.json` defines the fork manifest format.
 - `adapters/` contains the fork-specific build and runtime contracts.
 - `viewers/` contains pinned viewer submodules.
-- `fixtures/` will contain deterministic viewer state.
-- `scenarios/` will contain interaction and regression scenarios.
+- `fixtures/` contains deterministic viewer state.
+- `scenarios/` contains interaction and regression scenarios.
 - `SPEC.md` defines the first implementation.
 
-Read `SPEC.md` before adding the executable. The first implementation must add
-one production-code test seam to Alchemy rather than compile a copied list of
+Read `SPEC.md` before extending the executable. The implementation uses one
+production-code test seam in Alchemy instead of compiling a copied list of
 viewer source files.

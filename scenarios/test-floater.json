@@ -10,6 +10,10 @@
     { "op": "frames", "count": 2 },
     { "op": "stable", "consecutiveFrames": 2, "maximumFrames": 60, "saveAs": "stable" },
     { "op": "assert", "source": "stable", "pointer": "/stable", "comparison": "equals", "expected": true },
+    { "op": "resize", "width": 1024, "height": 700, "uiScale": 1.0, "saveAs": "viewport" },
+    { "op": "assert", "source": "viewport", "pointer": "/lluiWidth", "comparison": "equals", "expected": 1024 },
+    { "op": "reload", "saveAs": "reload" },
+    { "op": "assert", "source": "reload", "pointer": "/subject", "comparison": "equals", "expected": "test_widgets" },
     { "op": "query", "kind": "tree", "saveAs": "tree" },
     { "op": "assert", "source": "tree", "pointer": "/path", "comparison": "exists" },
     { "op": "query", "kind": "tree", "path": "/Floater View/floater_test_widgets/test_checkbox", "saveAs": "checkboxBefore" },
@@ -18,6 +22,8 @@
     { "op": "assert", "source": "click", "pointer": "/handled", "comparison": "equals", "expected": true },
     { "op": "query", "kind": "tree", "path": "/Floater View/floater_test_widgets/test_checkbox", "saveAs": "checkboxAfter" },
     { "op": "assert", "source": "checkboxAfter", "pointer": "/value", "comparison": "equals", "expected": true },
+    { "op": "query", "kind": "value", "path": "/Floater View/floater_test_widgets/test_checkbox", "saveAs": "checkboxUiValue" },
+    { "op": "assert", "source": "checkboxUiValue", "pointer": "/value", "comparison": "equals", "expected": true },
     { "op": "diagnostics", "saveAs": "diagnostics" },
     { "op": "assert", "source": "diagnostics", "pointer": "/subject/id", "comparison": "equals", "expected": "test_widgets" },
     { "op": "assert", "source": "diagnostics", "pointer": "/subject/view/path", "comparison": "exists" },
@@ -30,6 +36,7 @@
     { "op": "assert", "source": "diagnostics", "pointer": "/graphics/gl_renderer", "comparison": "exists" },
     { "op": "assert", "source": "diagnostics", "pointer": "/eventApis/UI", "comparison": "exists" },
     { "op": "assert", "source": "diagnostics", "pointer": "/eventApis/LLFloaterReg", "comparison": "exists" },
+    { "op": "assert", "source": "diagnostics", "pointer": "/eventApis/LLWindow", "comparison": "exists" },
     { "op": "capture", "name": "test-floater", "includeOverlay": true, "highlight": { "path": "/Floater View/floater_test_widgets/test_checkbox" } }
   ]
 }

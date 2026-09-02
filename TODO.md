@@ -11,10 +11,9 @@ assertions, and retain useful evidence after failure. The API must keep LLUI
 semantics where they matter. It must not introduce a parallel widget model.
 
 The repository checks and 15 Python controller tests pass. The public adapter
-currently declares only `input` and `inspection` for `test_widgets`. Existing
-captures are stale because their metadata reports Alchemy commit `cd9c6bbd`.
-Select and build one current Alchemy source before treating a runtime result as
-evidence.
+currently declares `input` and `inspection` for `test_widgets`. The runtime
+scenario passes against Alchemy commit
+`4e60607d684a4fde253a61129647f4dbd5fa32f5`.
 
 ## Stabilize the process boundary
 
@@ -38,23 +37,23 @@ evidence.
 - [x] Inventory the `LLEventAPI` operations available to the reusable Alchemy
   UI target. Record which operations work without login, world state, or
   network services.
-- [ ] Add one lab-specific `LLEventAPI` for lifecycle operations that the
+- [x] Add one lab-specific `LLEventAPI` for lifecycle operations that the
   viewer does not provide: initialize, install capabilities, advance frames,
   wait for stability, resize, capture, reload, diagnostics, and shutdown.
-- [ ] Keep the existing parent-controlled JSON-lines transport. Translate each
+- [x] Keep the existing parent-controlled JSON-lines transport. Translate each
   validated request to LLSD and dispatch it through `LLEventPumps`.
-- [ ] Expose event API and operation metadata to the controller. Do not expose
+- [x] Expose event API and operation metadata to the controller. Do not expose
   an API unless the selected subject declares the capabilities it requires.
-- [ ] Prove the bridge with one existing inspection operation, preferably
+- [x] Prove the bridge with one existing inspection operation, preferably
   `LLWindow.getSubtree`, before migrating other commands.
-- [ ] Reuse or extract the path-addressed input and inspection behavior in
+- [x] Reuse or extract the path-addressed input and inspection behavior in
   `LLWindowListener`. Its current `LLViewerWindow` dependency must not force the
   lab to construct the normal viewer application.
-- [ ] Reuse `LLFloaterReg`, `UI`, and subject-specific event APIs where they
+- [x] Reuse `LLFloaterReg`, `UI`, and subject-specific event APIs where they
   preserve the production behavior under test.
-- [ ] Delete each duplicate lab implementation after its existing viewer API
+- [x] Delete each duplicate lab implementation after its existing viewer API
   passes the same runtime scenario. Do not retain two command paths.
-- [ ] Use LEAP protocol and introspection code as prior art. Do not make the lab
+- [x] Use LEAP protocol and introspection code as prior art. Do not make the lab
   controller a viewer-launched LEAP child process.
 
 ## Add a Playwright-style Python API

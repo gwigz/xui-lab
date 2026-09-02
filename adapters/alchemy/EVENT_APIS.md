@@ -2,17 +2,18 @@
 
 This reference covers the `LLEventAPI` instances registered in the no-login
 `xui-lab` runtime at Alchemy commit
-`00070185dbf063ad6d2bebeec241a99b15a5f3b0`.
+`4e60607d684a4fde253a61129647f4dbd5fa32f5`.
 
-The runtime reports this inventory in `diagnostics.eventApis`. The
-`test-floater.json` scenario asserts that `UI` and `LLFloaterReg` are present.
-To list every registered operation from a run, use:
+After capability installation, the runtime reports the exposed subset in
+`diagnostics.eventApis`. The `test-floater.json` scenario asserts that `UI`,
+`LLFloaterReg`, and `LLWindow` are present. To list the exposed operations from
+a run, use:
 
 ```sh
 jq '[.[] | select(.command.op == "diagnostics") |
   .response.result.eventApis | to_entries[] |
   {api: .key, operations: [.value.operations[].name]}]' \
-  artifacts/process-boundary/test_floater/event-trace.json
+  artifacts/event-api/test_floater/event-trace.json
 ```
 
 Registration proves that the linker retained an API object. It does not prove
@@ -45,10 +46,28 @@ these terms:
 | `LLToolMgr` | None | `openBuildFloater` and `selectTool` require the normal tool manager, selection manager, and world state. |
 | `LLURLDispatcher` | None | `dispatch`, `dispatchFromTextEditor`, and `dispatchRightClick` can invoke login, world, network, or external URL boundaries. |
 | `UI` | **Local:** `getValue`. **Subject:** `setSelectedByValue` works for an existing `LLComboBox`. `call` is local only for a callback whose implementation has no external dependency. | None at the commit-callback registry boundary. |
+| `LLWindow` | **Local:** `getInfo`, `getPaths`, `getSubtree`, `mouseDown`, `mouseDoubleClick`, `mouseUp`, `mouseMove`, and `mouseScroll` use the lab's `LLWindowCallbacks` host. | Keyboard, text, clipboard, and keybinding operations remain unexposed until the lab supplies and proves their platform dependencies. |
+| `XUILab` | **Local:** `initialize`, `installCapabilities`, `frames`, `stable`, `resize`, `capture`, `reload`, `diagnostics`, and `shutdown`. **Subject:** `query` and `input` are exposed only when the subject installs their required capabilities. | None. |
 
-`LLWindow` is the most relevant API that is not registered. Its constructor
-requires an `LLViewerWindow`, while the lab owns an `LLWindow` and a production
-LLUI root without constructing the normal viewer application. `LLViewerWindow`,
-`LLViewerControl`, `LLStats`, and `LLGesture` are also absent from the live
-inventory. A later bridge must extract or adapt `LLWindow` input and inspection
-without forcing the lab to construct `LLViewerWindow`.
+## Runtime bridge
+
+The parent keeps the JSON-lines process boundary. The runtime parses each JSON
+object into LLSD and posts it to the `XUILab` event pump. Operations that need a
+reply use a temporary event pump named by the request's `reply` field.
+
+`XUILab.installCapabilities` returns metadata only for the APIs and operations
+that the subject can use with its installed capabilities. The runtime derives
+the metadata from `LLEventAPI::getMetadata()` instead of maintaining a second
+operation schema.
+
+`LLWindowListener` accepts `LLWindowCallbacks*`. Both `LLViewerWindow` and the
+lab window host implement that interface, so the lab reuses path resolution,
+tree inspection, coordinate synthesis, event replies, and input dispatch
+without constructing the viewer application. The `test-floater.json` scenario
+proves `LLWindow.getSubtree`, `LLWindow.mouseDown`, `LLWindow.mouseUp`,
+`UI.getValue`, and `LLFloaterReg` show and hide behavior in one process.
+
+The bridge follows `LLLeapListener` for request and reply pumps and for API
+metadata. It does not instantiate `LLLeap` or launch the controller as a LEAP
+child. The parent remains responsible for process lifetime, timeouts, and
+failure artifacts.
