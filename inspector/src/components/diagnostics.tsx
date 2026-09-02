@@ -1,5 +1,5 @@
 import { Maximize2, Minimize2 } from "lucide-react";
-import { type PointerEvent, useEffect, useRef, useState } from "react";
+import { type MouseEvent, type PointerEvent, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
@@ -55,7 +55,7 @@ function Snapshot({ state, runAction, onSelectedControlId }: SnapshotProps) {
     );
   }
 
-  function point(event: PointerEvent<HTMLImageElement>): FramePoint | undefined {
+  function point(event: MouseEvent<HTMLImageElement>): FramePoint | undefined {
     if (lluiWidth <= 0 || lluiHeight <= 0) {
       return undefined;
     }
@@ -72,7 +72,9 @@ function Snapshot({ state, runAction, onSelectedControlId }: SnapshotProps) {
     const start = pointerStart.current;
     const end = point(event);
     pointerStart.current = null;
-    event.currentTarget.releasePointerCapture(event.pointerId);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
     if (start === null || start.pointerId !== event.pointerId || end === undefined) {
       return;
     }
@@ -102,6 +104,23 @@ function Snapshot({ state, runAction, onSelectedControlId }: SnapshotProps) {
       endX: end.x,
       endY: end.y,
     });
+  }
+
+  async function rightClick(event: MouseEvent<HTMLImageElement>) {
+    if (mode !== "interact") {
+      return;
+    }
+    event.preventDefault();
+    const target = point(event);
+    if (target === undefined) {
+      return;
+    }
+    const result = recordValue(
+      await runAction({ action: "rightClickAt", x: target.x, y: target.y }),
+    );
+    if (typeof result?.controlId === "string" && result.controlId.length > 0) {
+      onSelectedControlId(result.controlId);
+    }
   }
 
   return (
@@ -150,10 +169,14 @@ function Snapshot({ state, runAction, onSelectedControlId }: SnapshotProps) {
           mode === "inspect" ? "cursor-crosshair" : "cursor-default",
         )}
         draggable={false}
+        onContextMenu={(event) => void rightClick(event)}
         onPointerCancel={() => {
           pointerStart.current = null;
         }}
         onPointerDown={(event) => {
+          if (event.button !== 0) {
+            return;
+          }
           const start = point(event);
           if (start !== undefined) {
             event.currentTarget.setPointerCapture(event.pointerId);

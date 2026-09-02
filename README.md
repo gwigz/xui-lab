@@ -1,31 +1,31 @@
 # `xui-lab`
 
 > [!CAUTION]
-> `xui-lab` is unfinished and changes often.
+> This project is unfinished and changes often.
 
-`xui-lab` runs production Alchemy `LLFloater` subclasses and their C++
+The lab runs production Alchemy `LLFloater` subclasses and their C++
 controllers without a full viewer session. It loads XUI through production
 floater code, sends normal LLUI events, and uses real viewer models. A reduced
 runtime replaces login, networking, world simulation, and other external
 services at explicit boundaries.
 
-![XUI Lab inspecting the production test floater in T3 Code](docs/images/xui-lab-in-t3-code.png)
+![The inspector showing the production test floater in T3 Code](docs/images/xui-lab-in-t3-code.png)
 
 ## What exists
 
 - A Python API for exact control targeting, pointer gestures, structural
   assertions, UI inspection, and failure artifacts.
-- A headed inspector for direct inspection and interaction with captured
-  frames, reloading XUI, resizing viewports or subjects, and replaying
-  scenarios.
+- A headed inspector that captures the initial frame and refreshes it after UI
+  actions. Interact mode routes left-click, right-click, and drag gestures
+  through LLUI.
 - Hidden scenario runs through the same production UI path.
 
 ## Inspector frontend
 
 The browser inspector is a React and TypeScript application in `inspector/`.
 Vite builds it into the embedded `xui_lab/_inspector/` assets served by the
-Python controller. Its Button, Input, Select, Tabs, and Toolbar components are vendored
-from the Coss UI registry and use Base UI behavior with Coss neutral tokens.
+Python controller. Its Button, Input, Select, Tabs, and Toolbar components come
+from the Coss UI registry. They use Base UI behavior and Coss neutral tokens.
 Tailwind CSS supplies the generated utility styles.
 
 Install the pinned frontend dependencies and run its complete check with:

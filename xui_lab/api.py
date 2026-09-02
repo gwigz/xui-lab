@@ -323,6 +323,13 @@ class Window:
             "click",
         )
 
+    def right_click_at(self, x: int, y: int) -> ActionResult:
+        self._validate_coordinates((x, y))
+        return self._perform_input(
+            CoordinatePointerAction(PointerEvent.CLICK, MouseButton.RIGHT, x, y),
+            "rightClick",
+        )
+
     def drag(self, start_x: int, start_y: int, end_x: int, end_y: int) -> ActionResult:
         self._validate_coordinates((start_x, start_y, end_x, end_y))
         return self._perform_input(DragAction(start_x, start_y, end_x, end_y), "drag")

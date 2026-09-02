@@ -6,7 +6,6 @@ import json
 import threading
 import webbrowser
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Protocol
@@ -22,6 +21,10 @@ from .inspector_assets import (
 )
 from .io import write_json
 from .scenarios import Scenario
+
+_ACTIONS_WITHOUT_AUTOMATIC_CAPTURE = frozenset(
+    {"capture", "export", "highlight", "pick"}
+)
 
 
 def recorded_python(actions: list[dict[str, Any]]) -> list[str]:
@@ -83,6 +86,11 @@ class InteractiveSession:
         self._latest_capture: Path | None = None
         self._capture_version = 0
         self.window = self._open(config.subject, config.fixture)
+        try:
+            self._capture("initial")
+        except Exception:
+            self.window.close()
+            raise
 
     def _open(self, subject: str, fixture: Path | None) -> Window:
         capabilities = self.subjects.get(subject)
@@ -127,6 +135,14 @@ class InteractiveSession:
 
     def action(self, request: dict[str, Any]) -> dict[str, Any]:
         action = request.get("action")
+        if not isinstance(action, str):
+            raise InputError("interactive action must be a string")
+        result = self._perform_action(action, request)
+        if action not in _ACTIONS_WITHOUT_AUTOMATIC_CAPTURE:
+            self._capture(action)
+        return result
+
+    def _perform_action(self, action: str, request: dict[str, Any]) -> dict[str, Any]:
         if action == "reload":
             before = self.window.runtime.pid
             result = self.window.reload()
@@ -167,11 +183,7 @@ class InteractiveSession:
                 raise InputError("subject width and height must be integers")
             return self.window.resize_subject(width, height)
         if action == "capture":
-            stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-            result = self.window.capture(f"interactive-{stamp}")
-            self._latest_capture = self._capture_path(result)
-            self._capture_version += 1
-            return result
+            return self._capture("manual")
         if action == "export":
             tree = self.window.query_tree()
             path = self.window.artifact_dir / "ui-tree-export.json"
@@ -182,6 +194,9 @@ class InteractiveSession:
         if action == "clickAt":
             x, y = self._coordinates(request, ("x", "y"))
             return self.window.click_at(x, y).data
+        if action == "rightClickAt":
+            x, y = self._coordinates(request, ("x", "y"))
+            return self.window.right_click_at(x, y).data
         if action == "drag":
             start_x, start_y, end_x, end_y = self._coordinates(
                 request, ("startX", "startY", "endX", "endY")
@@ -220,7 +235,6 @@ class InteractiveSession:
             self.window.close()
             self.window = self._open(subject, fixture)
             self._latest_capture = None
-            self._capture_version += 1
             return {
                 "subject": subject,
                 "fixture": fixture_id or "",
@@ -231,6 +245,13 @@ class InteractiveSession:
     @property
     def latest_capture(self) -> Path | None:
         return self._latest_capture
+
+    def _capture(self, reason: str) -> dict[str, Any]:
+        name = f"interactive-{self._capture_version + 1:04d}-{reason}"
+        result = self.window.capture(name)
+        self._latest_capture = self._capture_path(result)
+        self._capture_version += 1
+        return result
 
     def _capture_path(self, result: dict[str, Any]) -> Path:
         value = result.get("path")

@@ -15,6 +15,7 @@ from xui_lab.errors import AssertionFailure, RuntimeFailure
 from xui_lab.interactive import (
     InspectorHandler,
     InspectorServer,
+    InteractiveConfig,
     InteractiveSession,
     recorded_python,
 )
@@ -242,6 +243,17 @@ class PlaywrightApiTests(unittest.TestCase):
             [(command["event"], command["button"]) for command in inputs],
         )
 
+    def test_coordinate_right_click_uses_the_shared_input_operation(self) -> None:
+        with self.open() as window:
+            window.right_click_at(40, 30).expect_handled()
+
+        pointer_input = next(
+            command for command in self.commands() if command["op"] == "input"
+        )
+        self.assertEqual("click", pointer_input["event"])
+        self.assertEqual("right", pointer_input["button"])
+        self.assertEqual((40, 30), (pointer_input["x"], pointer_input["y"]))
+
     def test_model_id_locator_reports_every_ambiguous_match(self) -> None:
         with self.open("duplicates") as window:
             locator = window.get_by_model_id("11111111-1111-1111-1111-111111111111")
@@ -361,6 +373,119 @@ class PlaywrightApiTests(unittest.TestCase):
         self.assertEqual(str(capture), result["path"])
         self.assertEqual(capture.resolve(), session.latest_capture)
         self.assertEqual(1, session._capture_version)
+
+    def test_interactive_session_starts_with_a_browser_capture(self) -> None:
+        capture = self.directory / "artifacts" / "initial.png"
+        capture.parent.mkdir(parents=True)
+        capture.write_bytes(b"png bytes")
+        capture_names: list[str] = []
+
+        class WindowStub:
+            def __init__(self) -> None:
+                self.artifact_dir = capture.parent
+
+            def capture(self, name: str) -> dict[str, str]:
+                capture_names.append(name)
+                return {"path": str(capture)}
+
+        class LabStub:
+            @staticmethod
+            def open(**_kwargs: object) -> WindowStub:
+                return WindowStub()
+
+        session = InteractiveSession(
+            LabStub(),
+            InteractiveConfig(
+                subject="test_widgets",
+                viewport=Viewport(320, 240, 1.0),
+                fixture=None,
+                artifact_id="automatic-capture",
+            ),
+            {"test_widgets": frozenset()},
+            {},
+            {},
+        )
+
+        self.assertEqual(1, len(capture_names))
+        self.assertEqual(capture.resolve(), session.latest_capture)
+        self.assertEqual(1, session._capture_version)
+
+    def test_interactive_inputs_refresh_the_browser_capture(self) -> None:
+        capture = self.directory / "artifacts" / "latest.png"
+        capture.parent.mkdir(parents=True)
+        capture.write_bytes(b"png bytes")
+        capture_names: list[str] = []
+
+        class ActionStub:
+            data = {"handled": True}
+
+        class LocatorStub:
+            @staticmethod
+            def click() -> ActionStub:
+                return ActionStub()
+
+            @staticmethod
+            def fill(_text: str) -> ActionStub:
+                return ActionStub()
+
+            @staticmethod
+            def press(_key: str) -> ActionStub:
+                return ActionStub()
+
+        class WindowStub:
+            def __init__(self) -> None:
+                self.artifact_dir = capture.parent
+
+            def capture(self, name: str) -> dict[str, str]:
+                capture_names.append(name)
+                return {"path": str(capture)}
+
+            @staticmethod
+            def get_by_control_id(_control_id: str) -> LocatorStub:
+                return LocatorStub()
+
+            @staticmethod
+            def click_at(_x: int, _y: int) -> ActionStub:
+                return ActionStub()
+
+            @staticmethod
+            def right_click_at(_x: int, _y: int) -> ActionStub:
+                return ActionStub()
+
+            @staticmethod
+            def drag(
+                _start_x: int, _start_y: int, _end_x: int, _end_y: int
+            ) -> ActionStub:
+                return ActionStub()
+
+        session = object.__new__(InteractiveSession)
+        session.window = WindowStub()
+        session.scenarios = {"test_floater": object()}
+        session._replay = lambda _scenario: {"passed": True}
+        session._latest_capture = None
+        session._capture_version = 0
+
+        session.action({"action": "click", "controlId": "checkbox"})
+        session.action({"action": "press", "controlId": "line-editor", "key": "Enter"})
+        session.action({"action": "replay", "scenario": "test_floater"})
+        session.action({"action": "clickAt", "x": 10, "y": 20})
+        session.action({"action": "rightClickAt", "x": 10, "y": 20})
+        session.action(
+            {
+                "action": "drag",
+                "startX": 10,
+                "startY": 20,
+                "endX": 40,
+                "endY": 50,
+            }
+        )
+        session.action(
+            {"action": "fill", "controlId": "line-editor", "text": "Known text"}
+        )
+
+        self.assertEqual(7, len(capture_names))
+        self.assertEqual(capture.resolve(), session.latest_capture)
+        self.assertEqual(7, session._capture_version)
 
     def test_interactive_capture_rejects_a_path_outside_its_artifacts(self) -> None:
         capture = self.directory / "outside.png"
