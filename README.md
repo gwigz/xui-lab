@@ -9,6 +9,8 @@ floater code, sends normal LLUI events, and uses real viewer models. A reduced
 runtime replaces login, networking, world simulation, and other external
 services at explicit boundaries.
 
+![XUI Lab inspecting the production test floater in T3 Code](docs/images/xui-lab-in-t3-code.png)
+
 ## What exists
 
 - A Python API for exact control targeting, pointer gestures, structural
