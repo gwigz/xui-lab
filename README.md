@@ -58,6 +58,31 @@ ruff check --fix .
 ruff format .
 ```
 
+## Check and format C++
+
+The developer requirements pin `clang-format` and `clang-tidy` 22.1.8. Format
+the adapter-owned C++ files with the selected fork's style:
+
+```sh
+python tools/cpp_quality.py format --check
+python tools/cpp_quality.py format
+```
+
+Run `clang-tidy` with the compilation database from the real viewer build. The
+command rejects a database that does not contain every selected translation
+unit:
+
+```sh
+python tools/cpp_quality.py tidy \
+  --compile-commands /path/to/viewer-build/compile_commands.json
+```
+
+Alchemy exports `compile_commands.json` from its CMake build. Run the lint
+command in the environment that owns that build tree so its compiler paths and
+generated headers remain valid. The policy prefers supported C++20 library and
+language features. It retains Alchemy ownership types such as `LLPointer` when
+the production API requires them.
+
 To run the optional Git hooks, install them in the current checkout:
 
 ```sh

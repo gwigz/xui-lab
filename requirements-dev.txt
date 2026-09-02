@@ -1,2 +1,4 @@
+clang-format==22.1.8
+clang-tidy==22.1.8
 pre-commit==4.6.2
 ruff==0.16.5

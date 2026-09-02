@@ -97,6 +97,57 @@ Ruff 0.16 expanded its default selection from 59 rules to 413. Pinning an
 explicit rule set keeps a tool upgrade from silently changing repository
 policy. Do not enable preview rules or unsafe fixes in the first pass.
 
+## Split the Alchemy runtime by responsibility
+
+At this commit, `python3 tools/source_inventory.py --suffix .cpp` reports
+[`xui_lab_main.cpp`](adapters/alchemy/xui_lab_main.cpp) as the superproject's
+only C++ source file, at 1,443 lines. Most of the file belongs to the 920-line
+`Runtime` class. Choose a target design before moving code:
+
+1. Split `Runtime` method definitions across several translation units while
+   keeping one class and one shared private header. This is the smallest and
+   safest change, but all responsibilities still share the full runtime state.
+2. Keep `Runtime` as the `LLEventAPI` coordinator and extract owned components
+   for the UI host, deterministic fixtures, and inspection. This is the
+   preferred end state because ownership and shutdown order become visible in
+   types instead of filename conventions.
+3. Group code by capability, such as input, inspection, and inventory. This
+   matches `adapter.json`, but initialization and shutdown cross those groups.
+   Defer this choice until more subjects prove that capability code can stand
+   alone.
+
+Choose option 2. If a component boundary cannot preserve current behavior,
+stop at option 1 for that code instead of adding pass-through wrappers:
+
+- [x] Record a baseline with `python3 tools/source_inventory.py`, the repository
+  checks, the Python tests, the runtime scenario, and the selected Alchemy
+  commit. Keep the same viewer source for every later stage.
+- [x] Leave only argument handling, `--metadata`, and a call to the scenario
+  entry function in `xui_lab_main.cpp`. Keep `Runtime` private to its
+  implementation instead of exposing all runtime state to the entry point.
+- [x] Move event API registration, capability gating, the JSON-lines loop, and
+  error serialization into `xui_lab_runtime.cpp`. Preserve the existing command
+  names and response shapes.
+- [x] Extract the window, shader, image provider, frame rendering, capture, and
+  shutdown order into an owned UI-host component. Preserve RAII and the current
+  production `LLWindowCallbacks` event path.
+- [x] Extract inventory fixture validation and installation into one component.
+  Pass typed fixture input at its boundary, and keep mutations of `gInventory`,
+  agent identity, and the avatar-name cache together with their cleanup.
+- [x] Extract tree construction and target resolution into an inspection
+  component. Keep `LLWindowListener`, `LLUI::resolvePath`, and production view
+  objects as the source of truth.
+- [x] Add the new adapter-owned sources to
+  [`CMakeLists.txt`](adapters/alchemy/CMakeLists.txt). Continue to link the one
+  `alchemy_newview_ui` production target. Do not add a second command router, a
+  copied viewer source list, or a binary plugin seam.
+- [x] Move one responsibility at a time. After each move, run the repository
+  checks, the local Alchemy build, and the affected runtime scenario. Compare
+  the structural trace and diagnostics before the next move.
+- [x] Add a source-size report to the normal checks after the split. Treat
+  unexpected growth as a prompt to inspect ownership, not as a reason to split
+  code at an arbitrary line count.
+
 ## Add a Playwright-style Python API
 
 - [x] Introduce `Lab`, `Window`, and `Locator` types over the typed runtime

@@ -9,7 +9,14 @@ if (NOT XUI_LAB_FORK_COMMIT_LENGTH EQUAL 40 OR NOT XUI_LAB_FORK_COMMIT MATCHES "
   message(FATAL_ERROR "XUI_LAB_FORK_COMMIT must be the selected viewer commit")
 endif ()
 
-add_executable(xui-lab xui_lab_main.cpp)
+add_executable(xui-lab
+  xui_lab_event_api.cpp
+  xui_lab_inspection.cpp
+  xui_lab_inventory_fixture.cpp
+  xui_lab_main.cpp
+  xui_lab_runtime.cpp
+  xui_lab_ui_host.cpp
+  )
 target_compile_features(xui-lab PRIVATE cxx_std_20)
 target_compile_definitions(xui-lab PRIVATE
   XUI_LAB_FORK="alchemy"

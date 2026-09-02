@@ -1,0 +1,23 @@
+---
+Checks: >
+  -*,
+  clang-analyzer-*,
+  bugprone-*,
+  performance-*,
+  portability-*,
+  modernize-*,
+  readability-container-contains,
+  -performance-enum-size,
+  -portability-avoid-pragma-once,
+  -modernize-use-auto,
+  -modernize-use-emplace,
+  -modernize-use-std-format,
+  -modernize-use-std-print,
+  -modernize-use-trailing-return-type
+WarningsAsErrors: '*'
+HeaderFileExtensions: [h, hh, hpp]
+ImplementationFileExtensions: [c, cc, cpp, cxx]
+HeaderFilterRegex: '(^|/)adapters/alchemy/'
+SystemHeaders: false
+FormatStyle: file
+...

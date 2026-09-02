@@ -130,6 +130,25 @@ would obscure the operation. Spell out domain types when the type carries
 meaning for the reader. Follow the selected fork's local formatting and naming
 style in adapter code.
 
+Install the pinned LLVM tools from `requirements-dev.txt`. Format only the
+adapter-owned C++ files:
+
+```sh
+python3 tools/cpp_quality.py format --check
+python3 tools/cpp_quality.py format
+```
+
+Run `clang-tidy` with `compile_commands.json` from the selected viewer build:
+
+```sh
+python3 tools/cpp_quality.py tidy \
+  --compile-commands /absolute/path/to/viewer-build/compile_commands.json
+```
+
+Run the lint command in the environment that owns the build tree. Do not pass
+viewer-submodule files to `tools/cpp_quality.py`. The tool must reject paths
+outside `adapters/`.
+
 Do not raise a fork's global language level as a side effect of lab work. If a
 needed standard feature is unavailable on one supported platform, either choose
 an equally clear supported feature or make the language-level change a separate

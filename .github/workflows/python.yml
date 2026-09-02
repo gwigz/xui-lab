@@ -24,6 +24,8 @@ jobs:
         run: ruff check .
       - name: Check Python formatting
         run: ruff format --check .
+      - name: Check C++ formatting
+        run: python tools/cpp_quality.py format --check
       - name: Check repository
         run: python tools/check.py
       - name: Run Python tests

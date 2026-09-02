@@ -13,6 +13,9 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from source_inventory import print_report, source_rows
 
 from xui_lab.domain import Fork, parse_manifest, parse_scenario
 from xui_lab.errors import InputError
@@ -329,6 +332,8 @@ def main() -> int:
         f"xui-lab repository is consistent; default fork: {default_fork}; "
         f"declared forks: {fork_names}"
     )
+    print("C++ source size report:")
+    print_report(source_rows(REPO_ROOT, (".cpp",)), 20)
     return 0
 
 
