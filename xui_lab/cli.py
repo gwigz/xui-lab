@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .api import Lab, artifact_directory
@@ -126,7 +126,7 @@ def cmd_interactive(args: argparse.Namespace) -> int:
     fixture = Path(args.fixture).expanduser().resolve() if args.fixture else None
     if fixture is not None and not fixture.is_file():
         raise InputError(f"fixture not found: {fixture}")
-    artifact_id = args.artifact_id or datetime.now(UTC).strftime(
+    artifact_id = args.artifact_id or datetime.now(timezone.utc).strftime(
         "interactive-%Y%m%d-%H%M%S"
     )
     lab = Lab(
