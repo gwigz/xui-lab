@@ -69,6 +69,18 @@ def recorded_python(actions: list[dict[str, Any]]) -> list[str]:
             lines.append(
                 f"{locator}.drag_by(dx={action['deltaX']}, dy={action['deltaY']})"
             )
+        elif kind == "scroll" and isinstance(action.get("clicks"), int):
+            lines.append(f"{locator}.scroll({action['clicks']})")
+        elif kind == "drag_and_drop":
+            target_control_id = action.get("targetControlId")
+            target_path = action.get("targetPath")
+            if isinstance(target_control_id, str) and target_control_id:
+                target = f"window.get_by_control_id({target_control_id!r})"
+            elif isinstance(target_path, str) and target_path:
+                target = f"window.get_by_path({target_path!r})"
+            else:
+                continue
+            lines.append(f"{locator}.drag_to({target})")
     return lines
 
 
@@ -217,6 +229,19 @@ class InteractiveSession:
                 request, ("startX", "startY", "endX", "endY")
             )
             return self.window.drag(start_x, start_y, end_x, end_y).data
+        if action == "scrollAt":
+            x, y, clicks = self._coordinates(request, ("x", "y", "clicks"))
+            return self.window.scroll_at(x, y, clicks).data
+        if action == "dragAndDrop":
+            source_control_id = request.get("sourceControlId")
+            target_control_id = request.get("targetControlId")
+            if not isinstance(source_control_id, str) or not source_control_id:
+                raise InputError("sourceControlId must be a non-empty string")
+            if not isinstance(target_control_id, str) or not target_control_id:
+                raise InputError("targetControlId must be a non-empty string")
+            source = self.window.get_by_control_id(source_control_id)
+            target = self.window.get_by_control_id(target_control_id)
+            return source.drag_to(target).data
         if action == "fill":
             text = request.get("text")
             if not isinstance(text, str):

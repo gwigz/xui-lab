@@ -36,9 +36,9 @@ external effects only at system boundaries.
 The lab has an interactive mode for visual work and a scenario mode for
 repeatable tests. Both modes use the same subject host, input path, inspection
 API, and renderer. A scenario can set floater geometry, resize it through a
-production pointer drag, click a control, type text, open a context menu,
-inspect the UI tree, assert visible behavior, and capture a frame with its
-diagnostics.
+production pointer drag, scroll a control, offer a semantic drag-and-drop,
+click a control, type text, open a context menu, inspect the UI tree, assert
+visible behavior, and capture a frame with its diagnostics.
 
 The first adapter targets Alchemy. Developers can use the pinned Alchemy
 submodule or select a local checkout. The local override supports unpushed
@@ -173,8 +173,8 @@ branches without changing the submodule commit.
   discovery, production subject registration, and clean failure for an
   unavailable capability.
 - Runtime tests verify visible and hidden rendering, exact viewport resizing,
-  XUI-path input, focus changes, mouse capture, popup routing, frame capture, and
-  clean process shutdown.
+  XUI-path input, wheel scrolling, drag-and-drop acceptance, focus changes,
+  mouse capture, popup routing, frame capture, and clean process shutdown.
 - Inspector tests verify UI-tree queries, source provenance, clipping
   calculations, hit-test order, overlay exclusion, and event traces.
 - Fixture tests verify stable identifiers and prove that the selected fork's

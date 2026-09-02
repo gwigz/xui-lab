@@ -6,11 +6,13 @@ import {
   useEffect,
   useRef,
   useState,
+  type WheelEvent,
 } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import {
+  findModelTreeNodeAtPoint,
   findTreeNodeAtPoint,
   findTreeNodeByControlId,
   type InspectorState,
@@ -21,8 +23,10 @@ import {
   browserFrameInput,
   type FrameOutline,
   type FramePoint,
+  frameDragInput,
   frameOutline,
   framePoint,
+  wheelClicks,
 } from "../frame-interaction";
 import type { InspectorTab, RunInspectorAction } from "../model";
 
@@ -55,7 +59,12 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
     Readonly<{ controlId: string; outline: FrameOutline }> | undefined
   >();
   const container = useRef<HTMLDivElement>(null);
-  const pointerStart = useRef<Readonly<{ pointerId: number; point: FramePoint }> | null>(null);
+  const pointerStart = useRef<Readonly<{
+    pointerId: number;
+    point: FramePoint;
+    sourceControlId?: string;
+    sourceModelId?: string;
+  }> | null>(null);
   const suppressClick = useRef(false);
   const inputQueue = useRef<Promise<void>>(Promise.resolve());
   const selectedControlIdRef = useRef(selectedControlId);
@@ -217,14 +226,32 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
       return;
     }
     suppressClick.current = true;
+    const targetNode = state === null ? undefined : findTreeNodeAtPoint(state.tree, end);
+    const input = frameDragInput({
+      start: start.point,
+      end,
+      sourceControlId: start.sourceControlId,
+      sourceModelId: start.sourceModelId,
+      targetControlId: targetNode?.controlId,
+      supportsDragAndDrop: state?.inputOperations.includes("dragAndDrop") ?? false,
+    });
     enqueueInput(async () => {
-      await runAction({
-        action: "drag",
-        startX: start.point.x,
-        startY: start.point.y,
-        endX: end.x,
-        endY: end.y,
-      });
+      await runAction(input);
+    });
+  }
+
+  function wheel(event: WheelEvent<HTMLImageElement>) {
+    if (mode !== "interact" || !state?.inputOperations.includes("scroll")) {
+      return;
+    }
+    const target = point(event);
+    const clicks = wheelClicks(event.deltaY);
+    if (target === undefined || clicks === 0) {
+      return;
+    }
+    event.preventDefault();
+    enqueueInput(async () => {
+      await runAction({ action: "scrollAt", x: target.x, y: target.y, clicks });
     });
   }
 
@@ -350,13 +377,25 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
           }
           const start = point(event);
           if (start !== undefined) {
+            const sourceNode =
+              state === null
+                ? undefined
+                : (findModelTreeNodeAtPoint(state.tree, start) ??
+                  findTreeNodeAtPoint(state.tree, start));
+            const modelId = sourceNode?.raw.model_id;
             event.currentTarget.setPointerCapture(event.pointerId);
-            pointerStart.current = { pointerId: event.pointerId, point: start };
+            pointerStart.current = {
+              pointerId: event.pointerId,
+              point: start,
+              sourceControlId: sourceNode?.controlId,
+              sourceModelId: typeof modelId === "string" ? modelId : undefined,
+            };
           }
         }}
         onPointerLeave={() => setHovered(undefined)}
         onPointerMove={updateHovered}
         onPointerUp={(event) => void finishGesture(event)}
+        onWheel={wheel}
         src={`/api/capture?v=${capture.version}`}
         tabIndex={mode === "interact" && state?.inputOperations.includes("key") ? 0 : -1}
       />

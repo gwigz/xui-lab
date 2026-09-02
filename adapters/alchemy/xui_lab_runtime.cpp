@@ -11,6 +11,9 @@
 
 #include "lleventapi.h"
 #include "llapp.h"
+#include "llfolderviewitem.h"
+#include "llfolderviewmodelinventory.h"
+#include "llinventorymodel.h"
 #include "llsdjson.h"
 #include "llsdutil.h"
 #include "llui.h"
@@ -39,6 +42,7 @@ constexpr std::string_view kForkCommit = XUI_LAB_FORK_COMMIT;
 
 using LabError = xui_lab::Error;
 using xui_lab::callEventApi;
+using xui_lab::postEventApi;
 using xui_lab::Subject;
 using xui_lab::subjectName;
 
@@ -98,8 +102,12 @@ public:
             {
                 LLView* target = mInspection->pickView(action["x"].asInteger(), action["y"].asInteger());
                 if (target && !target->getPathname().empty())
-                    mUIHost->recordAction(
-                        LLSDMap("action", action["action"])("path", target->getPathname())("controlId", mInspection->controlId(target)));
+                {
+                    LLSD recorded         = action;
+                    recorded["path"]      = target->getPathname();
+                    recorded["controlId"] = mInspection->controlId(target);
+                    mUIHost->recordAction(std::move(recorded));
+                }
             }
             else
             {
@@ -382,9 +390,112 @@ private:
         LLSD operations = LLSD::emptyArray();
         if (!hasCapability("input"))
             return operations;
-        for (const std::string_view operation : { "click", "doubleClick", "rightClick", "fill", "text", "key", "drag" })
+        for (const std::string_view operation :
+             { "click", "doubleClick", "rightClick", "fill", "text", "key", "scroll", "drag", "dragAndDrop" })
             operations.append(std::string(operation));
         return operations;
+    }
+
+    [[nodiscard]] LLView* resolveSelector(const LLSD& selector) const
+    {
+        if (!selector.isMap())
+            throw LabError("input", "input selector must be an object");
+        return resolveTarget(selector);
+    }
+
+    static std::string_view acceptanceName(EAcceptance acceptance)
+    {
+        switch (acceptance)
+        {
+            case ACCEPT_POSTPONED:
+                return "postponed";
+            case ACCEPT_NO:
+                return "no";
+            case ACCEPT_NO_CUSTOM:
+                return "noCustom";
+            case ACCEPT_NO_LOCKED:
+                return "noLocked";
+            case ACCEPT_YES_COPY_SINGLE:
+                return "yesCopySingle";
+            case ACCEPT_YES_SINGLE:
+                return "yesSingle";
+            case ACCEPT_YES_COPY_MULTI:
+                return "yesCopyMulti";
+            case ACCEPT_YES_MULTI:
+                return "yesMulti";
+        }
+        throw LabError("input", "production drag-and-drop returned an unknown acceptance value");
+    }
+
+    std::pair<EDragAndDropType, LLInventoryObject*> dragCargo(LLView* source) const
+    {
+        auto* folder_item = dynamic_cast<LLFolderViewItem*>(source);
+        auto* model_item  = folder_item ? dynamic_cast<LLFolderViewModelItemInventory*>(folder_item->getViewModelItem()) : nullptr;
+        if (!model_item)
+            return { DAD_NONE, nullptr };
+
+        requireCapability("inventory_model");
+        EDragAndDropType cargo_type = DAD_NONE;
+        LLUUID           cargo_id;
+        if (!model_item->startDrag(&cargo_type, &cargo_id) || cargo_type == DAD_NONE || cargo_id.isNull())
+            throw LabError("input", "production inventory source refused the drag: " + source->getPathname());
+        LLInventoryObject* cargo = gInventory.getObject(cargo_id);
+        if (!cargo)
+            throw LabError("model_id", "drag-and-drop inventory object not found: " + cargo_id.asString());
+        return { cargo_type, cargo };
+    }
+
+    [[nodiscard]] bool dispatchDragAndDrop(S32 screen_x, S32 screen_y, bool drop, EDragAndDropType cargo_type, void* cargo,
+                                           EAcceptance* acceptance, std::string& tooltip)
+    {
+        if (LLUICtrl* top = gFocusMgr.getTopCtrl())
+        {
+            S32 local_x = 0;
+            S32 local_y = 0;
+            top->screenPointToLocal(screen_x, screen_y, &local_x, &local_y);
+            if (top->handleDragAndDrop(local_x, local_y, MASK_NONE, drop, cargo_type, cargo, acceptance, tooltip))
+                return true;
+        }
+
+        S32 local_x = 0;
+        S32 local_y = 0;
+        mUIHost->root()->screenPointToLocal(screen_x, screen_y, &local_x, &local_y);
+        return mUIHost->root()->handleDragAndDrop(local_x, local_y, MASK_NONE, drop, cargo_type, cargo, acceptance, tooltip);
+    }
+
+    LLSD dragAndDrop(const LLSD& command)
+    {
+        const LLSD& source_selector = command["source"];
+        const LLSD& target_selector = command["target"];
+        LLView*     source          = resolveSelector(source_selector);
+        LLView*     target          = resolveSelector(target_selector);
+        if (!source->isInVisibleChain() || !target->isInVisibleChain())
+            throw LabError("input", "drag-and-drop source and target must be visible");
+
+        const auto [cargo_type, cargo] = dragCargo(source);
+        const LLRect target_rect       = target->calcScreenRect();
+        const S32    screen_x          = target_rect.getCenterX();
+        const S32    screen_y          = target_rect.getCenterY();
+
+        EAcceptance acceptance = ACCEPT_NO;
+        std::string tooltip;
+        const bool  handled      = dispatchDragAndDrop(screen_x, screen_y, false, cargo_type, cargo, &acceptance, tooltip);
+        const bool  accepted     = handled && acceptance >= ACCEPT_YES_COPY_SINGLE;
+        bool        drop_handled = false;
+        if (accepted)
+        {
+            EAcceptance drop_acceptance = acceptance;
+            drop_handled                = dispatchDragAndDrop(screen_x, screen_y, true, cargo_type, cargo, &drop_acceptance, tooltip);
+        }
+        mUIHost->renderFrame(true);
+
+        const std::string source_control_id = mInspection->controlId(source);
+        const std::string target_control_id = mInspection->controlId(target);
+        mUIHost->recordAction(LLSDMap("action", "drag_and_drop")("path", source->getPathname())("controlId", source_control_id)(
+            "targetPath", target->getPathname())("targetControlId", target_control_id));
+        return LLSDMap("event", "dragAndDrop")("handled", handled)("accepted", accepted)("dropped", accepted && drop_handled)(
+            "acceptance", std::string(acceptanceName(acceptance)))("tooltip", tooltip)("cargoType", static_cast<S32>(cargo_type))(
+            "source", describeControl(source))("target", describeControl(target));
     }
 
     LLSD describeControl(LLView* view) const
@@ -409,19 +520,45 @@ private:
         requireInitialized();
         requireCapability("input");
         const std::string event = command["event"].asString();
-        if (event != "click" && event != "doubleClick" && event != "key" && event != "text" && event != "fill" && event != "drag")
+        if (event != "click" && event != "doubleClick" && event != "key" && event != "text" && event != "fill" && event != "scroll" &&
+            event != "drag" && event != "dragAndDrop")
         {
             throw LabError("input", "unsupported input event: " + event);
         }
+        if (event == "dragAndDrop")
+            return dragAndDrop(command);
         const bool has_target_selector = command.has("path") || command.has("modelId") || command.has("controlId");
         LLView*    target              = has_target_selector ? resolveTarget(command) : nullptr;
-        if (!target && (event == "click" || event == "doubleClick") && command.has("x") && command.has("y"))
+        if (!target && (event == "click" || event == "doubleClick" || event == "scroll") && command.has("x") && command.has("y"))
             target = mInspection->pickView(command["x"].asInteger(), command["y"].asInteger());
         if (!target && event == "drag" && command.has("startX") && command.has("startY"))
             target = mInspection->pickView(command["startX"].asInteger(), command["startY"].asInteger());
         if (!target && event != "click" && event != "doubleClick" && event != "drag")
             throw LabError("input", "input event requires a target control");
         const LLSD before = inputState();
+        if (event == "scroll")
+        {
+            if (!command["clicks"].isInteger())
+                throw LabError("input", "scroll clicks must be a non-zero integer");
+            const S32 clicks = command["clicks"].asInteger();
+            if (clicks == 0)
+                throw LabError("input", "scroll clicks must be a non-zero integer");
+            const auto [screen_x, screen_y] = commandPosition(command, target);
+            (void)callEventApi("LLWindow", pointerEventAt("mouseMove", "LEFT", screen_x, screen_y));
+            (void)mUIHost->takeScrollResult();
+            postEventApi("LLWindow", LLSDMap("op", "mouseScroll")("clicks", clicks));
+            LLSD result = mUIHost->takeScrollResult();
+            if (!result.isMap())
+                throw LabError("input", "production window did not report the scroll result");
+            result["event"]     = event;
+            result["path"]      = target->getPathname();
+            result["controlId"] = mInspection->controlId(target);
+            addInputState(result, before);
+            mUIHost->recordAction(
+                LLSDMap("action", "scroll")("path", target->getPathname())("controlId", mInspection->controlId(target))("clicks", clicks));
+            mUIHost->renderFrame(true);
+            return result;
+        }
         if (event == "key" || event == "text" || event == "fill")
         {
             const std::string path           = target->getPathname();

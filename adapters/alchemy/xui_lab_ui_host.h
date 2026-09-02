@@ -48,6 +48,7 @@ public:
     [[nodiscard]] bool                               closeRequested() const noexcept;
     [[nodiscard]] std::optional<std::pair<S32, S32>> takePointerMove();
     [[nodiscard]] LLSD                               takeInteractiveActions();
+    [[nodiscard]] LLSD                               takeScrollResult();
     void                                             setHighlight(LLView* target) noexcept;
     [[nodiscard]] LLSD                               inputKey(std::string_view key, const LLSD& modifiers);
     [[nodiscard]] LLSD                               inputText(std::string_view text, bool replace);

@@ -13,12 +13,13 @@ services at explicit boundaries.
 
 ## What exists
 
-- A Python API for exact control targeting, pointer gestures, structural
-  assertions, UI inspection, and failure artifacts.
+- A Python API for exact control targeting, wheel scrolling, raw pointer drag,
+  semantic drag-and-drop, structural assertions, UI inspection, and failure
+  artifacts.
 - A headed inspector that captures the initial frame and refreshes it after UI
-  actions. Interact mode routes left-clicks, right-clicks, drags, and key
-  presses through LLUI. Inspect mode outlines hovered controls from the current
-  production UI tree.
+  actions. Interact mode routes clicks, wheel input, pointer drag, model-backed
+  drag-and-drop, and key presses through LLUI. Inspect mode outlines hovered
+  controls from the current production UI tree.
 - Hidden scenario runs through the same production UI path.
 
 ## Inspector frontend
@@ -50,8 +51,14 @@ with the rebuild command when the embedded client is missing or stale.
 
 > [!WARNING]
 > Only the Alchemy adapter and its `test_widgets` subject are usable today.
-> Scrolling and semantic drag-and-drop are not wired up. Pointer drag is
-> available for production interactions such as floater resizing.
+> Inventory Explorer remains work in progress and is not declared as a usable
+> subject.
+
+`Locator.scroll()` and `Window.scroll_at()` route wheel input through the
+production `LLWindowCallbacks` path. `Locator.drag_to()` offers cargo through
+`LLView::handleDragAndDrop` and drops it only when the production handler
+accepts it. Use `Locator.drag_by()` or `Window.drag()` for raw pointer gestures
+such as floater resizing.
 
 ## Build performance
 

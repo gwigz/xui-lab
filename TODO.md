@@ -44,9 +44,10 @@ The browser inspector remains optional for a person to view. Agents use the CLI.
   and JSONL modes.
 - [ ] Add `--timeout` and deterministic cancellation semantics to every command
   that waits for startup, stability, rendering, input, or shutdown.
-- [ ] Add one-shot `tree`, `pick`, `get`, `click`, `fill`, `press`, `drag-by`,
-  `resize-viewport`, `resize-subject`, `capture`, `reload`, and `diagnostics`
-  commands which reuse the same typed operations as Python scenarios.
+- [ ] Add one-shot `tree`, `pick`, `get`, `click`, `fill`, `press`, `scroll`,
+  `drag-by`, `drag-to`, `resize-viewport`, `resize-subject`, `capture`,
+  `reload`, and `diagnostics` commands. Reuse the typed operations from Python
+  scenarios.
 - [ ] Accept selectors through unambiguous flags such as `--control-id`,
   `--model-id`, and `--path`. Reject conflicting selector flags at parsing.
 - [ ] Define one selector contract for the Python API, CLI, inspector, recorder,
@@ -125,8 +126,9 @@ The browser inspector remains optional for a person to view. Agents use the CLI.
   capability.
 - [ ] Prove that scenario mode does not contact the network. Fail with the
   missing capability name when a subject requests an undeclared service.
-- [ ] Add drag-and-drop through the production handler when the first scenario
-  needs it. Do not copy acceptance or permission rules.
+- [x] Route drag-and-drop through the production handler. The
+  `input_gestures` scenario proves handled rejection without copying acceptance
+  rules.
 
 ## Complete inspection and failure diagnostics
 
@@ -156,7 +158,9 @@ The browser inspector remains optional for a person to view. Agents use the CLI.
   list, and grid views.
 - [ ] Add tests for folder navigation, search, inspector details, and the
   holding tray.
-- [ ] Add a drag-and-drop test through the production handler.
+- [x] Add a drag-and-drop test through the production handler.
+- [ ] Add an accepted Inventory Explorer drag-and-drop case after the subject
+  is declared.
 - [ ] Keep structural assertions as the pass condition. Add platform-specific
   image comparisons only after the behaviors pass.
 

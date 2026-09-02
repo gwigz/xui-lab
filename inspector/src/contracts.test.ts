@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  findModelTreeNodeAtPoint,
   findTreeNodeAtPoint,
   findTreeNodeByControlId,
   parseActionResponse,
@@ -137,5 +138,40 @@ describe("findTreeNodeAtPoint", () => {
       top: 200,
     });
     expect(findTreeNodeAtPoint(state.tree, { x: 460, y: 175 })?.controlId).toBe("root");
+  });
+
+  it("finds the model-backed row when its label is the smallest element", () => {
+    const state = parseInspectorState({
+      ...validState,
+      tree: {
+        ...validState.tree,
+        visible_chain: true,
+        screen_rect: { left: 0, right: 800, bottom: 0, top: 600 },
+        children: [
+          {
+            control_id: "inventory-item",
+            path: "/root/inventory/item",
+            class: "LLFolderViewItem",
+            model_id: "30000000-0000-4000-8000-000000000001",
+            visible_chain: true,
+            screen_rect: { left: 100, right: 400, bottom: 100, top: 130 },
+            children: [
+              {
+                control_id: "inventory-label",
+                path: "/root/inventory/item/label",
+                class: "LLTextBox",
+                visible_chain: true,
+                screen_rect: { left: 130, right: 300, bottom: 100, top: 130 },
+                children: [],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    const point = { x: 200, y: 115 };
+    expect(findTreeNodeAtPoint(state.tree, point)?.controlId).toBe("inventory-label");
+    expect(findModelTreeNodeAtPoint(state.tree, point)?.controlId).toBe("inventory-item");
   });
 });

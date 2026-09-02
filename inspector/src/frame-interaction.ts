@@ -2,6 +2,20 @@ import type { KeyboardModifier } from "./contracts";
 
 export type FramePoint = Readonly<{ x: number; y: number }>;
 
+export type FrameDragInput =
+  | Readonly<{
+      action: "drag";
+      startX: number;
+      startY: number;
+      endX: number;
+      endY: number;
+    }>
+  | Readonly<{
+      action: "dragAndDrop";
+      sourceControlId: string;
+      targetControlId: string;
+    }>;
+
 export type BrowserFrameInput =
   | Readonly<{ action: "type"; text: string }>
   | Readonly<{
@@ -94,6 +108,42 @@ export function framePoint(
   return {
     x: Math.round((imageX / bounds.width) * lluiWidth),
     y: Math.round((1 - imageY / bounds.height) * lluiHeight),
+  };
+}
+
+export function wheelClicks(deltaY: number): number {
+  return Math.sign(deltaY);
+}
+
+export function frameDragInput(
+  input: Readonly<{
+    start: FramePoint;
+    end: FramePoint;
+    sourceControlId?: string;
+    sourceModelId?: string;
+    targetControlId?: string;
+    supportsDragAndDrop: boolean;
+  }>,
+): FrameDragInput {
+  if (
+    input.supportsDragAndDrop &&
+    input.sourceModelId !== undefined &&
+    input.sourceControlId !== undefined &&
+    input.targetControlId !== undefined
+  ) {
+    return {
+      action: "dragAndDrop",
+      sourceControlId: input.sourceControlId,
+      targetControlId: input.targetControlId,
+    };
+  }
+
+  return {
+    action: "drag",
+    startX: input.start.x,
+    startY: input.start.y,
+    endX: input.end.x,
+    endY: input.end.y,
   };
 }
 

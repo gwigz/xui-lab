@@ -80,7 +80,7 @@ def fake_runtime(directory: Path, command_log: Path) -> Path:
                             "LLWindow": {{"operations": [{{"name": "getSubtree"}}, {{"name": "mouseDown"}}]}},
                             "XUILab": {{"operations": [{{"name": "query"}}, {{"name": "input"}}]}},
                         }},
-                        "inputOperations": ["click", "doubleClick", "rightClick", "fill", "text", "key", "drag"],
+                        "inputOperations": ["click", "doubleClick", "rightClick", "fill", "text", "key", "scroll", "drag", "dragAndDrop"],
                     }}
                 elif op == "stable":
                     result = {{"stable": subject != "unstable", "frames": command["maximumFrames"]}}
@@ -289,6 +289,43 @@ class PlaywrightApiTests(unittest.TestCase):
         self.assertEqual("handle-bottom-right", drag["controlId"])
         self.assertEqual((40, -30), (drag["deltaX"], drag["deltaY"]))
 
+    def test_scroll_uses_the_shared_input_operation(self) -> None:
+        with self.open() as window:
+            window.get_by_path(CHECKBOX_PATH).scroll(3).expect_handled()
+            window.scroll_at(40, 30, -2).expect_handled()
+
+        inputs = [command for command in self.commands() if command["op"] == "input"]
+        self.assertEqual(["scroll", "scroll"], [command["event"] for command in inputs])
+        self.assertEqual(CHECKBOX_PATH, inputs[0]["path"])
+        self.assertEqual(3, inputs[0]["clicks"])
+        self.assertEqual(
+            (40, 30, -2), (inputs[1]["x"], inputs[1]["y"], inputs[1]["clicks"])
+        )
+
+    def test_scroll_rejects_zero_and_non_integer_clicks(self) -> None:
+        with self.open() as window:
+            locator = window.get_by_path(CHECKBOX_PATH)
+            for clicks in (0, True, 1.5):
+                with self.subTest(clicks=clicks):
+                    with self.assertRaisesRegex(
+                        InputError, "scroll clicks must be a non-zero integer"
+                    ):
+                        locator.scroll(clicks)
+
+    def test_drag_to_uses_production_drag_and_drop_dispatch(self) -> None:
+        with self.open() as window:
+            source = window.get_by_path(CHECKBOX_PATH)
+            target = window.get_by_path(PRODUCTION_CHECKBOX)
+            source.drag_to(target).expect_handled()
+
+        operation = next(
+            command
+            for command in self.commands()
+            if command.get("op") == "input" and command.get("event") == "dragAndDrop"
+        )
+        self.assertEqual({"path": CHECKBOX_PATH}, operation["source"])
+        self.assertEqual({"path": PRODUCTION_CHECKBOX}, operation["target"])
+
     def test_missing_locator_reports_zero_matches(self) -> None:
         with self.open() as window:
             with self.assertRaisesRegex(AssertionFailure, "resolved to 0 controls"):
@@ -346,6 +383,11 @@ class PlaywrightApiTests(unittest.TestCase):
                 f"window.get_by_path({CHECKBOX_PATH!r}).fill('hello')",
                 f"window.get_by_path({CHECKBOX_PATH!r}).press('Enter')",
                 f"window.get_by_path({CHECKBOX_PATH!r}).press('Left', modifiers=('shift', 'control'))",
+                f"window.get_by_path({CHECKBOX_PATH!r}).scroll(-2)",
+                (
+                    f"window.get_by_path({CHECKBOX_PATH!r}).drag_to("
+                    "window.get_by_control_id('drop-target'))"
+                ),
                 "window.get_by_control_id('resize-handle').drag_by(dx=40, dy=-30)",
             ],
             recorded_python(
@@ -358,6 +400,16 @@ class PlaywrightApiTests(unittest.TestCase):
                         "path": CHECKBOX_PATH,
                         "key": "Left",
                         "modifiers": ["shift", "control"],
+                    },
+                    {
+                        "action": "scroll",
+                        "path": CHECKBOX_PATH,
+                        "clicks": -2,
+                    },
+                    {
+                        "action": "drag_and_drop",
+                        "path": CHECKBOX_PATH,
+                        "targetControlId": "drop-target",
                     },
                     {
                         "action": "drag",
@@ -434,11 +486,16 @@ class PlaywrightApiTests(unittest.TestCase):
         capture.write_bytes(b"png bytes")
         capture_names: list[str] = []
         presses: list[tuple[str, tuple[str, ...]]] = []
+        scrolls: list[tuple[int, int, int]] = []
+        drops: list[tuple[str, str]] = []
 
         class ActionStub:
             data = {"handled": True}
 
         class LocatorStub:
+            def __init__(self, control_id: str) -> None:
+                self.control_id = control_id
+
             @staticmethod
             def click() -> ActionStub:
                 return ActionStub()
@@ -452,6 +509,10 @@ class PlaywrightApiTests(unittest.TestCase):
                 presses.append((key, modifiers))
                 return ActionStub()
 
+            def drag_to(self, target: LocatorStub) -> ActionStub:
+                drops.append((self.control_id, target.control_id))
+                return ActionStub()
+
         class WindowStub:
             def __init__(self) -> None:
                 self.artifact_dir = capture.parent
@@ -461,8 +522,8 @@ class PlaywrightApiTests(unittest.TestCase):
                 return {"path": str(capture)}
 
             @staticmethod
-            def get_by_control_id(_control_id: str) -> LocatorStub:
-                return LocatorStub()
+            def get_by_control_id(control_id: str) -> LocatorStub:
+                return LocatorStub(control_id)
 
             @staticmethod
             def click_at(_x: int, _y: int) -> ActionStub:
@@ -480,6 +541,11 @@ class PlaywrightApiTests(unittest.TestCase):
             def drag(
                 _start_x: int, _start_y: int, _end_x: int, _end_y: int
             ) -> ActionStub:
+                return ActionStub()
+
+            @staticmethod
+            def scroll_at(x: int, y: int, clicks: int) -> ActionStub:
+                scrolls.append((x, y, clicks))
                 return ActionStub()
 
         session = object.__new__(InteractiveSession)
@@ -511,6 +577,14 @@ class PlaywrightApiTests(unittest.TestCase):
                 "endY": 50,
             }
         )
+        session.action({"action": "scrollAt", "x": 10, "y": 20, "clicks": -1})
+        session.action(
+            {
+                "action": "dragAndDrop",
+                "sourceControlId": "inventory-item",
+                "targetControlId": "inventory-folder",
+            }
+        )
         session.action(
             {"action": "fill", "controlId": "line-editor", "text": "Known text"}
         )
@@ -524,10 +598,12 @@ class PlaywrightApiTests(unittest.TestCase):
                 }
             )
 
-        self.assertEqual(8, len(capture_names))
+        self.assertEqual(10, len(capture_names))
         self.assertEqual([("Enter", ("control",))], presses)
+        self.assertEqual([(10, 20, -1)], scrolls)
+        self.assertEqual([("inventory-item", "inventory-folder")], drops)
         self.assertEqual(capture.resolve(), session.latest_capture)
-        self.assertEqual(8, session._capture_version)
+        self.assertEqual(10, session._capture_version)
 
     def test_interactive_capture_rejects_a_path_outside_its_artifacts(self) -> None:
         capture = self.directory / "outside.png"

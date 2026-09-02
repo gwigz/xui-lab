@@ -20,8 +20,10 @@ from .operations import (
     Capture,
     ControlIdSelector,
     CoordinatePointerAction,
+    CoordinateScrollAction,
     Diagnostics,
     DragAction,
+    DragAndDropAction,
     Frames,
     Highlight,
     KeyInput,
@@ -35,6 +37,7 @@ from .operations import (
     Reload,
     ResizeSubject,
     ResizeViewport,
+    ScrollAction,
     Selector,
     TextInput,
     WaitForStable,
@@ -341,6 +344,13 @@ class Window:
         self._validate_coordinates((start_x, start_y, end_x, end_y))
         return self._perform_input(DragAction(start_x, start_y, end_x, end_y), "drag")
 
+    def scroll_at(self, x: int, y: int, clicks: int) -> ActionResult:
+        self._validate_coordinates((x, y))
+        self._validate_scroll_clicks(clicks)
+        return self._perform_input(
+            CoordinateScrollAction(x=x, y=y, clicks=clicks), "scroll"
+        )
+
     @staticmethod
     def _validate_positive_size(width: int, height: int, label: str) -> None:
         if (
@@ -359,6 +369,11 @@ class Window:
             not isinstance(value, int) or isinstance(value, bool) for value in values
         ):
             raise InputError("pointer coordinates must be integers")
+
+    @staticmethod
+    def _validate_scroll_clicks(clicks: int) -> None:
+        if not isinstance(clicks, int) or isinstance(clicks, bool) or clicks == 0:
+            raise InputError("scroll clicks must be a non-zero integer")
 
     def _perform_input(self, operation: Any, action: str) -> ActionResult:
         self._require_capability("input")
@@ -610,9 +625,6 @@ class Locator:
     def right_click(self) -> ActionResult:
         return self._perform(PointerEvent.CLICK, MouseButton.RIGHT)
 
-    def _unsupported(self, action: str) -> None:
-        raise CapabilityError(f"runtime does not expose the locator action {action!r}")
-
     def fill(self, value: str) -> ActionResult:
         return self._perform_text(TextInput(value, self.selector, replace=True))
 
@@ -640,8 +652,19 @@ class Locator:
         self.window.wait_for_stable()
         return ActionResult("fill" if operation.replace else "text", result)
 
-    def scroll(self, _clicks: int) -> None:
-        self._unsupported("scroll")
+    def scroll(self, clicks: int) -> ActionResult:
+        self.window._validate_scroll_clicks(clicks)
+        self.window._require_capability("input")
+        self.window._require_operation("XUILab", "input")
+        self.window._require_input_operation("scroll")
+        self.window.wait_for_stable()
+        self.resolve()
+        result = _mapping(
+            self.window._request(ScrollAction(clicks, self.selector).to_command()),
+            "scroll result",
+        )
+        self.window.wait_for_stable()
+        return ActionResult("scroll", result)
 
     def drag_by(self, *, dx: int, dy: int) -> ActionResult:
         if any(
@@ -663,23 +686,22 @@ class Locator:
         return ActionResult("drag", result)
 
     def drag_to(self, target: Locator) -> ActionResult:
-        source_control = self.resolve()
-        target_control = target.resolve()
-        source_rect = source_control.info.get("screen_rect")
-        target_rect = target_control.info.get("screen_rect")
-        if not isinstance(source_rect, dict) or not isinstance(target_rect, dict):
-            raise AssertionFailure("drag endpoints do not expose screen rectangles")
-
-        def center(rect: dict[str, Any]) -> tuple[int, int]:
-            values = tuple(rect.get(key) for key in ("left", "right", "bottom", "top"))
-            if any(not isinstance(value, int) for value in values):
-                raise AssertionFailure("drag endpoint has an invalid screen rectangle")
-            left, right, bottom, top = values
-            return ((left + right) // 2, (bottom + top) // 2)
-
-        start_x, start_y = center(source_rect)
-        end_x, end_y = center(target_rect)
-        return self.window.drag(start_x, start_y, end_x, end_y)
+        if target.window is not self.window:
+            raise InputError("drag-and-drop locators must belong to the same window")
+        self.window._require_capability("input")
+        self.window._require_operation("XUILab", "input")
+        self.window._require_input_operation("dragAndDrop")
+        self.window.wait_for_stable()
+        self.resolve()
+        target.resolve()
+        result = _mapping(
+            self.window._request(
+                DragAndDropAction(self.selector, target.selector).to_command()
+            ),
+            "drag-and-drop result",
+        )
+        self.window.wait_for_stable()
+        return ActionResult("dragAndDrop", result)
 
     def expect(
         self, field: str, expected: Any, comparison: Comparison = Comparison.EQUALS

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { browserFrameInput, frameOutline, framePoint } from "./frame-interaction";
+import {
+  browserFrameInput,
+  frameDragInput,
+  frameOutline,
+  framePoint,
+  wheelClicks,
+} from "./frame-interaction";
 
 describe("framePoint", () => {
   it("maps browser pixels into bottom-origin LLUI coordinates", () => {
@@ -99,5 +105,44 @@ describe("frameOutline", () => {
         400,
       ),
     ).toEqual({ left: 200, top: 100, width: 200, height: 100 });
+  });
+});
+
+describe("wheelClicks", () => {
+  it("turns browser wheel direction into discrete viewer clicks", () => {
+    expect(wheelClicks(120)).toBe(1);
+    expect(wheelClicks(-0.5)).toBe(-1);
+    expect(wheelClicks(0)).toBe(0);
+  });
+});
+
+describe("frameDragInput", () => {
+  it("uses semantic drag-and-drop for model-backed sources", () => {
+    expect(
+      frameDragInput({
+        start: { x: 10, y: 20 },
+        end: { x: 30, y: 40 },
+        sourceControlId: "inventory-item",
+        sourceModelId: "30000000-0000-4000-8000-000000000001",
+        targetControlId: "inventory-folder",
+        supportsDragAndDrop: true,
+      }),
+    ).toEqual({
+      action: "dragAndDrop",
+      sourceControlId: "inventory-item",
+      targetControlId: "inventory-folder",
+    });
+  });
+
+  it("keeps raw pointer drag for ordinary controls", () => {
+    expect(
+      frameDragInput({
+        start: { x: 10, y: 20 },
+        end: { x: 30, y: 40 },
+        sourceControlId: "resize-handle",
+        targetControlId: "floater",
+        supportsDragAndDrop: true,
+      }),
+    ).toEqual({ action: "drag", startX: 10, startY: 20, endX: 30, endY: 40 });
   });
 });

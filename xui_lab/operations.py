@@ -163,6 +163,36 @@ class CoordinatePointerAction:
 
 
 @dataclass(frozen=True)
+class ScrollAction:
+    clicks: int
+    selector: Selector
+
+    def to_command(self) -> dict[str, Any]:
+        return {
+            "op": "input",
+            "event": "scroll",
+            "clicks": self.clicks,
+            **self.selector.target(),
+        }
+
+
+@dataclass(frozen=True)
+class CoordinateScrollAction:
+    x: int
+    y: int
+    clicks: int
+
+    def to_command(self) -> dict[str, Any]:
+        return {
+            "op": "input",
+            "event": "scroll",
+            "x": self.x,
+            "y": self.y,
+            "clicks": self.clicks,
+        }
+
+
+@dataclass(frozen=True)
 class DragAction:
     start_x: int | None = None
     start_y: int | None = None
@@ -188,6 +218,20 @@ class DragAction:
                 }
             )
         return command
+
+
+@dataclass(frozen=True)
+class DragAndDropAction:
+    source: Selector
+    target: Selector
+
+    def to_command(self) -> dict[str, Any]:
+        return {
+            "op": "input",
+            "event": "dragAndDrop",
+            "source": self.source.target(),
+            "target": self.target.target(),
+        }
 
 
 @dataclass(frozen=True)

@@ -42,7 +42,7 @@ the following terms:
 | `LLURLDispatcher` | None | `dispatch`, `dispatchFromTextEditor`, and `dispatchRightClick` can invoke login, world, network, or external URL boundaries. |
 | `UI` | `getValue` is local. `setSelectedByValue` works for an existing `LLComboBox`. `call` is local only for a callback whose implementation has no external dependency. | None at the commit-callback registry boundary. |
 | `LLWindow` | `getInfo`, `getPaths`, `getSubtree`, `mouseDown`, `mouseDoubleClick`, `mouseUp`, `mouseMove`, and `mouseScroll` use the lab's `LLWindowCallbacks` host. | Keyboard, text, clipboard, and keybinding operations remain unexposed until the lab supplies and proves their platform dependencies. |
-| `XUILab` | `initialize`, `installCapabilities`, `frames`, `stable`, `resize`, `capture`, `reload`, `diagnostics`, and `shutdown` are local. `query` and `input` are exposed only when the subject installs their required capabilities. | None. |
+| `XUILab` | `initialize`, `installCapabilities`, `frames`, `stable`, `resizeViewport`, `resizeSubject`, `capture`, `reload`, `diagnostics`, and `shutdown` are local. `query` and `input` are exposed only when the subject installs their required capabilities. The `input` operation supports wheel scrolling, raw pointer drag, and semantic drag-and-drop. | None. |
 
 ## Runtime bridge
 
@@ -60,7 +60,9 @@ lab window host implement that interface. The lab reuses path resolution, tree
 inspection, coordinate synthesis, event replies, and input dispatch without
 constructing the viewer application. The Python test-floater scenario opens the
 registered production floater and proves `LLWindow.getSubtree`,
-`LLWindow.mouseDown`, and `LLWindow.mouseUp` in one process.
+`LLWindow.mouseDown`, and `LLWindow.mouseUp` in one process. The
+`input_gestures` scenario proves `LLWindow.mouseScroll` and production
+`LLView::handleDragAndDrop` dispatch.
 
 The bridge follows `LLLeapListener` for request and reply pumps and for API
 metadata. It does not instantiate `LLLeap` or launch the controller as a LEAP

@@ -287,6 +287,13 @@ public:
         return result;
     }
 
+    [[nodiscard]] LLSD takeScrollResult()
+    {
+        LLSD result   = std::move(mScrollResult);
+        mScrollResult = LLSD();
+        return result;
+    }
+
     bool sendKey(KEY key, MASK mask)
     {
         const bool down = handleTranslatedKeyDown(key, mask, false);
@@ -398,6 +405,7 @@ public:
     {
         const LLCoordGL screen = screenPosition(position);
         mPointerMove           = std::pair(screen.mX, screen.mY);
+        mCurrentPointer        = screen;
         if (LLMouseHandler* capture = gFocusMgr.getMouseCapture())
         {
             S32 local_x = 0;
@@ -407,6 +415,32 @@ public:
             return;
         }
         mRoot->handleHover(screen.mX, screen.mY, mask);
+    }
+
+    void handleScrollWheel(LLWindow*, LLScrollDelta delta) override
+    {
+        bool handled = false;
+        if (LLMouseHandler* capture = gFocusMgr.getMouseCapture())
+        {
+            S32 local_x = 0;
+            S32 local_y = 0;
+            capture->screenPointToLocal(mCurrentPointer.mX, mCurrentPointer.mY, &local_x, &local_y);
+            handled = capture->handleScrollWheel(local_x, local_y, delta);
+        }
+        else if (LLUICtrl* top = gFocusMgr.getTopCtrl())
+        {
+            S32 local_x = 0;
+            S32 local_y = 0;
+            top->screenPointToLocal(mCurrentPointer.mX, mCurrentPointer.mY, &local_x, &local_y);
+            handled = top->handleScrollWheel(local_x, local_y, delta);
+        }
+        if (!handled)
+            handled = mRoot->handleScrollWheel(mCurrentPointer.mX, mCurrentPointer.mY, delta);
+
+        mScrollResult = LLSDMap("handled", handled)("clicks", delta.mClicks)("x", mCurrentPointer.mX)("y", mCurrentPointer.mY);
+        if (mGatheringInput)
+            mInteractiveActions.append(
+                LLSDMap("action", "scroll")("clicks", delta.mClicks)("x", mCurrentPointer.mX)("y", mCurrentPointer.mY));
     }
 
     bool handleTranslatedKeyDown(KEY key, MASK mask, bool) override
@@ -482,11 +516,13 @@ private:
 
     LLWindow*                          mWindow = nullptr;
     LLView*                            mRoot   = nullptr;
+    LLCoordGL                          mCurrentPointer;
     std::optional<std::pair<S32, S32>> mPointerMove;
     std::optional<std::pair<S32, S32>> mResize;
     LLSD                               mInteractiveActions = LLSD::emptyArray();
-    bool                               mGatheringInput     = false;
-    bool                               mCloseRequested     = false;
+    LLSD                               mScrollResult;
+    bool                               mGatheringInput = false;
+    bool                               mCloseRequested = false;
 };
 
 LLSD describeView(LLView* view)
@@ -955,6 +991,8 @@ public:
 
     [[nodiscard]] LLSD takeInteractiveActions() { return mWindow->takeInteractiveActions(); }
 
+    [[nodiscard]] LLSD takeScrollResult() { return mWindow->takeScrollResult(); }
+
     void setHighlight(LLView* target) noexcept { mHighlight = target; }
 
     LLSD inputKey(std::string_view requested_key, const LLSD& modifiers)
@@ -1054,6 +1092,8 @@ std::optional<std::pair<S32, S32>> UIHost::takePointerMove()
 { return mImpl->takePointerMove(); }
 LLSD UIHost::takeInteractiveActions()
 { return mImpl->takeInteractiveActions(); }
+LLSD UIHost::takeScrollResult()
+{ return mImpl->takeScrollResult(); }
 void UIHost::setHighlight(LLView* target) noexcept
 { mImpl->setHighlight(target); }
 LLSD UIHost::inputKey(std::string_view key, const LLSD& modifiers)

@@ -50,6 +50,12 @@ export type InspectorAction =
       endX: number;
       endY: number;
     }>
+  | Readonly<{ action: "scrollAt"; x: number; y: number; clicks: number }>
+  | Readonly<{
+      action: "dragAndDrop";
+      sourceControlId: string;
+      targetControlId: string;
+    }>
   | Readonly<{ action: "fill"; controlId: string; text: string }>
   | Readonly<{ action: "type"; controlId: string; text: string }>
   | Readonly<{
@@ -249,9 +255,10 @@ export function treeNodeVisibleRect(node: TreeNode): FrameRect | undefined {
   return visible.right > visible.left && visible.top > visible.bottom ? visible : undefined;
 }
 
-export function findTreeNodeAtPoint(
+function findTreeNodeAtPointWhere(
   node: TreeNode,
   point: Readonly<{ x: number; y: number }>,
+  accepts: (candidate: TreeNode) => boolean,
 ): TreeNode | undefined {
   let best: Readonly<{ node: TreeNode; area: number; depth: number }> | undefined;
 
@@ -269,7 +276,10 @@ export function findTreeNodeAtPoint(
       point.y <= rect.top
     ) {
       const area = (rect.right - rect.left) * (rect.top - rect.bottom);
-      if (best === undefined || area < best.area || (area === best.area && depth > best.depth)) {
+      if (
+        accepts(candidate) &&
+        (best === undefined || area < best.area || (area === best.area && depth > best.depth))
+      ) {
         best = { node: candidate, area, depth };
       }
     }
@@ -281,4 +291,22 @@ export function findTreeNodeAtPoint(
 
   visit(node, 0);
   return best?.node;
+}
+
+export function findTreeNodeAtPoint(
+  node: TreeNode,
+  point: Readonly<{ x: number; y: number }>,
+): TreeNode | undefined {
+  return findTreeNodeAtPointWhere(node, point, () => true);
+}
+
+export function findModelTreeNodeAtPoint(
+  node: TreeNode,
+  point: Readonly<{ x: number; y: number }>,
+): TreeNode | undefined {
+  return findTreeNodeAtPointWhere(
+    node,
+    point,
+    (candidate) => typeof candidate.raw.model_id === "string" && candidate.raw.model_id.length > 0,
+  );
 }
