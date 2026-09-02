@@ -11,8 +11,12 @@ from xui_lab.domain import AssertionStep, Comparison, parse_manifest, parse_scen
 from xui_lab.errors import AssertionFailure, InputError, RuntimeFailure
 from xui_lab.io import read_json
 from xui_lab.protocol import RuntimeProcess
-from xui_lab.runner import ScenarioRunner, artifact_directory, check_assertion, resolve_pointer
-
+from xui_lab.runner import (
+    ScenarioRunner,
+    artifact_directory,
+    check_assertion,
+    resolve_pointer,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -95,7 +99,9 @@ class ScenarioRunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory_text:
             directory = Path(directory_text)
             process_log = directory / "processes.jsonl"
-            executable = fake_runtime(directory, f"""
+            executable = fake_runtime(
+                directory,
+                f"""
                 import json
                 import os
                 import sys
@@ -114,27 +120,38 @@ class ScenarioRunnerTests(unittest.TestCase):
                     print(json.dumps({{"ok": True, "result": result}}), flush=True)
                     if command["op"] == "shutdown":
                         break
-            """)
+            """,
+            )
             manifest = parse_manifest(ROOT, read_json(ROOT / "forks.json"))
             fork = manifest.forks[manifest.default_fork]
-            runner = ScenarioRunner(ROOT, fork, fork.source.path, executable, directory / "artifacts")
+            runner = ScenarioRunner(
+                ROOT, fork, fork.source.path, executable, directory / "artifacts"
+            )
 
             for scenario_id in ("fresh_process_one", "fresh_process_two"):
-                scenario = parse_scenario(ROOT, {
-                    "schemaVersion": 1,
-                    "id": scenario_id,
-                    "fork": "alchemy",
-                    "subject": "test_widgets",
-                    "viewport": {"width": 100, "height": 100, "uiScale": 1.0},
-                    "requires": ["inspection"],
-                    "steps": [{"op": "frames", "count": 1}],
-                })
+                scenario = parse_scenario(
+                    ROOT,
+                    {
+                        "schemaVersion": 1,
+                        "id": scenario_id,
+                        "fork": "alchemy",
+                        "subject": "test_widgets",
+                        "viewport": {"width": 100, "height": 100, "uiScale": 1.0},
+                        "requires": ["inspection"],
+                        "steps": [{"op": "frames", "count": 1}],
+                    },
+                )
                 self.assertTrue(runner.run(scenario).passed)
 
-            processes = [json.loads(line) for line in process_log.read_text(encoding="utf-8").splitlines()]
+            processes = [
+                json.loads(line)
+                for line in process_log.read_text(encoding="utf-8").splitlines()
+            ]
             self.assertEqual(2, len(processes))
             self.assertEqual(2, len({process["pid"] for process in processes}))
-            self.assertEqual({os.getpid()}, {process["parentPid"] for process in processes})
+            self.assertEqual(
+                {os.getpid()}, {process["parentPid"] for process in processes}
+            )
 
 
 class RuntimeProcessTests(unittest.TestCase):
@@ -150,61 +167,82 @@ class RuntimeProcessTests(unittest.TestCase):
 
     def test_request_reports_stalled_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as directory_text:
-            runtime = self.start(Path(directory_text), """
+            runtime = self.start(
+                Path(directory_text),
+                """
                 import sys
                 import time
                 sys.stdin.readline()
                 time.sleep(60)
-            """)
+            """,
+            )
             with self.assertRaisesRegex(RuntimeFailure, "stalled.*query"):
                 runtime.request({"op": "query"})
 
     def test_request_reports_runtime_exit(self) -> None:
         with tempfile.TemporaryDirectory() as directory_text:
-            runtime = self.start(Path(directory_text), """
+            runtime = self.start(
+                Path(directory_text),
+                """
                 import sys
                 sys.stdin.readline()
                 raise SystemExit(7)
-            """)
+            """,
+            )
             with self.assertRaisesRegex(RuntimeFailure, "exited with status 7"):
                 runtime.request({"op": "query"})
 
     def test_request_reports_closed_response_stream(self) -> None:
         with tempfile.TemporaryDirectory() as directory_text:
-            runtime = self.start(Path(directory_text), """
+            runtime = self.start(
+                Path(directory_text),
+                """
                 import os
                 import sys
                 import time
                 sys.stdin.readline()
                 os.close(sys.stdout.fileno())
                 time.sleep(60)
-            """)
-            with self.assertRaisesRegex(RuntimeFailure, "closed its response stream.*query"):
+            """,
+            )
+            with self.assertRaisesRegex(
+                RuntimeFailure, "closed its response stream.*query"
+            ):
                 runtime.request({"op": "query"})
 
     def test_request_reports_invalid_json_response(self) -> None:
         with tempfile.TemporaryDirectory() as directory_text:
-            runtime = self.start(Path(directory_text), """
+            runtime = self.start(
+                Path(directory_text),
+                """
                 import sys
                 sys.stdin.readline()
                 print("not-json", flush=True)
-            """)
+            """,
+            )
             with self.assertRaisesRegex(RuntimeFailure, "invalid response.*JSON"):
                 runtime.request({"op": "query"})
 
     def test_request_reports_invalid_response_shape(self) -> None:
         with tempfile.TemporaryDirectory() as directory_text:
-            runtime = self.start(Path(directory_text), """
+            runtime = self.start(
+                Path(directory_text),
+                """
                 import sys
                 sys.stdin.readline()
                 print("[]", flush=True)
-            """)
-            with self.assertRaisesRegex(RuntimeFailure, "invalid response.*Boolean 'ok'"):
+            """,
+            )
+            with self.assertRaisesRegex(
+                RuntimeFailure, "invalid response.*Boolean 'ok'"
+            ):
                 runtime.request({"op": "query"})
 
     def test_shutdown_reports_runtime_that_does_not_exit(self) -> None:
         with tempfile.TemporaryDirectory() as directory_text:
-            runtime = self.start(Path(directory_text), """
+            runtime = self.start(
+                Path(directory_text),
+                """
                 import json
                 import sys
                 import time
@@ -213,13 +251,16 @@ class RuntimeProcessTests(unittest.TestCase):
                     print(json.dumps({"ok": True, "result": {}}), flush=True)
                     if command["op"] == "shutdown":
                         time.sleep(60)
-            """)
+            """,
+            )
             with self.assertRaisesRegex(RuntimeFailure, "stalled.*shutdown"):
                 runtime.close()
 
     def test_clean_shutdown_returns_zero(self) -> None:
         with tempfile.TemporaryDirectory() as directory_text:
-            runtime = self.start(Path(directory_text), """
+            runtime = self.start(
+                Path(directory_text),
+                """
                 import json
                 import sys
                 for line in sys.stdin:
@@ -227,8 +268,10 @@ class RuntimeProcessTests(unittest.TestCase):
                     print(json.dumps({"ok": True, "result": {}}), flush=True)
                     if command["op"] == "shutdown":
                         break
-            """)
+            """,
+            )
             self.assertEqual(0, runtime.close())
+
 
 if __name__ == "__main__":
     unittest.main()

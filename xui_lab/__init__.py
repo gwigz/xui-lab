@@ -20,7 +20,6 @@ from .operations import (
     WaitForStable,
 )
 
-
 __all__ = [
     "ActionResult",
     "Capability",

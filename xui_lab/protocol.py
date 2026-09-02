@@ -31,17 +31,25 @@ class RuntimeProcess:
         self._status: int | None = None
         try:
             self._process = subprocess.Popen(
-                [str(executable), "--scenario"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                stderr=self._stderr, text=True, bufsize=1,
+                [str(executable), "--scenario"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=self._stderr,
+                text=True,
+                bufsize=1,
             )
         except OSError as error:
             self._stderr.close()
-            raise RuntimeFailure(f"cannot start runtime {executable}: {error}") from error
+            raise RuntimeFailure(
+                f"cannot start runtime {executable}: {error}"
+            ) from error
         if self._process.stdin is None or self._process.stdout is None:
             self._terminate()
             self._stderr.close()
             raise RuntimeFailure("runtime process has no JSON-lines pipes")
-        self._reader = threading.Thread(target=self._read_responses, name="xui-lab-runtime-reader", daemon=True)
+        self._reader = threading.Thread(
+            target=self._read_responses, name="xui-lab-runtime-reader", daemon=True
+        )
         self._reader.start()
 
     def _read_responses(self) -> None:
@@ -52,15 +60,21 @@ class RuntimeProcess:
         finally:
             self._responses.put(None)
 
-    def request(self, command: dict[str, Any], *, timeout: float | None = None) -> dict[str, Any]:
+    def request(
+        self, command: dict[str, Any], *, timeout: float | None = None
+    ) -> dict[str, Any]:
         operation = command.get("op", "unknown")
         if self._closed:
             raise RuntimeFailure("runtime process is closed")
         if self._failed:
-            raise RuntimeFailure("runtime process cannot accept requests after a protocol failure")
+            raise RuntimeFailure(
+                "runtime process cannot accept requests after a protocol failure"
+            )
         if self._process.poll() is not None:
             self._failed = True
-            raise RuntimeFailure(f"runtime exited with status {self._process.returncode} before '{operation}'")
+            raise RuntimeFailure(
+                f"runtime exited with status {self._process.returncode} before '{operation}'"
+            )
         assert self._process.stdin is not None
         try:
             self._process.stdin.write(json.dumps(command, separators=(",", ":")) + "\n")
@@ -69,8 +83,12 @@ class RuntimeProcess:
             self._failed = True
             status = self._process.poll()
             if status is not None:
-                raise RuntimeFailure(f"runtime exited with status {status} during '{operation}'") from error
-            raise RuntimeFailure(f"runtime closed its request stream during '{operation}'") from error
+                raise RuntimeFailure(
+                    f"runtime exited with status {status} during '{operation}'"
+                ) from error
+            raise RuntimeFailure(
+                f"runtime closed its request stream during '{operation}'"
+            ) from error
 
         wait_seconds = self._request_timeout if timeout is None else timeout
         try:
@@ -79,7 +97,9 @@ class RuntimeProcess:
             self._failed = True
             status = self._process.poll()
             if status is not None:
-                raise RuntimeFailure(f"runtime exited with status {status} before responding to '{operation}'") from error
+                raise RuntimeFailure(
+                    f"runtime exited with status {status} before responding to '{operation}'"
+                ) from error
             raise RuntimeFailure(
                 f"runtime stalled for {wait_seconds:g}s waiting for response to '{operation}'"
             ) from error
@@ -88,8 +108,12 @@ class RuntimeProcess:
             self._failed = True
             status = self._process.poll()
             if status is not None:
-                raise RuntimeFailure(f"runtime exited with status {status} before responding to '{operation}'")
-            raise RuntimeFailure(f"runtime closed its response stream while still running during '{operation}'")
+                raise RuntimeFailure(
+                    f"runtime exited with status {status} before responding to '{operation}'"
+                )
+            raise RuntimeFailure(
+                f"runtime closed its response stream while still running during '{operation}'"
+            )
         try:
             response = json.loads(line)
         except json.JSONDecodeError as error:
@@ -105,7 +129,9 @@ class RuntimeProcess:
         if not response["ok"]:
             error = response.get("error", {})
             if isinstance(error, dict):
-                raise RuntimeFailure(f"{error.get('code', 'runtime_error')}: {error.get('message', 'runtime command failed')}")
+                raise RuntimeFailure(
+                    f"{error.get('code', 'runtime_error')}: {error.get('message', 'runtime command failed')}"
+                )
             raise RuntimeFailure("runtime command failed")
         return response
 
@@ -121,7 +147,9 @@ class RuntimeProcess:
             try:
                 return self._process.wait(timeout=self._shutdown_timeout)
             except subprocess.TimeoutExpired as error:
-                raise RuntimeFailure("runtime did not exit after terminate and kill") from error
+                raise RuntimeFailure(
+                    "runtime did not exit after terminate and kill"
+                ) from error
 
     def _close_streams(self) -> None:
         if self._process.stdin is not None:
@@ -163,7 +191,7 @@ class RuntimeProcess:
             raise failure
         return status
 
-    def __enter__(self) -> "RuntimeProcess":
+    def __enter__(self) -> RuntimeProcess:
         return self
 
     def __exit__(self, _type: object, _value: object, _traceback: object) -> None:

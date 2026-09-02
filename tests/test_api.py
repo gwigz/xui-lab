@@ -13,7 +13,6 @@ from xui_lab.errors import AssertionFailure, CapabilityError
 from xui_lab.io import read_json
 from xui_lab.operations import Frames, PathSelector, PointerAction
 
-
 ROOT = Path(__file__).resolve().parents[1]
 CHECKBOX_PATH = "/root/checkbox"
 
@@ -21,7 +20,8 @@ CHECKBOX_PATH = "/root/checkbox"
 def fake_runtime(directory: Path, command_log: Path) -> Path:
     executable = directory / "fake-api-runtime"
     executable.write_text(
-        "#!/usr/bin/env python3\n" + textwrap.dedent(f"""
+        "#!/usr/bin/env python3\n"
+        + textwrap.dedent(f"""
             import json
             import sys
             from pathlib import Path
@@ -127,16 +127,21 @@ class PlaywrightApiTests(unittest.TestCase):
             artifact_id=f"python_api_{subject}",
             subject=subject,
             viewport=Viewport(320, 240, 1.0),
-            capabilities=frozenset({
-                Capability("input"),
-                Capability("inspection"),
-                Capability("menus"),
-                Capability("external_effects"),
-            }),
+            capabilities=frozenset(
+                {
+                    Capability("input"),
+                    Capability("inspection"),
+                    Capability("menus"),
+                    Capability("external_effects"),
+                }
+            ),
         )
 
     def commands(self) -> list[dict[str, object]]:
-        return [json.loads(line) for line in self.command_log.read_text(encoding="utf-8").splitlines()]
+        return [
+            json.loads(line)
+            for line in self.command_log.read_text(encoding="utf-8").splitlines()
+        ]
 
     def test_locator_resolves_before_each_action_and_expectation(self) -> None:
         with self.open() as window:
@@ -147,22 +152,39 @@ class PlaywrightApiTests(unittest.TestCase):
             checkbox.expect_selected(False)
             checkbox.expect_focused(False)
             checkbox.expect_local_rect({"left": 0, "right": 10, "top": 10, "bottom": 0})
-            checkbox.expect_screen_rect({"left": 5, "right": 15, "top": 15, "bottom": 5})
-            checkbox.expect_clipping_rect({"left": 5, "right": 15, "top": 15, "bottom": 5})
+            checkbox.expect_screen_rect(
+                {"left": 5, "right": 15, "top": 15, "bottom": 5}
+            )
+            checkbox.expect_clipping_rect(
+                {"left": 5, "right": 15, "top": 15, "bottom": 5}
+            )
             action = checkbox.click()
             action.expect_handled()
             checkbox.expect_value(True)
             window.expect_menu_visible()
             window.expect_recorded_effect("kind", "url")
-            self.assertEqual(True, window.raw({"op": "diagnostics"})["effects"][0]["kind"] == "url")
+            self.assertEqual(
+                True, window.raw({"op": "diagnostics"})["effects"][0]["kind"] == "url"
+            )
 
         commands = self.commands()
-        input_index = next(index for index, command in enumerate(commands) if command["op"] == "input")
+        input_index = next(
+            index for index, command in enumerate(commands) if command["op"] == "input"
+        )
         self.assertEqual("query", commands[input_index - 1]["op"])
         self.assertEqual("stable", commands[input_index - 2]["op"])
         self.assertEqual("stable", commands[input_index + 1]["op"])
-        self.assertGreaterEqual(sum(command["op"] == "query" for command in commands), 4)
-        self.assertTrue((self.directory / "artifacts" / "python_api_test_widgets" / "event-trace.json").is_file())
+        self.assertGreaterEqual(
+            sum(command["op"] == "query" for command in commands), 4
+        )
+        self.assertTrue(
+            (
+                self.directory
+                / "artifacts"
+                / "python_api_test_widgets"
+                / "event-trace.json"
+            ).is_file()
+        )
 
     def test_supported_pointer_actions_use_the_same_input_operation(self) -> None:
         with self.open() as window:
@@ -192,7 +214,9 @@ class PlaywrightApiTests(unittest.TestCase):
 
     def test_stability_timeout_reports_changing_paths(self) -> None:
         artifact_dir = self.directory / "artifacts" / "python_api_unstable"
-        with self.assertRaisesRegex(AssertionFailure, r"did not stabilize.*changing paths: /root/checkbox"):
+        with self.assertRaisesRegex(
+            AssertionFailure, r"did not stabilize.*changing paths: /root/checkbox"
+        ):
             with self.open("unstable") as window:
                 window.get_by_path(CHECKBOX_PATH).expect_visible()
         self.assertFalse(read_json(artifact_dir / "diagnostics.json")["passed"])
@@ -212,10 +236,17 @@ class PlaywrightApiTests(unittest.TestCase):
                 with self.subTest(action=action):
                     with self.assertRaises(CapabilityError):
                         action()
-        self.assertFalse(any(command.get("event") in {"fill", "key", "scroll", "drag"} for command in self.commands()))
+        self.assertFalse(
+            any(
+                command.get("event") in {"fill", "key", "scroll", "drag"}
+                for command in self.commands()
+            )
+        )
 
     def test_json_scenarios_parse_to_the_public_operation_types(self) -> None:
-        scenario = parse_scenario(ROOT, read_json(ROOT / "scenarios" / "test-floater.json"))
+        scenario = parse_scenario(
+            ROOT, read_json(ROOT / "scenarios" / "test-floater.json")
+        )
         self.assertIsInstance(scenario.steps[0].operation, Frames)
         pointer = next(
             step.operation

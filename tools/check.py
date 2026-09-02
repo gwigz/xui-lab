@@ -17,7 +17,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from xui_lab.domain import Fork, parse_manifest, parse_scenario
 from xui_lab.errors import InputError
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REQUIRED_SPEC_HEADINGS = (
     "## Problem Statement",
@@ -113,7 +112,9 @@ def load_submodule_paths() -> set[Path]:
 
     paths: set[Path] = set()
     for section in parser.sections():
-        if not section.startswith('submodule "') or not parser.has_option(section, "path"):
+        if not section.startswith('submodule "') or not parser.has_option(
+            section, "path"
+        ):
             continue
         paths.add(relative_path(parser.get(section, "path"), f"{section}.path"))
     return paths
@@ -128,7 +129,9 @@ def check_spec() -> None:
     missing = [heading for heading in REQUIRED_SPEC_HEADINGS if heading not in text]
     if missing:
         raise CheckError(f"SPEC.md is missing headings: {', '.join(missing)}")
-    stories = re.findall(r"^\d+\. As an? .+, I want .+, so that .+$", text, re.MULTILINE)
+    stories = re.findall(
+        r"^\d+\. As an? .+, I want .+, so that .+$", text, re.MULTILINE
+    )
     if len(stories) < 20:
         raise CheckError("SPEC.md must contain at least 20 formatted user stories")
 
@@ -153,8 +156,12 @@ def load_adapter(fork: Fork) -> Adapter:
     except (OSError, json.JSONDecodeError) as error:
         raise CheckError(f"cannot read {path}: {error}") from error
     allowed = {
-        "$schema", "schemaVersion", "fork", "productionTarget",
-        "capabilities", "subjects",
+        "$schema",
+        "schemaVersion",
+        "fork",
+        "productionTarget",
+        "capabilities",
+        "subjects",
     }
     reject_unknown_keys(data, allowed, f"adapter {fork.id}")
     if data.get("schemaVersion") != 1:
@@ -170,7 +177,9 @@ def load_adapter(fork: Fork) -> Adapter:
     capabilities = frozenset(capabilities_value)
     if len(capabilities) != len(capabilities_value):
         raise CheckError(f"adapter {fork.id}.capabilities contains duplicates")
-    subjects_value = require_mapping(data.get("subjects"), f"adapter {fork.id}.subjects")
+    subjects_value = require_mapping(
+        data.get("subjects"), f"adapter {fork.id}.subjects"
+    )
     subjects: dict[str, frozenset[str]] = {}
     for subject, required_value in subjects_value.items():
         if not isinstance(subject, str) or not subject:
@@ -178,7 +187,9 @@ def load_adapter(fork: Fork) -> Adapter:
         if not isinstance(required_value, list) or any(
             not isinstance(value, str) or not value for value in required_value
         ):
-            raise CheckError(f"adapter {fork.id}.subjects.{subject} must be an array of strings")
+            raise CheckError(
+                f"adapter {fork.id}.subjects.{subject} must be an array of strings"
+            )
         required = frozenset(required_value)
         unknown = sorted(required - capabilities)
         if unknown:
@@ -216,7 +227,9 @@ def check_scenarios(adapters: dict[str, Adapter]) -> None:
     scenario_ids: set[str] = set()
     for path in paths:
         try:
-            scenario = parse_scenario(REPO_ROOT, json.loads(path.read_text()), str(path))
+            scenario = parse_scenario(
+                REPO_ROOT, json.loads(path.read_text()), str(path)
+            )
         except (OSError, json.JSONDecodeError, InputError) as error:
             raise CheckError(f"invalid scenario {path}: {error}") from error
         if scenario.id in scenario_ids:
@@ -224,12 +237,17 @@ def check_scenarios(adapters: dict[str, Adapter]) -> None:
         scenario_ids.add(scenario.id)
         adapter = adapters.get(scenario.fork)
         if adapter is None:
-            raise CheckError(f"scenario {scenario.id} names unknown fork: {scenario.fork}")
+            raise CheckError(
+                f"scenario {scenario.id} names unknown fork: {scenario.fork}"
+            )
         if scenario.subject not in adapter.subjects:
             raise CheckError(
                 f"scenario {scenario.id} names unregistered subject: {scenario.subject}"
             )
-        unknown = sorted(str(value) for value in scenario.required_capabilities - adapter.capabilities)
+        unknown = sorted(
+            str(value)
+            for value in scenario.required_capabilities - adapter.capabilities
+        )
         if unknown:
             raise CheckError(
                 f"scenario {scenario.id} requires undeclared capabilities: {', '.join(unknown)}"
@@ -243,11 +261,15 @@ def check_scenarios(adapters: dict[str, Adapter]) -> None:
             )
         if scenario.fixture:
             if not scenario.fixture.is_file():
-                raise CheckError(f"scenario {scenario.id} fixture is missing: {scenario.fixture}")
+                raise CheckError(
+                    f"scenario {scenario.id} fixture is missing: {scenario.fixture}"
+                )
             check_fixture(scenario.fixture)
 
 
-def check_fork(fork: Fork, source: Path, submodule_paths: set[Path], overridden: bool) -> None:
+def check_fork(
+    fork: Fork, source: Path, submodule_paths: set[Path], overridden: bool
+) -> None:
     if not fork.adapter.is_dir():
         raise CheckError(f"adapter directory is missing for {fork.id}")
     if not (fork.adapter / "README.md").is_file():
@@ -259,7 +281,9 @@ def check_fork(fork: Fork, source: Path, submodule_paths: set[Path], overridden:
         )
     if not overridden:
         if fork.source.path not in submodule_paths:
-            raise CheckError(f"viewer source is not registered as a submodule: {fork.id}")
+            raise CheckError(
+                f"viewer source is not registered as a submodule: {fork.id}"
+            )
         if not (source / ".git").exists():
             raise CheckError(f"viewer submodule is not initialized: {fork.id}")
     resource_path = source.joinpath(*fork.resource_root.parts)

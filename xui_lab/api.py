@@ -9,13 +9,17 @@ from typing import Any
 
 from .assertions import check_observation
 from .domain import Capability, Comparison, Fork, Viewport
-from .errors import AssertionFailure, CapabilityError, InputError, RuntimeFailure, XUILabError
+from .errors import (
+    AssertionFailure,
+    CapabilityError,
+    InputError,
+    RuntimeFailure,
+)
 from .io import git_commit, read_json, write_json
 from .operations import (
     Capture,
     Diagnostics,
     Frames,
-    ModelIdSelector,
     MouseButton,
     PathSelector,
     PointerAction,
@@ -61,7 +65,9 @@ def _node_state(tree: Any) -> dict[str, dict[str, Any]]:
     for node in _tree_nodes(tree):
         path = node.get("path")
         if isinstance(path, str):
-            result[path] = {key: value for key, value in node.items() if key != "children"}
+            result[path] = {
+                key: value for key, value in node.items() if key != "children"
+            }
     return result
 
 
@@ -97,8 +103,10 @@ class ActionResult:
     def handled(self) -> bool:
         return self.data.get("handled") is True
 
-    def expect_handled(self, expected: bool = True) -> "ActionResult":
-        check_observation(self.action, self.data, "/handled", Comparison.EQUALS, expected)
+    def expect_handled(self, expected: bool = True) -> ActionResult:
+        check_observation(
+            self.action, self.data, "/handled", Comparison.EQUALS, expected
+        )
         return self
 
 
@@ -126,7 +134,7 @@ class Lab:
         capabilities: frozenset[Capability],
         fixture: Path | None = None,
         stability: WaitForStable = WaitForStable(),
-    ) -> "Window":
+    ) -> Window:
         artifact_dir = artifact_directory(self.artifact_root, artifact_id)
         if artifact_dir.exists():
             shutil.rmtree(artifact_dir)
@@ -139,7 +147,9 @@ class Lab:
                 "op": "initialize",
                 "fork": self.fork.id,
                 "forkCommit": git_commit(self.viewer_source),
-                "resourceRoot": str(self.viewer_source.joinpath(*self.fork.resource_root.parts)),
+                "resourceRoot": str(
+                    self.viewer_source.joinpath(*self.fork.resource_root.parts)
+                ),
                 "subject": subject,
                 "viewport": {
                     "width": viewport.width,
@@ -150,27 +160,48 @@ class Lab:
                 "artifactDir": str(artifact_dir),
             }
             hello = window._request(initialize)
-            supported = _mapping(hello, "initialize result").get("supportedCapabilities")
-            if not isinstance(supported, list) or any(not isinstance(value, str) for value in supported):
-                raise RuntimeFailure("initialize response has invalid supportedCapabilities")
+            supported = _mapping(hello, "initialize result").get(
+                "supportedCapabilities"
+            )
+            if not isinstance(supported, list) or any(
+                not isinstance(value, str) for value in supported
+            ):
+                raise RuntimeFailure(
+                    "initialize response has invalid supportedCapabilities"
+                )
             missing = sorted(str(value) for value in capabilities - set(supported))
             if missing:
-                raise CapabilityError(f"runtime is missing capabilities: {', '.join(missing)}")
+                raise CapabilityError(
+                    f"runtime is missing capabilities: {', '.join(missing)}"
+                )
 
-            installed = window._request({"op": "installCapabilities", "capabilities": sorted(capabilities)})
+            installed = window._request(
+                {"op": "installCapabilities", "capabilities": sorted(capabilities)}
+            )
             installed_map = _mapping(installed, "installCapabilities result")
             installed_capabilities = installed_map.get("capabilities")
             event_apis = installed_map.get("eventApis")
             if not isinstance(installed_capabilities, list) or any(
                 not isinstance(value, str) for value in installed_capabilities
             ):
-                raise RuntimeFailure("installCapabilities response has invalid capabilities")
+                raise RuntimeFailure(
+                    "installCapabilities response has invalid capabilities"
+                )
             if not isinstance(event_apis, dict):
-                raise RuntimeFailure("installCapabilities response has invalid eventApis")
-            missing = sorted(str(value) for value in capabilities - set(installed_capabilities))
+                raise RuntimeFailure(
+                    "installCapabilities response has invalid eventApis"
+                )
+            missing = sorted(
+                str(value) for value in capabilities - set(installed_capabilities)
+            )
             if missing:
-                raise CapabilityError(f"runtime did not install capabilities: {', '.join(missing)}")
-            window._install(frozenset(Capability(value) for value in installed_capabilities), event_apis)
+                raise CapabilityError(
+                    f"runtime did not install capabilities: {', '.join(missing)}"
+                )
+            window._install(
+                frozenset(Capability(value) for value in installed_capabilities),
+                event_apis,
+            )
             return window
         except BaseException as error:
             window._finish(error)
@@ -178,7 +209,9 @@ class Lab:
 
 
 class Window:
-    def __init__(self, runtime: RuntimeProcess, artifact_dir: Path, stability: WaitForStable):
+    def __init__(
+        self, runtime: RuntimeProcess, artifact_dir: Path, stability: WaitForStable
+    ):
         self.runtime = runtime
         self.artifact_dir = artifact_dir
         self.stability = stability
@@ -187,7 +220,9 @@ class Window:
         self.event_apis: dict[str, Any] = {}
         self._finished = False
 
-    def _install(self, capabilities: frozenset[Capability], event_apis: dict[str, Any]) -> None:
+    def _install(
+        self, capabilities: frozenset[Capability], event_apis: dict[str, Any]
+    ) -> None:
         self.capabilities = capabilities
         self.event_apis = event_apis
 
@@ -201,16 +236,20 @@ class Window:
 
     def execute(self, operation: RuntimeOperation) -> Any:
         if isinstance(operation, PointerAction):
-            return self.locator(operation.selector)._perform(operation.event, operation.button).data
+            return (
+                self.locator(operation.selector)
+                ._perform(operation.event, operation.button)
+                .data
+            )
         return self._request(operation.to_command())
 
-    def get_by_path(self, path: str) -> "Locator":
+    def get_by_path(self, path: str) -> Locator:
         return Locator(self, path_selector(path))
 
-    def get_by_model_id(self, model_id: str) -> "Locator":
+    def get_by_model_id(self, model_id: str) -> Locator:
         return Locator(self, model_id_selector(model_id))
 
-    def locator(self, selector: Selector) -> "Locator":
+    def locator(self, selector: Selector) -> Locator:
         return Locator(self, selector)
 
     def _require_capability(self, capability: str) -> None:
@@ -243,7 +282,11 @@ class Window:
             for path in first_state.keys() | second_state.keys()
             if first_state.get(path) != second_state.get(path)
         )
-        detail = ", ".join(changed[:10]) if changed else "no path-level differences were reported"
+        detail = (
+            ", ".join(changed[:10])
+            if changed
+            else "no path-level differences were reported"
+        )
         raise AssertionFailure(
             f"UI did not stabilize after {policy.maximum_frames} frames; changing paths: {detail}"
         )
@@ -258,12 +301,23 @@ class Window:
     def expect_recorded_effect(self, field: str, expected: Any) -> dict[str, Any]:
         self._require_capability("external_effects")
         self.wait_for_stable()
-        result = _mapping(self._request(Diagnostics().to_command()), "diagnostics result")
+        result = _mapping(
+            self._request(Diagnostics().to_command()), "diagnostics result"
+        )
         effects = result.get("effects")
-        matches = [effect for effect in effects if isinstance(effect, dict) and effect.get(field) == expected] \
-            if isinstance(effects, list) else []
+        matches = (
+            [
+                effect
+                for effect in effects
+                if isinstance(effect, dict) and effect.get(field) == expected
+            ]
+            if isinstance(effects, list)
+            else []
+        )
         if not matches:
-            raise AssertionFailure(f"recorded effects do not contain {field}={expected!r}")
+            raise AssertionFailure(
+                f"recorded effects do not contain {field}={expected!r}"
+            )
         return matches[0]
 
     def _collect_failure(self, failure: BaseException) -> None:
@@ -298,7 +352,10 @@ class Window:
         if failure is None and close_failure is None:
             write_json(self.artifact_dir / "diagnostics.json", {"passed": True})
         elif failure is None and close_failure is not None:
-            write_json(self.artifact_dir / "diagnostics.json", {"passed": False, "error": str(close_failure)})
+            write_json(
+                self.artifact_dir / "diagnostics.json",
+                {"passed": False, "error": str(close_failure)},
+            )
         self._finished = True
         if close_failure is not None:
             raise close_failure
@@ -306,10 +363,12 @@ class Window:
     def close(self) -> None:
         self._finish(None)
 
-    def __enter__(self) -> "Window":
+    def __enter__(self) -> Window:
         return self
 
-    def __exit__(self, _type: object, value: BaseException | None, _traceback: object) -> None:
+    def __exit__(
+        self, _type: object, value: BaseException | None, _traceback: object
+    ) -> None:
         self._finish(value)
 
 
@@ -321,9 +380,17 @@ class Locator:
     def resolve(self) -> Control:
         tree = self.window._request(QueryTree().to_command())
         if isinstance(self.selector, PathSelector):
-            matches = [node for node in _tree_nodes(tree) if node.get("path") == self.selector.path]
+            matches = [
+                node
+                for node in _tree_nodes(tree)
+                if node.get("path") == self.selector.path
+            ]
         else:
-            matches = [node for node in _tree_nodes(tree) if node.get("model_id") == self.selector.model_id]
+            matches = [
+                node
+                for node in _tree_nodes(tree)
+                if node.get("model_id") == self.selector.model_id
+            ]
         if len(matches) != 1:
             descriptions = []
             for match in matches:
@@ -331,7 +398,9 @@ class Locator:
                 runtime_class = match.get("class", "<unknown class>")
                 source_file = match.get("source_file", "<unknown source>")
                 source_line = match.get("source_line", 0)
-                descriptions.append(f"{path} ({runtime_class}, {source_file}:{source_line})")
+                descriptions.append(
+                    f"{path} ({runtime_class}, {source_file}:{source_line})"
+                )
             detail = "; ".join(descriptions) if descriptions else "none"
             raise AssertionFailure(
                 f"locator for {self.selector.describe()} resolved to {len(matches)} controls; matches: {detail}"
@@ -344,7 +413,9 @@ class Locator:
         self.window.wait_for_stable()
         self.resolve()
         operation = PointerAction(event, button, self.selector)
-        result = _mapping(self.window._request(operation.to_command()), f"{event.value} result")
+        result = _mapping(
+            self.window._request(operation.to_command()), f"{event.value} result"
+        )
         self.window.wait_for_stable()
         return ActionResult(event.value, result)
 
@@ -369,13 +440,17 @@ class Locator:
     def scroll(self, _clicks: int) -> None:
         self._unsupported("scroll")
 
-    def drag_to(self, _target: "Locator") -> None:
+    def drag_to(self, _target: Locator) -> None:
         self._unsupported("drag-to")
 
-    def expect(self, field: str, expected: Any, comparison: Comparison = Comparison.EQUALS) -> Control:
+    def expect(
+        self, field: str, expected: Any, comparison: Comparison = Comparison.EQUALS
+    ) -> Control:
         self.window.wait_for_stable()
         control = self.resolve()
-        check_observation(self.selector.describe(), control.info, f"/{field}", comparison, expected)
+        check_observation(
+            self.selector.describe(), control.info, f"/{field}", comparison, expected
+        )
         return control
 
     def expect_visible(self, expected: bool = True) -> Control:

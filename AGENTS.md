@@ -27,6 +27,34 @@ Run the repository check before and after a coherent change:
 python3 tools/check.py
 ```
 
+## Use the pinned Python tools
+
+xui-lab supports Python 3.10 and newer. Install the developer tools from
+`requirements-dev.txt`. Do not use a global or floating Ruff version to decide
+the repository's lint or format output.
+
+For Python changes, apply safe lint fixes before formatting:
+
+```sh
+ruff check --fix .
+ruff format .
+```
+
+Before finishing a Python change, run the authoritative checks in this order:
+
+```sh
+ruff check .
+ruff format --check .
+python3 -m unittest discover -s tests
+```
+
+CI runs the same commands and remains authoritative. The pre-commit hooks are
+optional. Do not enable Ruff preview rules or unsafe fixes.
+
+Upgrade Ruff in a dedicated change. Update `pyproject.toml`,
+`requirements-dev.txt`, and `.pre-commit-config.yaml` to the same version, then
+inspect the lint and format diff before committing it.
+
 ## Select the viewer source explicitly
 
 `forks.json` is the source of truth for supported forks, adapters, build

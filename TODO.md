@@ -56,6 +56,47 @@ scenario passes against Alchemy commit
 - [x] Use LEAP protocol and introspection code as prior art. Do not make the lab
   controller a viewer-launched LEAP child process.
 
+## Standardize Python linting and formatting
+
+Use one of these tool combinations:
+
+1. Use Ruff for linting, import sorting, and formatting. This is the preferred
+   choice. Ruff 0.16.5 was current when this task was written. It replaces the
+   Flake8, isort, pyupgrade, and Black roles with one configuration and one
+   executable.
+2. Use Ruff for linting and import sorting, and use Black for formatting. Pick
+   this if exact Black output matters more than having one tool. Ruff formats
+   more than 99.9% of lines identically to Black, but it documents a small set
+   of intentional differences.
+3. Use Pylint, Black, and isort. Pick this only if the project wants Pylint's
+   deeper and more opinionated checks. This stack has more configuration,
+   dependencies, and duplicate diagnostics.
+
+The tasks below assume the Ruff-only choice:
+
+- [x] Choose the minimum supported Python version. The current annotations
+  require Python 3.10 or newer, but the local Python 3.14 installation does not
+  define the project's support policy.
+- [x] Add `pyproject.toml` with an exact Ruff `required-version`, the chosen
+  Python target, and an explicit stable rule set. Include import sorting. Limit
+  discovery to Python files so Ruff 0.16 does not format Markdown code blocks,
+  and exclude `viewers/`, build output, artifacts, and generated files.
+- [x] Pin the same Ruff version in the developer installation path. Do not let
+  a global Ruff installation or a floating CI version choose the result.
+- [x] Run `ruff check --fix` before `ruff format`. Accept safe fixes only, and
+  inspect the semantic diff before committing the format-only baseline.
+- [x] Add `ruff check .` and `ruff format --check .` to CI. Run both commands
+  before the unit tests so style failures finish early.
+- [x] Add optional pre-commit hooks in the same order: `ruff-check --fix`, then
+  `ruff-format`. Keep CI authoritative for contributors who do not use hooks.
+- [x] Document the install, check, fix, and upgrade commands in `README.md`.
+  Upgrade Ruff in a dedicated change that shows the resulting lint and format
+  diff.
+
+Ruff 0.16 expanded its default selection from 59 rules to 413. Pinning an
+explicit rule set keeps a tool upgrade from silently changing repository
+policy. Do not enable preview rules or unsafe fixes in the first pass.
+
 ## Add a Playwright-style Python API
 
 - [x] Introduce `Lab`, `Window`, and `Locator` types over the typed runtime

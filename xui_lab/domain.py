@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path, PurePosixPath, PureWindowsPath
-import re
 from typing import Any, NewType
 
 from .errors import InputError
 from .operations import RuntimeOperation, parse_operation
-
 
 ForkId = NewType("ForkId", str)
 ScenarioId = NewType("ScenarioId", str)
@@ -57,13 +56,22 @@ def _validate_capture_step(step: dict[str, Any], label: str) -> None:
         if not isinstance(value, str) or not value:
             raise InputError(f"{label}.path must be a non-empty capture path")
         paths = (PurePosixPath(value), PureWindowsPath(value))
-        if any(path.is_absolute() or path.drive or ".." in path.parts for path in paths):
-            raise InputError(f"{label}.path capture must stay beneath the scenario artifact directory")
+        if any(
+            path.is_absolute() or path.drive or ".." in path.parts for path in paths
+        ):
+            raise InputError(
+                f"{label}.path capture must stay beneath the scenario artifact directory"
+            )
     if "name" in step:
         value = step["name"]
         if not isinstance(value, str) or not value:
             raise InputError(f"{label}.name must be a non-empty capture name")
-        if value in {".", ".."} or PureWindowsPath(value).drive or "/" in value or "\\" in value:
+        if (
+            value in {".", ".."}
+            or PureWindowsPath(value).drive
+            or "/" in value
+            or "\\" in value
+        ):
             raise InputError(f"{label}.name must not create capture subdirectories")
 
 
@@ -156,8 +164,16 @@ def parse_manifest(root: Path, raw: Any) -> Manifest:
         forks[fork_id] = Fork(
             id=fork_id,
             display_name=_string(entry, "displayName", label),
-            source=ForkSource(repository_path(root, _string(source, "path", f"{label}.source"), f"{label}.source.path")),
-            adapter=repository_path(root, _string(entry, "adapter", label), f"{label}.adapter"),
+            source=ForkSource(
+                repository_path(
+                    root,
+                    _string(source, "path", f"{label}.source"),
+                    f"{label}.source.path",
+                )
+            ),
+            adapter=repository_path(
+                root, _string(entry, "adapter", label), f"{label}.adapter"
+            ),
             resource_root=resource_root,
         )
     if default_id not in forks:
@@ -173,14 +189,32 @@ def _positive_int(value: Any, label: str) -> int:
 
 def parse_scenario(root: Path, raw: Any, label: str = "scenario") -> Scenario:
     data = _mapping(raw, label)
-    _keys(data, {"$schema", "schemaVersion", "id", "fork", "subject", "fixture", "viewport", "requires", "steps"}, label)
+    _keys(
+        data,
+        {
+            "$schema",
+            "schemaVersion",
+            "id",
+            "fork",
+            "subject",
+            "fixture",
+            "viewport",
+            "requires",
+            "steps",
+        },
+        label,
+    )
     if data.get("schemaVersion") != 1:
         raise InputError(f"{label}.schemaVersion must be 1")
 
     viewport_data = _mapping(data.get("viewport"), f"{label}.viewport")
     _keys(viewport_data, {"width", "height", "uiScale"}, f"{label}.viewport")
     ui_scale = viewport_data.get("uiScale", 1.0)
-    if not isinstance(ui_scale, (int, float)) or isinstance(ui_scale, bool) or ui_scale <= 0:
+    if (
+        not isinstance(ui_scale, (int, float))
+        or isinstance(ui_scale, bool)
+        or ui_scale <= 0
+    ):
         raise InputError(f"{label}.viewport.uiScale must be positive")
     viewport = Viewport(
         _positive_int(viewport_data.get("width"), f"{label}.viewport.width"),
@@ -189,7 +223,9 @@ def parse_scenario(root: Path, raw: Any, label: str = "scenario") -> Scenario:
     )
 
     requires = data.get("requires", [])
-    if not isinstance(requires, list) or any(not isinstance(value, str) or not value for value in requires):
+    if not isinstance(requires, list) or any(
+        not isinstance(value, str) or not value for value in requires
+    ):
         raise InputError(f"{label}.requires must be an array of non-empty strings")
     if len(requires) != len(set(requires)):
         raise InputError(f"{label}.requires must not contain duplicates")
@@ -203,19 +239,36 @@ def parse_scenario(root: Path, raw: Any, label: str = "scenario") -> Scenario:
         step = _mapping(value, step_label)
         op = _string(step, "op", step_label)
         if op == "assert":
-            _keys(step, {"op", "source", "pointer", "comparison", "expected"}, step_label)
+            _keys(
+                step, {"op", "source", "pointer", "comparison", "expected"}, step_label
+            )
             comparison_text = step.get("comparison", "equals")
             try:
                 comparison = Comparison(comparison_text)
             except ValueError as error:
                 allowed = ", ".join(value.value for value in Comparison)
-                raise InputError(f"{step_label}.comparison must be one of: {allowed}") from error
+                raise InputError(
+                    f"{step_label}.comparison must be one of: {allowed}"
+                ) from error
             if comparison is not Comparison.EXISTS and "expected" not in step:
-                raise InputError(f"{step_label}.expected is required for {comparison.value}")
+                raise InputError(
+                    f"{step_label}.expected is required for {comparison.value}"
+                )
             pointer = step.get("pointer", "")
-            if not isinstance(pointer, str) or (pointer and not pointer.startswith("/")):
-                raise InputError(f"{step_label}.pointer must be an RFC 6901 JSON pointer")
-            steps.append(AssertionStep(_string(step, "source", step_label), pointer, comparison, step.get("expected")))
+            if not isinstance(pointer, str) or (
+                pointer and not pointer.startswith("/")
+            ):
+                raise InputError(
+                    f"{step_label}.pointer must be an RFC 6901 JSON pointer"
+                )
+            steps.append(
+                AssertionStep(
+                    _string(step, "source", step_label),
+                    pointer,
+                    comparison,
+                    step.get("expected"),
+                )
+            )
             continue
         if op == "capture":
             _validate_capture_step(step, step_label)

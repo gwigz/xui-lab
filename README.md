@@ -32,6 +32,44 @@ python3 tools/check.py \
 The override changes only the current command. It does not modify the manifest
 or the submodule commit.
 
+## Check and format Python
+
+xui-lab supports Python 3.10 and newer. Create a virtual environment and
+install the pinned developer tools:
+
+```sh
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install --requirement requirements-dev.txt
+```
+
+Run the same lint and format checks as CI before the unit tests:
+
+```sh
+ruff check .
+ruff format --check .
+python -m unittest discover -s tests
+```
+
+Apply safe lint fixes before formatting:
+
+```sh
+ruff check --fix .
+ruff format .
+```
+
+To run the optional Git hooks, install them in the current checkout:
+
+```sh
+pre-commit install
+pre-commit run --all-files
+```
+
+Upgrade Ruff in a dedicated change. Update the version in `pyproject.toml`,
+`requirements-dev.txt`, and `.pre-commit-config.yaml`, then reinstall the
+developer tools. Run the fix commands above and inspect the complete diff
+before committing the upgrade.
+
 ## Repository contents
 
 - `AGENTS.md` defines the working rules for local and remote coding agents.

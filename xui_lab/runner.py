@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from .api import Lab, artifact_directory
-from .assertions import check_assertion, resolve_pointer
+from .assertions import check_assertion
+from .assertions import resolve_pointer as resolve_pointer
 from .domain import AssertionStep, Fork, Scenario
 from .errors import XUILabError
 
@@ -21,7 +22,14 @@ class RunResult:
 
 
 class ScenarioRunner:
-    def __init__(self, repository_root: Path, fork: Fork, viewer_source: Path, executable: Path, artifact_root: Path):
+    def __init__(
+        self,
+        repository_root: Path,
+        fork: Fork,
+        viewer_source: Path,
+        executable: Path,
+        artifact_root: Path,
+    ):
         self.repository_root = repository_root
         self.fork = fork
         self.viewer_source = viewer_source
@@ -51,16 +59,18 @@ class ScenarioRunner:
                     if isinstance(step, AssertionStep):
                         window.wait_for_stable()
                         check_assertion(step, saved)
-                        window.trace.append({
-                            "step": index,
-                            "assertion": {
-                                "source": step.source,
-                                "pointer": step.pointer,
-                                "comparison": step.comparison.value,
-                                "expected": step.expected,
-                            },
-                            "passed": True,
-                        })
+                        window.trace.append(
+                            {
+                                "step": index,
+                                "assertion": {
+                                    "source": step.source,
+                                    "pointer": step.pointer,
+                                    "comparison": step.comparison.value,
+                                    "expected": step.expected,
+                                },
+                                "passed": True,
+                            }
+                        )
                         continue
                     trace_start = len(window.trace)
                     result = window.execute(step.operation)

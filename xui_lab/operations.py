@@ -73,7 +73,11 @@ class Resize:
     ui_scale: float | None = None
 
     def to_command(self) -> dict[str, Any]:
-        command: dict[str, Any] = {"op": "resize", "width": self.width, "height": self.height}
+        command: dict[str, Any] = {
+            "op": "resize",
+            "width": self.width,
+            "height": self.height,
+        }
         if self.ui_scale is not None:
             command["uiScale"] = self.ui_scale
         return command
@@ -145,7 +149,10 @@ class Capture:
     highlight: Selector | None = None
 
     def to_command(self) -> dict[str, Any]:
-        command: dict[str, Any] = {"op": "capture", "includeOverlay": self.include_overlay}
+        command: dict[str, Any] = {
+            "op": "capture",
+            "includeOverlay": self.include_overlay,
+        }
         if self.name is not None:
             command["name"] = self.name
         if self.path is not None:
@@ -233,14 +240,26 @@ def parse_operation(value: Any, label: str = "operation") -> RuntimeOperation:
         return Frames(_integer(command.get("count"), f"{label}.count"))
     if op == "stable":
         _keys(command, {"op", "consecutiveFrames", "maximumFrames"}, label)
-        consecutive = _integer(command.get("consecutiveFrames"), f"{label}.consecutiveFrames", positive=True)
-        maximum = _integer(command.get("maximumFrames"), f"{label}.maximumFrames", positive=True)
+        consecutive = _integer(
+            command.get("consecutiveFrames"),
+            f"{label}.consecutiveFrames",
+            positive=True,
+        )
+        maximum = _integer(
+            command.get("maximumFrames"), f"{label}.maximumFrames", positive=True
+        )
         if maximum < consecutive:
-            raise InputError(f"{label}.maximumFrames must be at least consecutiveFrames")
+            raise InputError(
+                f"{label}.maximumFrames must be at least consecutiveFrames"
+            )
         return WaitForStable(consecutive, maximum)
     if op == "resize":
         _keys(command, {"op", "width", "height", "uiScale"}, label)
-        ui_scale = _number(command["uiScale"], f"{label}.uiScale") if "uiScale" in command else None
+        ui_scale = (
+            _number(command["uiScale"], f"{label}.uiScale")
+            if "uiScale" in command
+            else None
+        )
         return Resize(
             _integer(command.get("width"), f"{label}.width", positive=True),
             _integer(command.get("height"), f"{label}.height", positive=True),
@@ -253,7 +272,11 @@ def parse_operation(value: Any, label: str = "operation") -> RuntimeOperation:
         kind = command.get("kind")
         if kind == "tree":
             _keys(command, {"op", "kind", "path"}, label)
-            return QueryTree(path_selector(command["path"], f"{label}.path").path if "path" in command else None)
+            return QueryTree(
+                path_selector(command["path"], f"{label}.path").path
+                if "path" in command
+                else None
+            )
         if kind == "value":
             _keys(command, {"op", "kind", "path"}, label)
             return QueryValue(path_selector(command.get("path"), f"{label}.path").path)
@@ -293,8 +316,13 @@ def parse_operation(value: Any, label: str = "operation") -> RuntimeOperation:
             raise InputError(f"{label}.includeOverlay must be Boolean")
         highlight = None
         if "highlight" in command:
-            highlight = _selector(_mapping(command["highlight"], f"{label}.highlight"), f"{label}.highlight")
+            highlight = _selector(
+                _mapping(command["highlight"], f"{label}.highlight"),
+                f"{label}.highlight",
+            )
         if include_overlay and highlight is None:
-            raise InputError(f"{label}.highlight is required when includeOverlay is true")
+            raise InputError(
+                f"{label}.highlight is required when includeOverlay is true"
+            )
         return Capture(name, path, include_overlay, highlight)
     raise InputError(f"{label}.op is not supported: {op}")
