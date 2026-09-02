@@ -53,6 +53,7 @@ body,
   height: 100%;
   margin: 0;
   overflow: hidden;
+  user-select: none;
 }
 
 @layer base {
@@ -61,6 +62,12 @@ body,
   select,
   textarea {
     font: inherit;
+  }
+
+  input,
+  pre,
+  textarea {
+    user-select: text;
   }
 
   select option {

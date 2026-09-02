@@ -206,6 +206,9 @@ class InteractiveSession:
         if action == "clickAt":
             x, y = self._coordinates(request, ("x", "y"))
             return self.window.click_at(x, y).data
+        if action == "doubleClickAt":
+            x, y = self._coordinates(request, ("x", "y"))
+            return self.window.double_click_at(x, y).data
         if action == "rightClickAt":
             x, y = self._coordinates(request, ("x", "y"))
             return self.window.right_click_at(x, y).data
@@ -219,6 +222,11 @@ class InteractiveSession:
             if not isinstance(text, str):
                 raise InputError("fill text must be a string")
             return self._locator(request).fill(text).data
+        if action == "type":
+            text = request.get("text")
+            if not isinstance(text, str) or not text:
+                raise InputError("text must be a non-empty string")
+            return self._locator(request).type_text(text).data
         if action == "press":
             key = request.get("key")
             if not isinstance(key, str) or not key:

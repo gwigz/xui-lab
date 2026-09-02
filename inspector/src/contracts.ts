@@ -41,6 +41,7 @@ export type InspectorAction =
   | Readonly<{ action: "export" }>
   | Readonly<{ action: "click"; controlId: string }>
   | Readonly<{ action: "clickAt"; x: number; y: number }>
+  | Readonly<{ action: "doubleClickAt"; x: number; y: number }>
   | Readonly<{ action: "rightClickAt"; x: number; y: number }>
   | Readonly<{
       action: "drag";
@@ -50,6 +51,7 @@ export type InspectorAction =
       endY: number;
     }>
   | Readonly<{ action: "fill"; controlId: string; text: string }>
+  | Readonly<{ action: "type"; controlId: string; text: string }>
   | Readonly<{
       action: "press";
       controlId: string;

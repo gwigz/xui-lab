@@ -2,10 +2,13 @@ import type { KeyboardModifier } from "./contracts";
 
 export type FramePoint = Readonly<{ x: number; y: number }>;
 
-export type BrowserKeyPress = Readonly<{
-  key: string;
-  modifiers: readonly KeyboardModifier[];
-}>;
+export type BrowserFrameInput =
+  | Readonly<{ action: "type"; text: string }>
+  | Readonly<{
+      action: "press";
+      key: string;
+      modifiers: readonly KeyboardModifier[];
+    }>;
 
 export type FrameOutline = Readonly<{
   left: number;
@@ -38,7 +41,7 @@ const browserOnlyKeys = new Set([
   "Unidentified",
 ]);
 
-export function browserKeyPress(
+export function browserFrameInput(
   event: Readonly<{
     key: string;
     shiftKey: boolean;
@@ -47,28 +50,31 @@ export function browserKeyPress(
     metaKey: boolean;
     isComposing: boolean;
   }>,
-): BrowserKeyPress | undefined {
-  if (
-    event.isComposing ||
-    event.metaKey ||
-    event.key.length === 0 ||
-    browserOnlyKeys.has(event.key)
-  ) {
+): BrowserFrameInput | undefined {
+  if (event.isComposing || event.key.length === 0 || browserOnlyKeys.has(event.key)) {
     return undefined;
+  }
+
+  if (Array.from(event.key).length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+    return { action: "type", text: event.key };
   }
 
   const modifiers: KeyboardModifier[] = [];
   if (event.shiftKey) {
     modifiers.push("shift");
   }
-  if (event.ctrlKey) {
+  if (event.ctrlKey || event.metaKey) {
     modifiers.push("control");
   }
   if (event.altKey) {
     modifiers.push("alt");
   }
 
-  return { key: browserKeyNames[event.key] ?? event.key, modifiers };
+  return {
+    action: "press",
+    key: browserKeyNames[event.key] ?? event.key,
+    modifiers,
+  };
 }
 
 export function framePoint(

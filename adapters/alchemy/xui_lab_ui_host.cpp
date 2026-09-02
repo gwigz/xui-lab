@@ -609,6 +609,8 @@ public:
         LLViewerEventRecorder::createInstance();
         LLFloater::initClass();
         LLInitClassList::instance().fireCallbacks();
+        initialize_edit_menu();
+        initialize_spellcheck_menu();
 
         LLFontManager::initClass();
         LLFontGL::initClass(gSavedSettings.getF32("FontScreenDPI"), displayScale(), displayScale(), gDirUtilp->getAppRODataDir(),

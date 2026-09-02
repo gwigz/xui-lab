@@ -254,6 +254,17 @@ class PlaywrightApiTests(unittest.TestCase):
         self.assertEqual("right", pointer_input["button"])
         self.assertEqual((40, 30), (pointer_input["x"], pointer_input["y"]))
 
+    def test_coordinate_double_click_uses_the_shared_input_operation(self) -> None:
+        with self.open() as window:
+            window.double_click_at(40, 30).expect_handled()
+
+        pointer_input = next(
+            command for command in self.commands() if command["op"] == "input"
+        )
+        self.assertEqual("doubleClick", pointer_input["event"])
+        self.assertEqual("left", pointer_input["button"])
+        self.assertEqual((40, 30), (pointer_input["x"], pointer_input["y"]))
+
     def test_model_id_locator_reports_every_ambiguous_match(self) -> None:
         with self.open("duplicates") as window:
             locator = window.get_by_model_id("11111111-1111-1111-1111-111111111111")
@@ -458,6 +469,10 @@ class PlaywrightApiTests(unittest.TestCase):
                 return ActionStub()
 
             @staticmethod
+            def double_click_at(_x: int, _y: int) -> ActionStub:
+                return ActionStub()
+
+            @staticmethod
             def right_click_at(_x: int, _y: int) -> ActionStub:
                 return ActionStub()
 
@@ -485,6 +500,7 @@ class PlaywrightApiTests(unittest.TestCase):
         )
         session.action({"action": "replay", "scenario": "test_floater"})
         session.action({"action": "clickAt", "x": 10, "y": 20})
+        session.action({"action": "doubleClickAt", "x": 10, "y": 20})
         session.action({"action": "rightClickAt", "x": 10, "y": 20})
         session.action(
             {
@@ -508,10 +524,10 @@ class PlaywrightApiTests(unittest.TestCase):
                 }
             )
 
-        self.assertEqual(7, len(capture_names))
+        self.assertEqual(8, len(capture_names))
         self.assertEqual([("Enter", ("control",))], presses)
         self.assertEqual(capture.resolve(), session.latest_capture)
-        self.assertEqual(7, session._capture_version)
+        self.assertEqual(8, session._capture_version)
 
     def test_interactive_capture_rejects_a_path_outside_its_artifacts(self) -> None:
         capture = self.directory / "outside.png"

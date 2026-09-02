@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { browserKeyPress, frameOutline, framePoint } from "./frame-interaction";
+import { browserFrameInput, frameOutline, framePoint } from "./frame-interaction";
 
 describe("framePoint", () => {
   it("maps browser pixels into bottom-origin LLUI coordinates", () => {
@@ -17,10 +17,10 @@ describe("framePoint", () => {
   });
 });
 
-describe("browserKeyPress", () => {
+describe("browserFrameInput", () => {
   it("translates browser key names and preserves supported modifiers", () => {
     expect(
-      browserKeyPress({
+      browserFrameInput({
         key: "ArrowLeft",
         shiftKey: true,
         ctrlKey: true,
@@ -28,9 +28,9 @@ describe("browserKeyPress", () => {
         metaKey: false,
         isComposing: false,
       }),
-    ).toEqual({ key: "Left", modifiers: ["shift", "control"] });
+    ).toEqual({ action: "press", key: "Left", modifiers: ["shift", "control"] });
     expect(
-      browserKeyPress({
+      browserFrameInput({
         key: "Backspace",
         shiftKey: false,
         ctrlKey: false,
@@ -38,12 +38,35 @@ describe("browserKeyPress", () => {
         metaKey: false,
         isComposing: false,
       }),
-    ).toEqual({ key: "Backsp", modifiers: [] });
+    ).toEqual({ action: "press", key: "Backsp", modifiers: [] });
+    expect(
+      browserFrameInput({
+        key: "a",
+        shiftKey: false,
+        ctrlKey: false,
+        altKey: false,
+        metaKey: true,
+        isComposing: false,
+      }),
+    ).toEqual({ action: "press", key: "a", modifiers: ["control"] });
+  });
+
+  it("sends printable characters through the viewer text-input path", () => {
+    expect(
+      browserFrameInput({
+        key: "A",
+        shiftKey: true,
+        ctrlKey: false,
+        altKey: false,
+        metaKey: false,
+        isComposing: false,
+      }),
+    ).toEqual({ action: "type", text: "A" });
   });
 
   it("leaves browser and composition-only keys in the browser", () => {
     expect(
-      browserKeyPress({
+      browserFrameInput({
         key: "Meta",
         shiftKey: false,
         ctrlKey: false,
@@ -53,7 +76,7 @@ describe("browserKeyPress", () => {
       }),
     ).toBeUndefined();
     expect(
-      browserKeyPress({
+      browserFrameInput({
         key: "Dead",
         shiftKey: false,
         ctrlKey: false,

@@ -323,6 +323,13 @@ class Window:
             "click",
         )
 
+    def double_click_at(self, x: int, y: int) -> ActionResult:
+        self._validate_coordinates((x, y))
+        return self._perform_input(
+            CoordinatePointerAction(PointerEvent.DOUBLE_CLICK, MouseButton.LEFT, x, y),
+            "doubleClick",
+        )
+
     def right_click_at(self, x: int, y: int) -> ActionResult:
         self._validate_coordinates((x, y))
         return self._perform_input(

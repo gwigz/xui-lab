@@ -18,7 +18,7 @@ import {
   treeNodeVisibleRect,
 } from "../contracts";
 import {
-  browserKeyPress,
+  browserFrameInput,
   type FrameOutline,
   type FramePoint,
   frameOutline,
@@ -56,7 +56,9 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
   >();
   const container = useRef<HTMLDivElement>(null);
   const pointerStart = useRef<Readonly<{ pointerId: number; point: FramePoint }> | null>(null);
-  const keyQueue = useRef<Promise<void>>(Promise.resolve());
+  const suppressClick = useRef(false);
+  const inputQueue = useRef<Promise<void>>(Promise.resolve());
+  const selectedControlIdRef = useRef(selectedControlId);
   const capture = state?.capture;
   const viewport = recordValue(state?.diagnostics.viewport);
   const lluiWidth = typeof viewport?.lluiWidth === "number" ? viewport.lluiWidth : 0;
@@ -71,6 +73,10 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  useEffect(() => {
+    selectedControlIdRef.current = selectedControlId;
+  }, [selectedControlId]);
 
   if (capture?.kind !== "available") {
     return (
@@ -119,14 +125,10 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
   }
 
   function pressKey(event: ReactKeyboardEvent<HTMLImageElement>) {
-    if (
-      mode !== "interact" ||
-      selectedControlId.length === 0 ||
-      !state?.inputOperations.includes("key")
-    ) {
+    if (mode !== "interact" || !state?.inputOperations.includes("key")) {
       return;
     }
-    const press = browserKeyPress({
+    const input = browserFrameInput({
       key: event.key,
       shiftKey: event.shiftKey,
       ctrlKey: event.ctrlKey,
@@ -134,21 +136,58 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
       metaKey: event.metaKey,
       isComposing: event.nativeEvent.isComposing,
     });
-    if (press === undefined) {
+    if (input === undefined) {
+      return;
+    }
+    const operation = input.action === "type" ? "text" : "key";
+    if (!state.inputOperations.includes(operation)) {
       return;
     }
     event.preventDefault();
     event.stopPropagation();
-    keyQueue.current = keyQueue.current
-      .catch(() => undefined)
-      .then(async () => {
-        await runAction({
-          action: "press",
-          controlId: selectedControlId,
-          key: press.key,
-          modifiers: press.modifiers,
-        });
-      });
+    enqueueInput(async () => {
+      const controlId = selectedControlIdRef.current;
+      if (controlId.length === 0) {
+        return;
+      }
+      await runAction(
+        input.action === "type"
+          ? { action: "type", controlId, text: input.text }
+          : {
+              action: "press",
+              controlId,
+              key: input.key,
+              modifiers: input.modifiers,
+            },
+      );
+    });
+  }
+
+  function enqueueInput(task: () => Promise<void>) {
+    inputQueue.current = inputQueue.current.catch(() => undefined).then(task);
+  }
+
+  function selectActionTarget(result: Readonly<Record<string, unknown>> | undefined) {
+    if (typeof result?.controlId === "string" && result.controlId.length > 0) {
+      selectedControlIdRef.current = result.controlId;
+      onSelectedControlId(result.controlId);
+    }
+  }
+
+  function clickAt(target: FramePoint) {
+    enqueueInput(async () => {
+      const result = recordValue(await runAction({ action: "clickAt", x: target.x, y: target.y }));
+      selectActionTarget(result);
+    });
+  }
+
+  function doubleClickAt(target: FramePoint) {
+    enqueueInput(async () => {
+      const result = recordValue(
+        await runAction({ action: "doubleClickAt", x: target.x, y: target.y }),
+      );
+      selectActionTarget(result);
+    });
   }
 
   async function finishGesture(event: PointerEvent<HTMLImageElement>) {
@@ -174,22 +213,48 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
 
     const distance = Math.hypot(end.x - start.point.x, end.y - start.point.y);
     if (distance < 3) {
-      const result = recordValue(await runAction({ action: "clickAt", x: end.x, y: end.y }));
-      if (typeof result?.controlId === "string" && result.controlId.length > 0) {
-        onSelectedControlId(result.controlId);
-      }
+      suppressClick.current = false;
       return;
     }
-    await runAction({
-      action: "drag",
-      startX: start.point.x,
-      startY: start.point.y,
-      endX: end.x,
-      endY: end.y,
+    suppressClick.current = true;
+    enqueueInput(async () => {
+      await runAction({
+        action: "drag",
+        startX: start.point.x,
+        startY: start.point.y,
+        endX: end.x,
+        endY: end.y,
+      });
     });
   }
 
-  async function rightClick(event: MouseEvent<HTMLImageElement>) {
+  function clicked(event: MouseEvent<HTMLImageElement>) {
+    if (mode !== "interact") {
+      return;
+    }
+    if (suppressClick.current) {
+      suppressClick.current = false;
+      return;
+    }
+    const target = point(event);
+    if (target === undefined || event.detail !== 1) {
+      return;
+    }
+    clickAt(target);
+  }
+
+  function doubleClicked(event: MouseEvent<HTMLImageElement>) {
+    if (mode !== "interact") {
+      return;
+    }
+    event.preventDefault();
+    const target = point(event);
+    if (target !== undefined) {
+      doubleClickAt(target);
+    }
+  }
+
+  function rightClick(event: MouseEvent<HTMLImageElement>) {
     if (mode !== "interact") {
       return;
     }
@@ -199,12 +264,12 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
     if (target === undefined) {
       return;
     }
-    const result = recordValue(
-      await runAction({ action: "rightClickAt", x: target.x, y: target.y }),
-    );
-    if (typeof result?.controlId === "string" && result.controlId.length > 0) {
-      onSelectedControlId(result.controlId);
-    }
+    enqueueInput(async () => {
+      const result = recordValue(
+        await runAction({ action: "rightClickAt", x: target.x, y: target.y }),
+      );
+      selectActionTarget(result);
+    });
   }
 
   return (
@@ -268,7 +333,9 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
           mode === "inspect" ? "cursor-crosshair" : "cursor-default",
         )}
         draggable={false}
-        onContextMenu={(event) => void rightClick(event)}
+        onClick={clicked}
+        onContextMenu={rightClick}
+        onDoubleClick={doubleClicked}
         onKeyDown={pressKey}
         onLoad={() => setHovered(undefined)}
         onPointerCancel={() => {

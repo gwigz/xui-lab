@@ -17,6 +17,7 @@
 #include "llview.h"
 #include "llviewermenu.h"
 
+#include <algorithm>
 #include <chrono>
 #include <deque>
 #include <exception>
@@ -24,6 +25,7 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <ranges>
 #include <set>
 #include <string>
 #include <string_view>
@@ -39,6 +41,11 @@ using LabError = xui_lab::Error;
 using xui_lab::callEventApi;
 using xui_lab::Subject;
 using xui_lab::subjectName;
+
+bool hasModifier(const LLSD& modifiers, std::string_view expected)
+{
+    return std::ranges::any_of(llsd::inArray(modifiers), [expected](const LLSD& modifier) { return modifier.asString() == expected; });
+}
 
 class Runtime final : public LLEventAPI
 {
@@ -408,22 +415,39 @@ private:
         }
         const bool has_target_selector = command.has("path") || command.has("modelId") || command.has("controlId");
         LLView*    target              = has_target_selector ? resolveTarget(command) : nullptr;
-        if (!target && event == "click" && command.has("x") && command.has("y"))
+        if (!target && (event == "click" || event == "doubleClick") && command.has("x") && command.has("y"))
             target = mInspection->pickView(command["x"].asInteger(), command["y"].asInteger());
         if (!target && event == "drag" && command.has("startX") && command.has("startY"))
             target = mInspection->pickView(command["startX"].asInteger(), command["startY"].asInteger());
-        if (!target && event != "click" && event != "drag")
+        if (!target && event != "click" && event != "doubleClick" && event != "drag")
             throw LabError("input", "input event requires a target control");
         const LLSD before = inputState();
         if (event == "key" || event == "text" || event == "fill")
         {
-            const std::string path = target->getPathname();
-            (void)callEventApi("LLWindow", pointerEvent("mouseDown", "LEFT", target));
-            (void)callEventApi("LLWindow", pointerEvent("mouseUp", "LEFT", target));
+            const std::string path           = target->getPathname();
+            LLView*           keyboard_focus = dynamic_cast<LLView*>(gFocusMgr.getKeyboardFocus());
+            const bool        target_has_focus =
+                keyboard_focus && (keyboard_focus == target || keyboard_focus->hasAncestor(target) || target->hasAncestor(keyboard_focus));
+            if (!target_has_focus)
+            {
+                (void)callEventApi("LLWindow", pointerEvent("mouseDown", "LEFT", target));
+                (void)callEventApi("LLWindow", pointerEvent("mouseUp", "LEFT", target));
+            }
             LLSD result;
             if (event == "key")
             {
-                result = mUIHost->inputKey(command["key"].asString(), command["modifiers"]);
+                const std::string key       = command["key"].asString();
+                const LLSD&       modifiers = command["modifiers"];
+                if ((key == "a" || key == "A") && hasModifier(modifiers, "control") && !hasModifier(modifiers, "shift") &&
+                    !hasModifier(modifiers, "alt"))
+                {
+                    const LLSD select_all = callEventApi("LLWindow", LLSDMap("op", "selectAll"));
+                    result                = LLSDMap("handled", true)("key", key)("modifiers", modifiers)("selectAll", select_all);
+                }
+                else
+                {
+                    result = mUIHost->inputKey(key, modifiers);
+                }
             }
             else if (event == "fill")
             {
