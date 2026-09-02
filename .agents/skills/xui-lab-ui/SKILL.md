@@ -19,11 +19,12 @@ a person to view until the CLI exposes equivalent one-shot and session commands.
 Use **explore mode** when the user asks what the lab can see, what an existing
 subject does, or for a UI review without code changes. Resolve the selected
 source and runtime, open the subject, inspect declared operations, exercise the
-task, and report observations. Do not require the full repository-change
-ceremony unless exploration reveals work the user asks you to implement.
+task, and report observations. Report missing lab support without changing it
+unless the user asks for implementation.
 
 Use **change mode** when editing XUI, viewer code, the adapter, scenarios, or
-the inspector. Follow the complete process below.
+the inspector. Implement any missing local lab support that the requested
+production interaction needs, then follow the complete process below.
 
 ## Preflight the requested interaction
 
@@ -33,13 +34,40 @@ one declared operation:
 - Browser inspector panel size is browser layout, not viewer behavior.
 - `resize_viewport()` changes the host window and LLUI root.
 - `resize_subject()` sets deterministic floater geometry for a test state.
-- `Locator.drag_by()` proves a resize handle through normal pointer capture.
+- `Locator.scroll()` and `Window.scroll_at()` route wheel clicks through
+  `LLWindowCallbacks`.
+- `Locator.drag_by()` and `Window.drag()` send raw pointer gestures. Use them
+  for interactions such as floater resizing.
+- `Locator.drag_to()` offers semantic cargo to a target through
+  `LLView::handleDragAndDrop`. It drops only after the production handler
+  accepts the cargo.
 - `fill()` replaces text. `type_text()` inserts at the current selection.
 
 Read `window.input_operations` or the inspector's reported operations before
-acting. Stop early with the missing operation name when the runtime cannot
-perform the production gesture. Do not improvise with a similarly named resize
-control or claim a setup API proves event routing.
+acting. In explore mode, stop with the missing operation name. In change mode,
+add the smallest reusable operation that exposes the production path, prove it,
+and resume the requested work. Do not claim that a setup API proves event
+routing.
+
+## Add missing lab support in change mode
+
+Touch the CLI, Python API, inspector, adapter, runtime, fixture, or scenario
+only where the production interaction requires it. Preserve the selected
+viewer's controllers, models, input routing, and system boundaries. Do not
+replace missing production behavior with a mock.
+
+Prove new support before relying on it:
+
+1. Expose the operation or capability through the public `Window` or `Locator`
+   API.
+2. Drive one meaningful interaction through normal production input dispatch.
+3. Assert the visible or recorded result structurally.
+4. Inspect the frame, tree, trace, diagnostics, and runtime log.
+5. Resume the original UI task with the new support.
+
+Stop when the required support would expand the task into login, networking,
+world simulation, an irreversible external action, or an unresolved product
+decision. Report that boundary.
 
 ## Change process
 
@@ -139,12 +167,12 @@ Follow `tests/scenarios/test_floater.py`. Define one `SCENARIO` value and one
 
 1. Name the fork, subject, viewport, capabilities, and optional fixture.
 2. Call `window.wait_for_stable()` instead of sleeping.
-3. Use `click()`, `right_click()`, `double_click()`, `fill()`, `type_text()`, or
-   `press()` only when the runtime exposes that operation. Use `drag_by()` for
-   pointer-driven resizing.
+3. Use only operations declared by `window.input_operations`. Use `scroll()`
+   for wheel input, `drag_by()` for raw pointer drag, and `drag_to()` for
+   semantic drag-and-drop.
 4. Call `expect_handled()` when the bug involves event routing.
 5. Assert the visible result. Use control state, rectangles, focus, menus,
-   selection, values, or recorded effects.
+   selection, values, drag acceptance, drop state, or recorded effects.
 6. Capture the final state after the structural assertions pass.
 
 Run one scenario with this shape:
@@ -171,6 +199,13 @@ window.get_by_path(floater_path).expect_screen_rect(expected_rect)
 Derive `expected_rect` from the declared starting geometry and handle
 direction. Also assert that the drag acquired mouse capture after pointer down
 and released it after pointer up when diagnosing routing.
+
+For wheel or semantic drag-and-drop behavior, follow
+`tests/scenarios/input_gestures.py`. Assert the value change caused by wheel
+input. For drag-and-drop, assert `handled`, `acceptance`, `accepted`, and
+`dropped`. A handled rejection proves production routing, but it does not prove
+an accepted drop. Keep Inventory Explorer work undeclared until its production
+subject and capabilities pass their own scenario.
 
 ## Reject weak tests
 
