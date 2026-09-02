@@ -22,6 +22,30 @@ services at explicit boundaries.
   controls from the current production UI tree.
 - Hidden scenario runs through the same production UI path.
 
+## Run an input scenario
+
+[`readme_example.py`](tests/scenarios/readme_example.py) uses `fill()` on the
+line editor and multiline editor. It clicks the checkbox and sends two upward
+wheel steps to the spinner, changing its value from `0.000` to `0.200`. After
+each input, the scenario reads the control's value from the production view
+tree. It writes the capture only after every check passes.
+
+Run the example against an Alchemy checkout and its matching lab binary:
+
+```sh
+./xui-lab \
+  --viewer-source alchemy=/path/to/alchemy \
+  run tests/scenarios/readme_example.py \
+  --runtime /path/to/xui-lab \
+  --artifacts artifacts/readme-example
+```
+
+The runner reports the scenario and the proof directory:
+
+```text
+readme_example: passed [artifacts/readme-example/readme_example]
+```
+
 ## Inspector frontend
 
 The browser inspector is a React and TypeScript application in `inspector/`.
