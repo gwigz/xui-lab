@@ -80,6 +80,9 @@ void ignoreUISound(const LLUUID&)
 {
 }
 
+LLSD rectToLLSD(const LLRect& rect)
+{ return LLSDMap("left", rect.mLeft)("right", rect.mRight)("bottom", rect.mBottom)("top", rect.mTop); }
+
 class LabTranslationBridge final : public LLTranslationBridge
 {
 public:
@@ -247,7 +250,12 @@ public:
             LLWindowManager::destroyWindow(mWindow);
     }
 
-    [[nodiscard]] LLWindow*                          get() const noexcept { return mWindow; }
+    [[nodiscard]] LLWindow* get() const noexcept { return mWindow; }
+    [[nodiscard]] F32       systemUIScale() const
+    {
+        const F32 scale = mWindow->getSystemUISize();
+        return scale > 0.f ? scale : 1.f;
+    }
     void                                             setRoot(LLView* root) noexcept { mRoot = root; }
     [[nodiscard]] std::optional<std::pair<S32, S32>> takePointerMove() { return std::exchange(mPointerMove, std::nullopt); }
     [[nodiscard]] std::optional<std::pair<S32, S32>> takeResize() { return std::exchange(mResize, std::nullopt); }
@@ -357,6 +365,12 @@ public:
     }
 
     void handleResize(LLWindow*, S32 width, S32 height) override { mResize = std::pair(width, height); }
+
+    bool handleDPIChanged(LLWindow*, F32, S32 width, S32 height) override
+    {
+        mResize = std::pair(width, height);
+        return true;
+    }
 
     bool handleCloseRequest(LLWindow*, bool) override
     {
@@ -478,6 +492,11 @@ public:
 
         LLRender::sGLCoreProfile = true;
         mWindow                  = std::make_unique<LabWindow>(mWidth, mHeight, mInteractive);
+        LLCoordWindow pixel_size;
+        if (!mWindow->get()->getSize(&pixel_size))
+            throw Error("window", "production LLWindow did not report its framebuffer size");
+        mWidth  = pixel_size.mX;
+        mHeight = pixel_size.mY;
         LLVertexBuffer::initClass(mWindow->get());
         if (!gGL.init(true))
             throw Error("render", "production LLRender failed to initialize");
@@ -507,7 +526,8 @@ public:
         settings["account"] = &gSavedPerAccountSettings;
         LLUI::createInstance(settings, mImages.get(), ignoreUISound, ignoreUISound);
         LLUI::getInstance()->mWindow = mWindow->get();
-        LLUI::setScaleFactor(LLVector2(static_cast<F32>(mUIScale), static_cast<F32>(mUIScale)));
+        mSystemUIScale               = mWindow->systemUIScale();
+        LLUI::setScaleFactor(LLVector2(displayScale(), displayScale()));
 
         std::set<std::string> default_args;
         LLTransUtil::parseStrings("strings.xml", default_args);
@@ -520,12 +540,12 @@ public:
         LLInitClassList::instance().fireCallbacks();
 
         LLFontManager::initClass();
-        LLFontGL::initClass(gSavedSettings.getF32("FontScreenDPI"), static_cast<F32>(mUIScale), static_cast<F32>(mUIScale),
-                            gDirUtilp->getAppRODataDir(), gSavedSettings.getLLSD("AlchemyUIFontOverrides"));
+        LLFontGL::initClass(gSavedSettings.getF32("FontScreenDPI"), displayScale(), displayScale(), gDirUtilp->getAppRODataDir(),
+                            gSavedSettings.getLLSD("AlchemyUIFontOverrides"));
         LLFolderViewItem::initClass();
 
-        const S32       virtual_width  = static_cast<S32>(ll_round(mWidth / mUIScale));
-        const S32       virtual_height = static_cast<S32>(ll_round(mHeight / mUIScale));
+        const S32       virtual_width  = static_cast<S32>(ll_round(static_cast<F32>(mWidth) / displayScale()));
+        const S32       virtual_height = static_cast<S32>(ll_round(static_cast<F32>(mHeight) / displayScale()));
         LLPanel::Params root_params;
         root_params.name("xui-lab-root");
         root_params.rect(LLRect(0, virtual_height, virtual_width, 0));
@@ -579,7 +599,7 @@ public:
         LLView::sIsDrawing = true;
         gGL.pushMatrix();
         LLUI::pushMatrix();
-        gGL.scaleUI(static_cast<F32>(mUIScale), static_cast<F32>(mUIScale), 1.f);
+        gGL.scaleUI(displayScale(), displayScale(), 1.f);
         mRoot->draw();
         LLUI::popMatrix();
         gGL.popMatrix();
@@ -612,22 +632,27 @@ public:
         }
 
         mUIScale = ui_scale;
-        LLUI::setScaleFactor(LLVector2(static_cast<F32>(mUIScale), static_cast<F32>(mUIScale)));
-        if (!mWindow->get()->setSize(LLCoordWindow(width, height)))
-            throw Error("viewport", "production window rejected the requested pixel size");
-        LLCoordWindow measured;
-        if (!mWindow->get()->getSize(&measured) || measured.mX != width || measured.mY != height)
-            throw Error("viewport", "production window did not reach the requested pixel size");
-        reshape(measured);
+        if (!mWindow->get()->setSize(LLCoordScreen(width, height)))
+            throw Error("viewport", "production window rejected the requested screen size");
+        LLCoordScreen measured_window;
+        if (!mWindow->get()->getSize(&measured_window) || measured_window.mX != width || measured_window.mY != height)
+            throw Error("viewport", "production window did not reach the requested screen size");
+        LLCoordWindow measured_pixels;
+        if (!mWindow->get()->getSize(&measured_pixels))
+            throw Error("viewport", "production window did not report its resized framebuffer");
+        reshape(measured_pixels);
         renderFrame(true);
         return diagnostics()["viewport"];
     }
 
     void reshape(LLCoordWindow size)
     {
-        mWidth  = size.mX;
-        mHeight = size.mY;
-        mRoot->reshape(static_cast<S32>(ll_round(mWidth / mUIScale)), static_cast<S32>(ll_round(mHeight / mUIScale)));
+        mWidth         = size.mX;
+        mHeight        = size.mY;
+        mSystemUIScale = mWindow->systemUIScale();
+        LLUI::setScaleFactor(LLVector2(displayScale(), displayScale()));
+        mRoot->reshape(static_cast<S32>(ll_round(static_cast<F32>(mWidth) / displayScale())),
+                       static_cast<S32>(ll_round(static_cast<F32>(mHeight) / displayScale())));
     }
 
     void pumpInteractive()
@@ -662,6 +687,8 @@ public:
         const Subject current_subject = subject();
         LLCoordWindow pixel_size(mWidth, mHeight);
         const bool    measured_window = mWindow->get()->getSize(&pixel_size);
+        LLCoordScreen screen_size;
+        const bool    measured_screen = mWindow->get()->getSize(&screen_size);
         const LLRect  llui_rect       = mRoot->getRect();
         LLSD          graphics;
         gGLManager.asLLSD(graphics);
@@ -672,13 +699,16 @@ public:
             "visibleMenu", describeView(gMenuHolder ? gMenuHolder->getVisibleMenu() : nullptr))(
             "subject", LLSDMap("id", std::string(subjectName(current_subject)))("view", describeView(mFloater)))(
             "viewport", LLSDMap("pixelWidth", pixel_size.mX)("pixelHeight", pixel_size.mY)("windowMeasured", measured_window)(
-                            "lluiWidth", llui_rect.getWidth())("lluiHeight", llui_rect.getHeight())("uiScale", mUIScale))(
-            "graphics", graphics)("overlay", overlay)("recording", mRecordedActions);
+                            "windowWidth", screen_size.mX)("windowHeight", screen_size.mY)("screenMeasured", measured_screen)(
+                            "lluiWidth", llui_rect.getWidth())("lluiHeight", llui_rect.getHeight())("uiScale", mUIScale)(
+                            "systemUIScale", mSystemUIScale)("effectiveUIScale", displayScale()))("graphics", graphics)("overlay", overlay)(
+            "recording", mRecordedActions);
     }
 
-    void drawHighlight(LLView* target)
+    LLRect drawHighlight(LLView* target)
     {
-        const LLRect rect = target->calcScreenRect();
+        LLRect rect;
+        LLUI::getInstance()->screenRectToGL(target->calcScreenRect(), &rect);
         gSolidColorProgram.bind();
         gGL.getTextureSlot(0)->unbind();
         gGL.color4f(1.f, 0.2f, 0.1f, 1.f);
@@ -694,6 +724,7 @@ public:
         gGL.end();
         gGL.flush();
         gSolidColorProgram.unbind();
+        return rect;
     }
 
     LLSD capture(const LLSD& command, LLView* highlighted, std::string_view fixture_id)
@@ -738,11 +769,12 @@ public:
         std::filesystem::create_directories(path.parent_path());
 
         renderFrame(false, false);
-        std::string highlighted_path;
+        std::string           highlighted_path;
+        std::optional<LLRect> highlighted_rect;
         if (highlighted)
         {
             highlighted_path = highlighted->getPathname();
-            drawHighlight(highlighted);
+            highlighted_rect = drawHighlight(highlighted);
         }
         LLPointer<LLImageRaw> raw = new LLImageRaw(mWidth, mHeight, 4);
         glReadPixels(0, 0, mWidth, mHeight, GL_RGBA, GL_UNSIGNED_BYTE, raw->getData());
@@ -755,10 +787,17 @@ public:
 
         const LLSD live_overlay =
             LLSDMap("visible", mInteractive && mHighlight != nullptr)("path", mHighlight ? mHighlight->getPathname() : std::string());
+        LLCoordScreen screen_size;
+        const bool    measured_screen = mWindow->get()->getSize(&screen_size);
+        LLSD          overlay_metadata =
+            LLSDMap("included", highlighted != nullptr)("highlightedPath", highlighted_path)("interactiveState", live_overlay);
+        if (highlighted_rect)
+            overlay_metadata["framebufferRect"] = rectToLLSD(*highlighted_rect);
         const LLSD metadata = LLSDMap("fork", std::string(kFork))("forkCommit", std::string(kForkCommit))(
             "subject", std::string(subjectName(current_subject)))("fixture", std::string(fixture_id))(
-            "viewport", LLSDMap("width", mWidth)("height", mHeight)("uiScale", mUIScale))(
-            "overlay", LLSDMap("included", highlighted != nullptr)("highlightedPath", highlighted_path)("interactiveState", live_overlay));
+            "viewport", LLSDMap("width", mWidth)("height", mHeight)("uiScale", mUIScale)("systemUIScale", mSystemUIScale)(
+                            "effectiveUIScale", displayScale())("windowWidth", screen_size.mX)("windowHeight", screen_size.mY)(
+                            "screenMeasured", measured_screen))("overlay", overlay_metadata);
         std::ofstream sidecar(path.string() + ".json");
         sidecar << LlsdToJson(metadata) << '\n';
         return LLSDMap("path", path.string())("metadata", metadata)("highlightedPath", highlighted_path);
@@ -815,6 +854,8 @@ public:
             throw Error("subject", "runtime subject is not open");
         return mSubject.value();
     }
+
+    [[nodiscard]] F32 displayScale() const { return static_cast<F32>(mUIScale * mSystemUIScale); }
 
     [[nodiscard]] bool closeRequested() const noexcept { return mWindow->closeRequested(); }
 
@@ -882,8 +923,9 @@ public:
     S32                               mHeight;
     S32                               mFrameCount = 0;
     F64                               mUIScale;
-    bool                              mInitialized = false;
-    bool                              mInteractive = false;
+    F32                               mSystemUIScale = 1.f;
+    bool                              mInitialized   = false;
+    bool                              mInteractive   = false;
     std::optional<Subject>            mSubject;
     LLView*                           mHighlight       = nullptr;
     LLSD                              mRecordedActions = LLSD::emptyArray();

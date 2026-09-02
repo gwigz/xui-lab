@@ -13,6 +13,7 @@
 #include "llapp.h"
 #include "llsdjson.h"
 #include "llsdutil.h"
+#include "llui.h"
 #include "llview.h"
 #include "llviewermenu.h"
 
@@ -343,6 +344,15 @@ private:
         return mInspection->resolvePath(command["path"].asString());
     }
 
+    static LLSD pointerEvent(std::string_view operation, std::string_view button, LLView* target)
+    {
+        const LLRect screen_rect = target->calcScreenRect();
+        S32          gl_x        = 0;
+        S32          gl_y        = 0;
+        LLUI::getInstance()->screenPointToGL(screen_rect.getCenterX(), screen_rect.getCenterY(), &gl_x, &gl_y);
+        return LLSDMap("op", std::string(operation))("button", std::string(button))("path", target->getPathname())("x", gl_x)("y", gl_y);
+    }
+
     LLSD input(const LLSD& command)
     {
         requireInitialized();
@@ -357,8 +367,8 @@ private:
         if (event == "key" || event == "text" || event == "fill")
         {
             const std::string path = target->getPathname();
-            (void)callEventApi("LLWindow", LLSDMap("op", "mouseDown")("button", "LEFT")("path", path));
-            (void)callEventApi("LLWindow", LLSDMap("op", "mouseUp")("button", "LEFT")("path", path));
+            (void)callEventApi("LLWindow", pointerEvent("mouseDown", "LEFT", target));
+            (void)callEventApi("LLWindow", pointerEvent("mouseUp", "LEFT", target));
             LLSD result     = event == "key" ? mUIHost->inputKey(command["key"].asString(), command["modifiers"])
                                              : mUIHost->inputText(command["text"].asString(), event == "fill");
             result["path"]  = path;
@@ -377,12 +387,12 @@ private:
             throw LabError("input", "doubleClick supports only the left button");
         }
 
-        const std::string path              = target->getPathname();
-        const std::string production_button = button == "left" ? "LEFT" : "RIGHT";
-        const std::string down_operation    = event == "doubleClick" ? "mouseDoubleClick" : "mouseDown";
-        const LLSD        down = callEventApi("LLWindow", LLSDMap("op", down_operation)("button", production_button)("path", path));
+        const std::string path                    = target->getPathname();
+        const std::string production_button       = button == "left" ? "LEFT" : "RIGHT";
+        const std::string down_operation          = event == "doubleClick" ? "mouseDoubleClick" : "mouseDown";
+        const LLSD        down                    = callEventApi("LLWindow", pointerEvent(down_operation, production_button, target));
         const bool        menu_visible_after_down = gMenuHolder && gMenuHolder->hasVisibleMenu();
-        const LLSD        up = callEventApi("LLWindow", LLSDMap("op", "mouseUp")("button", production_button)("path", path));
+        const LLSD        up                      = callEventApi("LLWindow", pointerEvent("mouseUp", production_button, target));
         mUIHost->renderFrame(true);
 
         LLSD result = LLSDMap("path", path)("modelId", command["modelId"])("event", event)("button", button)(

@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import struct
 import subprocess
 import sys
 from pathlib import Path
@@ -55,6 +57,30 @@ def rectangle_center(rectangle: Any) -> tuple[int, int]:
     return ((left + right) // 2, (bottom + top) // 2)
 
 
+def scale_rectangle(rectangle: Any, scale: float) -> dict[str, int]:
+    require(isinstance(rectangle, dict), "screen rectangle is missing")
+    result: dict[str, int] = {}
+    for key in ("left", "right", "bottom", "top"):
+        value = rectangle.get(key)
+        require(
+            isinstance(value, int) and not isinstance(value, bool),
+            "screen rectangle coordinates must be integers",
+        )
+        scaled = value * scale
+        result[key] = (
+            math.floor(scaled + 0.5) if scaled >= 0 else math.ceil(scaled - 0.5)
+        )
+    return result
+
+
+def png_dimensions(path: Path) -> tuple[int, int]:
+    with path.open("rb") as image:
+        header = image.read(24)
+    require(header[:8] == b"\x89PNG\r\n\x1a\n", "capture is not a PNG")
+    require(len(header) == 24 and header[12:16] == b"IHDR", "PNG header is incomplete")
+    return struct.unpack(">II", header[16:24])
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runtime", type=Path, required=True)
@@ -96,20 +122,45 @@ def main() -> int:
         initial = session.window.diagnostics()
         process_id = session.window.runtime.pid
         require(initial["processId"] == process_id, "runtime PID diagnostic mismatch")
+        initial_viewport = initial["viewport"]
+        require(
+            initial_viewport["windowWidth"] == 800
+            and initial_viewport["windowHeight"] == 600,
+            "initial window did not keep the requested screen size",
+        )
+        system_scale = initial_viewport["systemUIScale"]
+        require(system_scale >= 1.0, "runtime reported an invalid system UI scale")
+        require(
+            initial_viewport["effectiveUIScale"] == system_scale,
+            "initial effective UI scale omitted the system UI scale",
+        )
+        require(
+            initial_viewport["lluiWidth"] == 800
+            and initial_viewport["lluiHeight"] == 600,
+            "initial LLUI size changed with the display density",
+        )
 
         viewport = session.action(
             {"action": "resize", "width": 900, "height": 700, "uiScale": 1.25}
         )
         require(
-            viewport["pixelWidth"] == 900 and viewport["pixelHeight"] == 700,
-            "resize did not reach the requested pixel size",
+            viewport["windowWidth"] == 900 and viewport["windowHeight"] == 700,
+            "resize did not reach the requested screen size",
+        )
+        effective_scale = 1.25 * system_scale
+        require(
+            viewport["effectiveUIScale"] == effective_scale,
+            "resize reported the wrong effective UI scale",
         )
         require(
-            viewport["lluiWidth"] == 720 and viewport["lluiHeight"] == 560,
+            viewport["lluiWidth"] == round(viewport["pixelWidth"] / effective_scale)
+            and viewport["lluiHeight"]
+            == round(viewport["pixelHeight"] / effective_scale),
             "resize reported the wrong LLUI size",
         )
 
-        control = session.window.get_by_path(LINE_EDITOR).resolve()
+        line_editor = session.window.get_by_path(LINE_EDITOR)
+        control = line_editor.resolve()
         x, y = rectangle_center(control.info.get("screen_rect"))
         picked = session.window.pick(x, y)
         require(
@@ -124,11 +175,25 @@ def main() -> int:
 
         session.window.highlight(session.window.get_by_path(LINE_EDITOR))
         capture = session.window.capture("headed-with-live-highlight")
+        require(
+            png_dimensions(Path(capture["path"]))
+            == (viewport["pixelWidth"], viewport["pixelHeight"]),
+            "capture dimensions do not match the Retina framebuffer",
+        )
         overlay = capture["metadata"]["overlay"]
         require(overlay["included"] is False, "ordinary capture included live overlay")
         require(
             overlay["interactiveState"]["visible"] is True,
             "capture metadata omitted live overlay state",
+        )
+        highlighted_capture = session.window.capture(
+            "headed-with-capture-highlight", highlight=line_editor
+        )
+        highlighted_overlay = highlighted_capture["metadata"]["overlay"]
+        require(
+            highlighted_overlay.get("framebufferRect")
+            == scale_rectangle(control.info.get("screen_rect"), effective_scale),
+            "capture highlight did not convert its screen rectangle to framebuffer coordinates",
         )
 
         filled = session.window.get_by_path(LINE_EDITOR).fill("headed input").data
@@ -174,6 +239,7 @@ def main() -> int:
                 "viewport": viewport,
                 "pick": picked.info,
                 "capture": capture,
+                "highlightedCapture": highlighted_capture,
                 "reload": reload_result,
                 "replay": replay,
                 "recording": recording,
