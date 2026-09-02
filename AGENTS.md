@@ -1,17 +1,15 @@
-# Working in xui-lab
+# Working in `xui-lab`
 
 Read `AGENTS.local.md` when it exists. It contains ignored instructions for the
 current machine.
 
-## Start with the repository contract
+## Protect repository state
 
-Read `SPEC.md`, `forks.json`, and the selected fork adapter before changing
-code. `README.md` describes the current commands and repository layout.
+Before changing code, read `SPEC.md`, `forks.json`, and the selected fork
+adapter. `README.md` gives the current project status, and `TODO.md` tracks
+unfinished work.
 
-This repository is at the specification stage. It does not contain an
-`xui-lab` executable yet. Do not report a viewer build as an `xui-lab` build.
-
-Before editing, inspect both worktrees:
+Inspect both worktrees before editing:
 
 ```sh
 git status --short
@@ -21,26 +19,21 @@ git -C viewers/alchemy status --short
 Existing changes belong to the user. Do not reset, revert, clean, or overwrite
 them. Do not update an initialized submodule while its worktree is dirty.
 
-Run the repository check before and after a coherent change:
+Run the repository check before and after a coherent change. If the baseline
+fails, record the failure and do not introduce another one.
 
 ```sh
-python3 tools/check.py
+./xui-lab check
 ```
 
-## Use the pinned Python tools
+## Use pinned tools
 
-xui-lab supports Python 3.10 and newer. Install the developer tools from
-`requirements-dev.txt`. Do not use a global or floating Ruff version to decide
-the repository's lint or format output.
+The project supports Python 3.10 and newer. Install the tools in
+`requirements-dev.txt`. Use the pinned versions, not global or floating Ruff
+and LLVM versions.
 
-For Python changes, apply safe lint fixes before formatting:
-
-```sh
-ruff check --fix .
-ruff format .
-```
-
-Before finishing a Python change, run the authoritative checks in this order:
+Apply safe Ruff fixes and formatting only to the Python files you changed. Run
+the full checks before finishing a Python change:
 
 ```sh
 ruff check .
@@ -48,158 +41,92 @@ ruff format --check .
 python3 -m unittest discover -s tests
 ```
 
-CI runs the same commands and remains authoritative. The pre-commit hooks are
-optional. Do not enable Ruff preview rules or unsafe fixes.
+Do not enable Ruff preview rules or unsafe fixes. Upgrade Ruff in a dedicated
+change, with matching versions in `pyproject.toml`, `requirements-dev.txt`, and
+`.pre-commit-config.yaml`.
 
-Upgrade Ruff in a dedicated change. Update `pyproject.toml`,
-`requirements-dev.txt`, and `.pre-commit-config.yaml` to the same version, then
-inspect the lint and format diff before committing it.
+`xui-lab check` includes the Markdown style audit.
 
-## Select the viewer source explicitly
+Before writing C++, read the selected fork's `CMAKE_CXX_STANDARD`. Alchemy uses
+C++20. Follow the fork's local style, prefer standard-library types and RAII,
+and preserve ownership types required by viewer APIs. Do not raise a fork's
+language level as a side effect of lab work.
 
-`forks.json` is the source of truth for supported forks, adapters, build
-drivers, and resource roots. The pinned submodule is the default source.
-
-Use a local override to work with an existing checkout or an unpushed branch:
+Format only adapter-owned C++ files with the pinned LLVM tools:
 
 ```sh
-python3 tools/check.py \
-  --viewer-source alchemy=/absolute/path/to/alchemy
+./xui-lab cpp format
+./xui-lab cpp format --check
 ```
 
-Carry the same source choice into configure, build, launch, and scenario
-commands. Do not validate one checkout and build another.
-
-Do not edit a detached submodule checkout for normal feature work. Make the
-viewer change in a branch or worktree that belongs to that viewer repository.
-Update the pinned submodule only when the task explicitly asks for a pointer
-update. Keep the viewer commit and the submodule-pointer commit separate.
-
-To add a fork, add one manifest entry, one pinned submodule, and one adapter.
-Extend `tools/check.py` when the new fork introduces a manifest rule that all
-future adapters must follow.
-
-## Keep one production UI seam
-
-Each fork builds its own `xui-lab` executable. Do not introduce a binary plugin
-interface shared by incompatible forks.
-
-The fork adapter must construct a real registered floater or panel in the lab's
-root view. Input must travel through the normal LLUI event path. Inspection must
-query the resulting production view tree.
-
-Reuse the selected fork's LLUI, LLXUI, floater registry, models, filters,
-bridges, menus, drag-and-drop handlers, rendering, fonts, colors, textures, and
-shaders. Do not copy newview source lists into this repository. Do not create a
-parallel inventory model or duplicate permission and action rules.
-
-Replace login, network access, world state, URL launching, and file dialogs only
-at their system boundaries. Record external effects for assertions. If a
-subject needs an unavailable capability, fail with the capability name.
-
-Run each scenario in a fresh process until tests prove that the selected viewer
-can reset every relevant singleton and callback registry.
-
-## Use the newest C++ supported by the selected fork
-
-Read the selected fork's `CMAKE_CXX_STANDARD` before writing C++. Alchemy
-currently requires C++20. Use C++20 language and library features in Alchemy
-code when its supported compilers and standard libraries implement them. A fork
-that enables a newer standard may use that standard in its adapter and binary.
-
-Do not preserve C++11 or C++14 patterns in new code. Prefer standard-library
-types and algorithms over local replacements. Useful C++20 tools include
-`std::span`, `std::string_view`, `std::optional`, `std::variant`, scoped enums,
-ranges, concepts, structured bindings, designated initializers, `constexpr`,
-and `[[nodiscard]]`.
-
-Use RAII and value semantics. A raw pointer may express a non-owning reference
-when that matches the surrounding viewer API. Do not use raw `new` or `delete`
-for ownership. Keep fork-specific ownership types such as `LLPointer` when the
-production API requires them; do not wrap them in a second smart pointer.
-
-Model finite states with scoped enums or variants instead of groups of Boolean
-flags. Give semantically different identifiers different types when confusing
-them would produce a valid but wrong call. Parse JSON, command-line values, and
-environment variables once at the process boundary, then pass typed values.
-Handle every state variant explicitly. Do not use a cast, nullable fallback, or
-default branch only to silence the compiler.
-
-Use `auto` when the initializer makes the type clear or when an iterator type
-would obscure the operation. Spell out domain types when the type carries
-meaning for the reader. Follow the selected fork's local formatting and naming
-style in adapter code.
-
-Install the pinned LLVM tools from `requirements-dev.txt`. Format only the
-adapter-owned C++ files:
+Run `clang-tidy` with the selected viewer build's `compile_commands.json`:
 
 ```sh
-python3 tools/cpp_quality.py format --check
-python3 tools/cpp_quality.py format
-```
-
-Run `clang-tidy` with `compile_commands.json` from the selected viewer build:
-
-```sh
-python3 tools/cpp_quality.py tidy \
+./xui-lab cpp tidy \
   --compile-commands /absolute/path/to/viewer-build/compile_commands.json
 ```
 
 Run the lint command in the environment that owns the build tree. Do not pass
-viewer-submodule files to `tools/cpp_quality.py`. The tool must reject paths
-outside `adapters/`.
+viewer-submodule files to `xui-lab cpp`.
 
-Do not raise a fork's global language level as a side effect of lab work. If a
-needed standard feature is unavailable on one supported platform, either choose
-an equally clear supported feature or make the language-level change a separate
-viewer decision with its own build verification.
+## Use one viewer source
 
-## Use the selected fork's build graph
-
-Read the adapter contract before building. Do not bypass a fork's supported
-build graph with a copied source list. Keep machine-specific build, sync, and
-artifact commands in ignored local instructions.
-
-Keep fetched applications, binaries, screenshots, event traces, UI trees, and
-diagnostics out of Git. Store transient results in ignored build or artifact
-directories.
-
-## Build in verifiable stages
-
-Keep the implementation sequence in `SPEC.md`. Each stage must finish with a
-real behavior check before the next stage starts:
-
-1. Expose the selected viewer's reusable production UI target and subject host.
-2. Render one registered floater with production resources and capture a frame.
-3. Add path-addressed input, UI-tree inspection, and control highlighting.
-4. Load deterministic data into real viewer models.
-5. Add scenario assertions and complete failure artifacts.
-
-Do not implement broad service mocks before a chosen subject requires them.
-When a new service is required, add one named capability to the adapter and one
-scenario that proves its visible behavior.
-
-Use structural assertions for behavior. Treat screenshots as secondary,
-platform-specific evidence. A passing screenshot alone does not prove that an
-event was handled, a menu opened, focus moved, or selection changed.
-
-## Verify and hand off the work
-
-At minimum, run:
+`forks.json` defines the supported forks, adapters, build drivers, and resource
+roots. The pinned submodule is the default source. To use another checkout,
+pass an explicit override:
 
 ```sh
-python3 tools/check.py
-python3 tools/check.py --viewer-source alchemy=/path/to/local/alchemy
+./xui-lab \
+  --viewer-source alchemy=/absolute/path/to/alchemy \
+  check
 ```
 
-Replace the example path with the checkout used for the work. If source or XUI
-changed in a viewer fork, run that fork's adapter checks and supported local
-build workflow. Exercise the affected behavior and inspect every generated
-artifact.
+Use the same source for checks, configure, build, launch, and scenarios. Do not
+validate one checkout and build another. Keep machine-specific build, sync, and
+artifact commands in ignored local instructions.
+
+Do not edit a detached submodule checkout for normal feature work. Make viewer
+changes in a branch or worktree owned by that repository. Update the pinned
+submodule only when the task requests it, and keep the viewer commit separate
+from the pointer update.
+
+To add a fork, add one manifest entry, one pinned submodule, and one adapter.
+Extend `xui-lab check` only for rules that every future adapter must follow.
+
+Build through the selected fork's supported graph. Do not copy its source list.
+Keep binaries, screenshots, traces, UI trees, and diagnostics in ignored build
+or artifact directories. Do not report a viewer build as an `xui-lab` build.
+
+## Preserve the production UI path
+
+Each fork builds its own `xui-lab` executable. Do not add a binary plugin
+interface between incompatible forks.
+
+The adapter must create a real registered floater or panel in the lab root
+view. Send input through normal LLUI events and inspect the resulting production
+view tree. Reuse the fork's UI systems, models, action rules, rendering, and
+resources. Do not create parallel models or duplicate production rules.
+
+Replace login, network access, world state, URL launching, and file dialogs only
+at system boundaries. Record external effects for assertions. When a subject
+needs a new service, add one named capability and one scenario that proves its
+visible behavior. Fail with the capability name when the service is unavailable.
+
+Run each scenario in a fresh process until tests prove that the fork can reset
+its singletons and callback registries. Use structural assertions as the pass
+condition. Screenshots are secondary evidence and do not prove event handling,
+focus, menus, or selection.
+
+## Verify and hand off
+
+Run `./xui-lab check` against the pinned source. If the work used a local
+checkout, run it again with the same `--viewer-source` override. If viewer
+source or XUI changed, run the adapter checks and the fork's supported build
+workflow. Exercise the affected behavior and inspect every generated artifact.
 
 Before finishing, inspect the status of the superproject and every viewer
 checkout touched by the task. Report the selected fork and commit, commands
-run, behavior observed, artifact locations, and remaining placeholders.
+run, observed behavior, artifact locations, and remaining placeholders.
 
 Do not push commits, tags, submodule pointers, artifacts, or branches unless the
 user explicitly asks for a push.

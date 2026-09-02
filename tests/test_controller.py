@@ -7,16 +7,12 @@ import textwrap
 import unittest
 from pathlib import Path
 
-from xui_lab.domain import AssertionStep, Comparison, parse_manifest, parse_scenario
-from xui_lab.errors import AssertionFailure, InputError, RuntimeFailure
+from xui_lab.api import Lab, artifact_directory
+from xui_lab.domain import Capability, Viewport, parse_manifest
+from xui_lab.errors import InputError, RuntimeFailure
 from xui_lab.io import read_json
 from xui_lab.protocol import RuntimeProcess
-from xui_lab.runner import (
-    ScenarioRunner,
-    artifact_directory,
-    check_assertion,
-    resolve_pointer,
-)
+from xui_lab.scenarios import Scenario, discover_scenarios, load_scenario
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -38,46 +34,20 @@ def close_quietly(runtime: RuntimeProcess) -> None:
 
 
 class DomainTests(unittest.TestCase):
-    def test_manifest_and_all_scenarios_parse(self) -> None:
+    def test_manifest_and_all_python_scenarios_load(self) -> None:
         manifest = parse_manifest(ROOT, read_json(ROOT / "forks.json"))
         self.assertEqual("alchemy", manifest.default_fork)
-        for path in (ROOT / "scenarios").glob("*.json"):
-            scenario = parse_scenario(ROOT, read_json(path), str(path))
+        scenarios = discover_scenarios(ROOT)
+        self.assertTrue(scenarios)
+        for scenario in scenarios.values():
             self.assertIn(scenario.fork, manifest.forks)
 
-    def test_scenario_rejects_unknown_keys(self) -> None:
-        raw = read_json(ROOT / "scenarios" / "test-floater.json")
-        raw["typo"] = True
-        with self.assertRaisesRegex(InputError, "unknown keys"):
-            parse_scenario(ROOT, raw)
-
-    def test_scenario_rejects_invalid_runtime_operation(self) -> None:
-        raw = read_json(ROOT / "scenarios" / "test-floater.json")
-        raw["steps"] = [{"op": "frames", "count": 1, "typo": True}]
-        with self.assertRaisesRegex(InputError, "unknown keys"):
-            parse_scenario(ROOT, raw)
-
-    def test_scenario_rejects_artifact_path_escape(self) -> None:
-        raw = read_json(ROOT / "scenarios" / "test-floater.json")
-        raw["id"] = "../outside"
-        with self.assertRaisesRegex(InputError, "invalid format"):
-            parse_scenario(ROOT, raw)
-
-    def test_scenario_rejects_capture_paths_outside_artifact_directory(self) -> None:
-        rejected_commands = (
-            {"op": "capture", "path": "/tmp/frame.png"},
-            {"op": "capture", "path": "C:\\temp\\frame.png"},
-            {"op": "capture", "path": "../frame.png"},
-            {"op": "capture", "path": "nested\\..\\frame.png"},
-            {"op": "capture", "name": "nested/frame"},
-            {"op": "capture", "name": "C:frame"},
-        )
-        for command in rejected_commands:
-            with self.subTest(command=command):
-                raw = read_json(ROOT / "scenarios" / "test-floater.json")
-                raw["steps"] = [command]
-                with self.assertRaisesRegex(InputError, "capture"):
-                    parse_scenario(ROOT, raw)
+    def test_python_scenario_requires_one_scenario_value(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_text:
+            path = Path(directory_text) / "invalid.py"
+            path.write_text("SCENARIO = object()\n", encoding="utf-8")
+            with self.assertRaisesRegex(InputError, "must define one SCENARIO"):
+                load_scenario(ROOT, path)
 
     def test_artifact_directory_stays_beneath_root(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -85,16 +55,8 @@ class DomainTests(unittest.TestCase):
             with self.assertRaisesRegex(InputError, "artifact root"):
                 artifact_directory(root, "../outside")
 
-    def test_json_pointer_decodes_tokens(self) -> None:
-        self.assertEqual(4, resolve_pointer({"a/b": {"~key": 4}}, "/a~1b/~0key"))
 
-    def test_structural_assertion_failure_is_specific(self) -> None:
-        step = AssertionStep("query", "/enabled", Comparison.EQUALS, True)
-        with self.assertRaisesRegex(AssertionFailure, "expected True, got False"):
-            check_assertion(step, {"query": {"enabled": False}})
-
-
-class ScenarioRunnerTests(unittest.TestCase):
+class LabIsolationTests(unittest.TestCase):
     def test_each_scenario_uses_a_fresh_child_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as directory_text:
             directory = Path(directory_text)
@@ -124,24 +86,33 @@ class ScenarioRunnerTests(unittest.TestCase):
             )
             manifest = parse_manifest(ROOT, read_json(ROOT / "forks.json"))
             fork = manifest.forks[manifest.default_fork]
-            runner = ScenarioRunner(
-                ROOT, fork, fork.source.path, executable, directory / "artifacts"
+            lab = Lab(
+                ROOT,
+                fork,
+                fork.source.path,
+                executable,
+                directory / "artifacts",
             )
 
+            def advance_one_frame(window):
+                window.advance_frames(1)
+
             for scenario_id in ("fresh_process_one", "fresh_process_two"):
-                scenario = parse_scenario(
-                    ROOT,
-                    {
-                        "schemaVersion": 1,
-                        "id": scenario_id,
-                        "fork": "alchemy",
-                        "subject": "test_widgets",
-                        "viewport": {"width": 100, "height": 100, "uiScale": 1.0},
-                        "requires": ["inspection"],
-                        "steps": [{"op": "frames", "count": 1}],
-                    },
+                scenario = Scenario(
+                    id=scenario_id,
+                    fork="alchemy",
+                    subject="test_widgets",
+                    viewport=Viewport(100, 100, 1.0),
+                    capabilities=frozenset({Capability("inspection")}),
+                    run=advance_one_frame,
                 )
-                self.assertTrue(runner.run(scenario).passed)
+                with lab.open(
+                    artifact_id=scenario.id,
+                    subject=scenario.subject,
+                    viewport=scenario.viewport,
+                    capabilities=scenario.capabilities,
+                ) as window:
+                    scenario.run(window)
 
             processes = [
                 json.loads(line)
@@ -271,6 +242,39 @@ class RuntimeProcessTests(unittest.TestCase):
             """,
             )
             self.assertEqual(0, runtime.close())
+
+    def test_interactive_runtime_uses_the_headed_process_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_text:
+            directory = Path(directory_text)
+            argv_log = directory / "argv.json"
+            executable = fake_runtime(
+                directory,
+                f"""
+                import json
+                import sys
+                from pathlib import Path
+
+                Path({str(argv_log)!r}).write_text(json.dumps(sys.argv), encoding="utf-8")
+                for line in sys.stdin:
+                    command = json.loads(line)
+                    print(json.dumps({{"ok": True, "result": {{}}}}), flush=True)
+                    if command["op"] == "shutdown":
+                        break
+            """,
+            )
+            runtime = RuntimeProcess(
+                executable,
+                directory / "runtime.log",
+                mode="interactive",
+                request_timeout=2.0,
+                shutdown_timeout=2.0,
+            )
+            self.addCleanup(close_quietly, runtime)
+            runtime.close()
+            self.assertEqual(
+                [str(executable), "--interactive"],
+                json.loads(argv_log.read_text(encoding="utf-8")),
+            )
 
 
 if __name__ == "__main__":

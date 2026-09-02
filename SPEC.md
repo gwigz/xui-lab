@@ -1,6 +1,6 @@
-# xui-lab specification
+# `xui-lab` specification
 
-## Problem Statement
+## Problem statement
 
 Viewer developers need to start and log in to a full viewer to test most LLUI
 and LLXUI changes. That cycle is slow, and world state makes failures difficult
@@ -11,11 +11,10 @@ floater behavior.
 These limits make ordinary UI defects expensive to diagnose. A clipped label,
 a pane that stops at the wrong height, or a context menu that never opens can
 survive until someone builds the viewer and exercises the exact state by hand.
-The current Inventory Explorer work has examples of each class of defect.
 
-A useful tool must run production UI code. A parallel widget model or copied
+The lab must run production UI code. A parallel widget model or copied
 inventory rules would produce convincing screenshots while missing the defects
-that matter. The tool must also accommodate viewer forks whose build systems,
+that matter. It must also support viewer forks whose build systems,
 global services, and registered controls have diverged.
 
 ## Solution
@@ -23,6 +22,10 @@ global services, and registered controls have diverged.
 Build `xui-lab` as a separate executable in a repository that pins supported
 viewer forks as Git submodules. Compile one fork-specific `xui-lab` binary
 against each selected fork. Do not define a binary ABI across forks.
+
+`xui-lab` is not an XUI-only layout previewer. It links and instantiates the
+selected viewer's actual C++ `LLFloater` subclasses and production controllers.
+The lab supplies enough of the viewer runtime for that code to execute.
 
 Each fork supplies one adapter that exposes its production UI runtime to the
 lab. The adapter initializes LLUI, LLXUI, rendering, skins, menus, and registered
@@ -40,7 +43,7 @@ The first adapter targets Alchemy. Developers can use the pinned Alchemy
 submodule or select a local checkout. The local override supports unpushed
 branches without changing the submodule commit.
 
-## User Stories
+## User stories
 
 1. As a viewer developer, I want to open a registered floater without logging in, so that I can test UI changes in a short feedback cycle.
 2. As a viewer developer, I want the lab to compile against production viewer code, so that the lab exercises the code users run.
@@ -88,7 +91,7 @@ branches without changing the submodule commit.
 44. As a UI developer, I want the inspector hidden during normal captures, so that inspection tools do not alter the subject image.
 45. As a UI developer, I want to reload a scenario after editing XUI, so that the lab supports both exploration and regression testing.
 
-## Implementation Decisions
+## Implementation decisions
 
 - `xui-lab` is a separate executable and repository. The repository is a
   superproject that pins supported viewer forks as submodules.
@@ -97,17 +100,18 @@ branches without changing the submodule commit.
 - A versioned manifest assigns each fork a stable identifier, source, adapter,
   and resource root. Commands may override the source for one
   invocation without modifying the manifest.
-- The lab core owns scenario parsing, process control, assertions, inspection
-  commands, and artifact naming. Fork adapters own viewer initialization,
-  production target selection, model fixture loading, and external-effect
-  interception.
-- The project uses one high-level test seam. A fork adapter creates a real
+- The lab core owns Python scenario discovery, process control, expectations,
+  inspection commands, and artifact naming. Fork adapters own viewer
+  initialization, production target selection, model fixture loading, and
+  external-effect interception.
+- The project uses one high-level test path. A fork adapter creates a real
   registered floater or panel inside a lab-owned root view, and the lab drives
   that subject through normal LLUI events. Lower-level mocks do not bypass that
-  seam.
-- Each fork exposes a reusable production UI build target. The target includes
-  the required viewer controller objects and excludes the normal application
-  entry point. The lab does not scrape or copy the fork's source list.
+  path.
+- Each fork exposes its production source list and build settings to an
+  out-of-tree adapter. The adapter derives a reusable production UI target that
+  includes the required viewer controllers and excludes the normal application
+  entry point. The lab does not keep a copied source list.
 - The Alchemy adapter adds its executable through the viewer's supported CMake
   graph. The repository does not prescribe a machine-specific build command.
 - The runtime uses a visible SDL OpenGL window in interactive mode and a hidden
@@ -130,13 +134,14 @@ branches without changing the submodule commit.
   request and returns a declared result. Internal action eligibility and routing
   remain production code.
 - Each scenario runs in a fresh process during the first implementation. The
-  project will not claim that viewer singletons can reset until tests prove a
+  project does not claim that viewer singletons can reset until tests prove a
   complete reset boundary.
-- Scenario files and command messages use JSON. The runtime may translate JSON
-  to LLSD after it validates the input.
-- The interactive controller and scenario runner use the same command set. The
-  command set covers loading, resizing, querying, picking, input, frame
-  advancement, capture, reload, and shutdown.
+- Scenario modules use the public Python `Window` and `Locator` API. Command
+  messages between Python and the fork runtime use JSON. The runtime may
+  translate JSON to LLSD after it validates the input.
+- The interactive controller and Python scenarios use the same `Window` and
+  `Locator` methods. Those methods cover loading, resizing, querying, picking,
+  input, frame advancement, capture, reload, and shutdown.
 - The inspector extends the existing view information with source provenance,
   clipping, focus, mouse capture, layout state, hit-test order, and event
   results. The first version exposes JSON output and an optional draw overlay.
@@ -151,17 +156,17 @@ branches without changing the submodule commit.
   and diagnostics. The runner writes all artifacts before it exits after a
   failure.
 
-## Testing Decisions
+## Testing decisions
 
-- Tests exercise the highest available behavior seam. A test opens the real
+- Tests exercise the highest available behavior path. A test opens the real
   registered subject, sends normal input, and inspects visible results.
 - Structural assertions are the primary pass condition. They cover control
   state, rectangles, selection, focus, menus, events, and recorded effects.
 - Image comparisons are secondary. Baselines are platform-specific and use a
   declared tolerance because font and graphics-driver rasterization can differ.
-- The runner tests manifest parsing and scenario parsing as process boundaries.
-  Internal scenario data uses validated types and does not repeat boundary
-  checks.
+- The repository checks validate the manifest and Python scenario metadata at
+  their process boundaries. Scenario functions receive a configured `Window`
+  and use its validated methods.
 - Adapter contract tests verify fork identity, capability reporting, resource
   discovery, production subject registration, and clean failure for an
   unavailable capability.
@@ -172,10 +177,10 @@ branches without changing the submodule commit.
   calculations, hit-test order, overlay exclusion, and event traces.
 - Fixture tests verify stable identifiers and prove that the selected fork's
   real model receives the fixture data.
-- Alchemy already has useful prior art: a hidden SDL OpenGL test context with
+- Alchemy already has code for a hidden SDL OpenGL test context with
   framebuffer readback, a stateful headless window, path-addressable window
   events, view-tree information, and an XUI preview with control highlighting
-  and overlap detection. The adapter should extract or reuse those seams.
+  and overlap detection. Extract or reuse that code in the adapter.
 - The first Inventory Explorer regression right-clicks a known inventory item.
   The test asserts that the event is handled, a popup becomes visible, and the
   production bridge supplies the expected enabled and disabled entries.
@@ -188,7 +193,7 @@ branches without changing the submodule commit.
 - CI runs scenarios without network access. A scenario that requests an
   undeclared service fails instead of contacting the service.
 
-## Out of Scope
+## Out of scope
 
 - The first implementation does not start login, region connectivity, world
   simulation, voice, media, or scene rendering.
@@ -206,23 +211,22 @@ branches without changing the submodule commit.
   remote hosted service.
 - The first implementation does not publish or package `xui-lab` for end users.
 
-## Further Notes
+## Further notes
 
-Implementation should proceed in checked stages. First, render one existing
+Implement the lab in checked stages. First, render one existing
 Alchemy test floater with production resources. Next, add input and inspection.
-Then add the inventory fixture capability and open Inventory Explorer. Add the
-scenario runner only after those interactive operations work through one command
-set.
+Then add the inventory fixture capability and open Inventory Explorer. Add
+Python scenarios only after those interactive operations work through the
+public API.
 
-The first Alchemy change should expose the reusable production target and the
-single subject-host seam. That change should remain separate from Inventory
-Explorer fixes so other UI work can use the lab.
+The first Alchemy change must expose reusable runtime seams and one generic
+out-of-tree build hook. Keep that change separate from Inventory Explorer fixes
+so other UI work can use the lab.
 
-The requested to-spec workflow normally publishes this specification to a
-configured issue tracker and applies the `ready-for-agent` label. This workspace
-does not provide an issue tracker or its label vocabulary, so this version is
-stored in the repository and has not been published. Configure the workflow's
-issue-tracker integration before requesting publication.
+The `to-spec` workflow publishes this specification to a configured issue
+tracker and applies the `ready-for-agent` label. This workspace has no issue
+tracker configuration, so the specification remains in the repository.
+Configure the integration before requesting publication.
 
 The project needs a license decision before it distributes binaries or accepts
 code from viewer forks with different licensing terms.

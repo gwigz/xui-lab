@@ -2,6 +2,7 @@
 
 #include "xui_lab_runtime.h"
 
+#include "llcommon.h"
 #include "llerrorcontrol.h"
 #include "llsdjson.h"
 
@@ -14,6 +15,16 @@ namespace
 {
 constexpr std::string_view kFork       = XUI_LAB_FORK;
 constexpr std::string_view kForkCommit = XUI_LAB_FORK_COMMIT;
+
+class CommonRuntime final
+{
+public:
+    CommonRuntime() { LLCommon::initClass(); }
+    ~CommonRuntime() { LLCommon::cleanupClass(); }
+
+    CommonRuntime(const CommonRuntime&)            = delete;
+    CommonRuntime& operator=(const CommonRuntime&) = delete;
+};
 } // namespace
 
 int main(int argc, char** argv)
@@ -28,9 +39,12 @@ int main(int argc, char** argv)
                       << '\n';
             return 0;
         }
+        CommonRuntime common;
         if (argc == 2 && std::string_view(argv[1]) == "--scenario")
             return xui_lab::runScenario();
-        std::cerr << "usage: xui-lab --metadata | --scenario\n";
+        if (argc == 2 && std::string_view(argv[1]) == "--interactive")
+            return xui_lab::runInteractive();
+        std::cerr << "usage: xui-lab --metadata | --scenario | --interactive\n";
         return 2;
     }
     catch (const std::exception& error)

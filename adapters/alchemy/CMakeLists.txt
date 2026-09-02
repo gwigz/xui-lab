@@ -1,8 +1,54 @@
 cmake_minimum_required(VERSION 3.21)
 
-if (NOT TARGET alchemy_newview_ui)
-  message(FATAL_ERROR "The Alchemy production UI target is required")
-endif ()
+set(alchemy_xui_subject_sources
+  alfloaterinventoryexplorer.cpp
+  alpanelinventoryexplorer.cpp
+  alpanelinventoryholdingtray.cpp
+  alpanelinventoryinspector.cpp
+  )
+list(TRANSFORM alchemy_xui_subject_sources PREPEND "${ALCHEMY_NEWVIEW_SOURCE_DIR}/")
+
+set(alchemy_xui_support_sources)
+foreach (source IN LISTS viewer_SOURCE_FILES)
+  if (source MATCHES "\\.(c|cc|cpp|cxx|m|mm)$")
+    if (IS_ABSOLUTE "${source}")
+      list(APPEND alchemy_xui_support_sources "${source}")
+    else ()
+      list(APPEND alchemy_xui_support_sources "${ALCHEMY_NEWVIEW_SOURCE_DIR}/${source}")
+    endif ()
+  endif ()
+endforeach ()
+list(REMOVE_ITEM alchemy_xui_support_sources
+  "${ALCHEMY_NEWVIEW_SOURCE_DIR}/llappviewersdl.cpp"
+  "${ALCHEMY_NEWVIEW_SOURCE_DIR}/llvoicewebrtc.cpp"
+  ${alchemy_xui_subject_sources}
+  )
+
+get_target_property(alchemy_viewer_link_libraries ${VIEWER_BINARY_NAME} LINK_LIBRARIES)
+list(FILTER alchemy_viewer_link_libraries EXCLUDE REGEX "llwebrtc")
+
+add_library(alchemy_xui_subjects OBJECT ${alchemy_xui_subject_sources})
+add_library(alchemy_xui_support STATIC ${alchemy_xui_support_sources})
+foreach (target alchemy_xui_subjects alchemy_xui_support)
+  target_include_directories(${target} PUBLIC
+    "${ALCHEMY_NEWVIEW_SOURCE_DIR}"
+    "${ALCHEMY_NEWVIEW_BINARY_DIR}"
+    )
+  target_precompile_headers(${target} PRIVATE "${ALCHEMY_NEWVIEW_SOURCE_DIR}/llviewerprecompiledheaders.h")
+  target_link_libraries(${target} PUBLIC ${alchemy_viewer_link_libraries})
+endforeach ()
+target_compile_definitions(alchemy_xui_support PRIVATE DISABLE_WEBRTC=1)
+
+add_library(alchemy_newview_ui INTERFACE)
+target_include_directories(alchemy_newview_ui INTERFACE
+  "${ALCHEMY_NEWVIEW_SOURCE_DIR}"
+  "${ALCHEMY_NEWVIEW_BINARY_DIR}"
+  )
+target_sources(alchemy_newview_ui INTERFACE $<TARGET_OBJECTS:alchemy_xui_subjects>)
+target_link_libraries(alchemy_newview_ui INTERFACE
+  alchemy_xui_support
+  ${alchemy_viewer_link_libraries}
+  )
 
 string(LENGTH "${XUI_LAB_FORK_COMMIT}" XUI_LAB_FORK_COMMIT_LENGTH)
 if (NOT XUI_LAB_FORK_COMMIT_LENGTH EQUAL 40 OR NOT XUI_LAB_FORK_COMMIT MATCHES "^[0-9a-f]+$")

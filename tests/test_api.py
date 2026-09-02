@@ -8,13 +8,16 @@ import unittest
 from pathlib import Path
 
 from xui_lab.api import Lab
-from xui_lab.domain import Capability, Viewport, parse_manifest, parse_scenario
-from xui_lab.errors import AssertionFailure, CapabilityError
+from xui_lab.domain import Capability, Viewport, parse_manifest
+from xui_lab.errors import AssertionFailure
+from xui_lab.interactive import HTML, recorded_python
 from xui_lab.io import read_json
-from xui_lab.operations import Frames, PathSelector, PointerAction
+from xui_lab.scenarios import load_scenario
 
 ROOT = Path(__file__).resolve().parents[1]
 CHECKBOX_PATH = "/root/checkbox"
+PRODUCTION_CHECKBOX = "/Floater View/floater_test_widgets/test_checkbox"
+PRODUCTION_CHECKBOX_BUTTON = f"{PRODUCTION_CHECKBOX}/CheckboxCtrl Button"
 
 
 def fake_runtime(directory: Path, command_log: Path) -> Path:
@@ -82,12 +85,36 @@ def fake_runtime(directory: Path, command_log: Path) -> Path:
                     else:
                         value = bool(tree_version % 2) if subject == "unstable" else checked
                         children = [node({CHECKBOX_PATH!r}, value)]
+                        if subject != "unstable":
+                            children.extend([
+                                node({PRODUCTION_CHECKBOX!r}, value),
+                                node({PRODUCTION_CHECKBOX_BUTTON!r}, value, runtime_class="LLButton"),
+                            ])
                     result = {{"path": "/root", "class": "LLPanel", "children": children}}
                 elif op == "query" and command["kind"] == "menus":
                     result = {{"visible": True, "menus": [{{"label": "Open"}}]}}
                 elif op == "input":
                     checked = True
-                    result = {{"handled": True, "path": command.get("path"), "event": command["event"]}}
+                    result = {{
+                        "handled": True,
+                        "path": command.get("path"),
+                        "event": command["event"],
+                        "focusBefore": None,
+                        "focusAfter": {{"path": command.get("path")}},
+                        "focusChanged": True,
+                        "mouseCaptureBefore": None,
+                        "mouseCaptureAfter": None,
+                        "mouseCaptureChanged": False,
+                    }}
+                elif op == "pick":
+                    result = {{"path": {CHECKBOX_PATH!r}, "class": "LLCheckBoxCtrl"}}
+                elif op == "highlight":
+                    result = {{"visible": command.get("target") is not None}}
+                elif op == "resize":
+                    result = {{"pixelWidth": command["width"], "pixelHeight": command["height"]}}
+                elif op == "reload":
+                    checked = False
+                    result = {{"subject": subject}}
                 elif op == "diagnostics":
                     result = {{"effects": [{{"kind": "url", "value": "https://example.test"}}]}}
                 elif op == "capture":
@@ -223,37 +250,69 @@ class PlaywrightApiTests(unittest.TestCase):
         self.assertTrue((artifact_dir / "ui-tree.json").is_file())
         self.assertTrue((artifact_dir / "diagnostics-runtime.json").is_file())
 
-    def test_unavailable_actions_fail_before_dispatch(self) -> None:
+    def test_keyboard_and_text_actions_use_the_shared_input_operation(self) -> None:
         with self.open() as window:
             locator = window.get_by_path(CHECKBOX_PATH)
-            other = window.get_by_path("/root/other")
-            for action in (
-                lambda: locator.fill("text"),
-                lambda: locator.press("ENTER"),
-                lambda: locator.scroll(3),
-                lambda: locator.drag_to(other),
-            ):
-                with self.subTest(action=action):
-                    with self.assertRaises(CapabilityError):
-                        action()
-        self.assertFalse(
-            any(
-                command.get("event") in {"fill", "key", "scroll", "drag"}
-                for command in self.commands()
+            locator.fill("Known text").expect_handled()
+            locator.press("Enter").expect_handled()
+        inputs = [command for command in self.commands() if command["op"] == "input"]
+        self.assertEqual(["fill", "key"], [command["event"] for command in inputs])
+        self.assertEqual("Known text", inputs[0]["text"])
+        self.assertEqual("Enter", inputs[1]["key"])
+
+    def test_window_exposes_runtime_operations_without_command_objects(self) -> None:
+        with self.open() as window:
+            self.assertEqual(3, window.advance_frames(3)["frames"])
+            self.assertEqual(640, window.resize(640, 480)["pixelWidth"])
+            self.assertEqual("test_widgets", window.reload()["subject"])
+            self.assertEqual("/root", window.query_tree()["path"])
+            self.assertIn("effects", window.diagnostics())
+            capture = window.capture(
+                "public-api", highlight=window.get_by_path(CHECKBOX_PATH)
             )
+            self.assertEqual("public-api.png", capture["path"])
+
+        capture_command = next(
+            command for command in self.commands() if command["op"] == "capture"
+        )
+        self.assertEqual({"path": CHECKBOX_PATH}, capture_command["highlight"])
+        self.assertTrue(capture_command["includeOverlay"])
+
+    def test_recorded_actions_render_as_editable_locator_calls(self) -> None:
+        self.assertEqual(
+            [
+                f"window.get_by_path({CHECKBOX_PATH!r}).click()",
+                f"window.get_by_path({CHECKBOX_PATH!r}).fill('hello')",
+                f"window.get_by_path({CHECKBOX_PATH!r}).press('Enter')",
+            ],
+            recorded_python(
+                [
+                    {"action": "click", "path": CHECKBOX_PATH},
+                    {"action": "fill", "path": CHECKBOX_PATH, "text": "hello"},
+                    {"action": "key", "path": CHECKBOX_PATH, "key": "Enter"},
+                ]
+            ),
         )
 
-    def test_json_scenarios_parse_to_the_public_operation_types(self) -> None:
-        scenario = parse_scenario(
-            ROOT, read_json(ROOT / "scenarios" / "test-floater.json")
-        )
-        self.assertIsInstance(scenario.steps[0].operation, Frames)
-        pointer = next(
-            step.operation
-            for step in scenario.steps
-            if hasattr(step, "operation") and isinstance(step.operation, PointerAction)
-        )
-        self.assertIsInstance(pointer.selector, PathSelector)
+    def test_inspector_emits_an_escaped_recorder_line_separator(self) -> None:
+        self.assertIn(".join('\\n')", HTML)
+        self.assertNotIn(".join('" + "\n" + "')", HTML)
+
+    def test_python_scenario_runs_through_window_and_locator(self) -> None:
+        scenario = load_scenario(ROOT, ROOT / "tests" / "scenarios" / "test_floater.py")
+        with self.lab.open(
+            artifact_id="python_scenario",
+            subject=scenario.subject,
+            viewport=scenario.viewport,
+            capabilities=scenario.capabilities,
+            fixture=scenario.fixture,
+        ) as window:
+            scenario.run(window)
+
+        commands = self.commands()
+        self.assertTrue(any(command["op"] == "resize" for command in commands))
+        self.assertTrue(any(command["op"] == "reload" for command in commands))
+        self.assertTrue(any(command["op"] == "capture" for command in commands))
 
 
 if __name__ == "__main__":

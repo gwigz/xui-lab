@@ -1,10 +1,10 @@
-"""Structural assertions shared by the Python API and JSON scenarios."""
+"""Structural expectations used by the Python API."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from .domain import AssertionStep, Comparison
+from .domain import Comparison
 from .errors import AssertionFailure
 
 MISSING = object()
@@ -51,11 +51,3 @@ def check_observation(
             ) from error
         if not contained:
             raise AssertionFailure(f"{location} does not contain {expected!r}")
-
-
-def check_assertion(step: AssertionStep, saved: dict[str, Any]) -> None:
-    if step.source not in saved:
-        raise AssertionFailure(f"assertion source was not saved: {step.source}")
-    check_observation(
-        step.source, saved[step.source], step.pointer, step.comparison, step.expected
-    )

@@ -1,46 +1,40 @@
-#!/usr/bin/env python3
 """Check the xui-lab repository manifest and its declared viewer sources."""
 
 from __future__ import annotations
 
-import argparse
 import configparser
 import json
 import re
-import sys
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-from source_inventory import print_report, source_rows
-
-from xui_lab.domain import Fork, parse_manifest, parse_scenario
-from xui_lab.errors import InputError
+from .domain import Fork, parse_manifest
+from .errors import InputError, XUILabError
+from .markdown_style import audit_markdown
+from .scenarios import discover_scenarios
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REQUIRED_SPEC_HEADINGS = (
-    "## Problem Statement",
+    "## Problem statement",
     "## Solution",
-    "## User Stories",
-    "## Implementation Decisions",
-    "## Testing Decisions",
-    "## Out of Scope",
-    "## Further Notes",
+    "## User stories",
+    "## Implementation decisions",
+    "## Testing decisions",
+    "## Out of scope",
+    "## Further notes",
 )
 REQUIRED_AGENT_TEXT = (
     "SPEC.md",
     "forks.json",
-    "python3 tools/check.py",
+    "./xui-lab check",
     "CMAKE_CXX_STANDARD",
     "Do not push",
 )
 
 
-class CheckError(ValueError):
-    """A repository boundary input is invalid."""
+class CheckError(XUILabError):
+    """The repository violates its checked contract."""
 
 
 @dataclass(frozen=True)
@@ -224,20 +218,16 @@ def check_fixture(path: Path) -> None:
 
 
 def check_scenarios(adapters: dict[str, Adapter]) -> None:
-    paths = sorted((REPO_ROOT / "scenarios").glob("*.json"))
-    if not paths:
-        raise CheckError("no scenario files are defined")
-    scenario_ids: set[str] = set()
-    for path in paths:
-        try:
-            scenario = parse_scenario(
-                REPO_ROOT, json.loads(path.read_text()), str(path)
-            )
-        except (OSError, json.JSONDecodeError, InputError) as error:
-            raise CheckError(f"invalid scenario {path}: {error}") from error
-        if scenario.id in scenario_ids:
-            raise CheckError(f"duplicate scenario id: {scenario.id}")
-        scenario_ids.add(scenario.id)
+    legacy = sorted((REPO_ROOT / "scenarios").glob("*.json"))
+    if legacy:
+        raise CheckError("JSON scenarios are no longer supported")
+    try:
+        scenarios = discover_scenarios(REPO_ROOT)
+    except InputError as error:
+        raise CheckError(f"invalid Python scenario: {error}") from error
+    if not scenarios:
+        raise CheckError("no Python scenarios are defined")
+    for scenario in scenarios.values():
         adapter = adapters.get(scenario.fork)
         if adapter is None:
             raise CheckError(
@@ -248,15 +238,14 @@ def check_scenarios(adapters: dict[str, Adapter]) -> None:
                 f"scenario {scenario.id} names unregistered subject: {scenario.subject}"
             )
         unknown = sorted(
-            str(value)
-            for value in scenario.required_capabilities - adapter.capabilities
+            str(value) for value in scenario.capabilities - adapter.capabilities
         )
         if unknown:
             raise CheckError(
                 f"scenario {scenario.id} requires undeclared capabilities: {', '.join(unknown)}"
             )
         subject_missing = sorted(
-            adapter.subjects[scenario.subject] - scenario.required_capabilities
+            adapter.subjects[scenario.subject] - scenario.capabilities
         )
         if subject_missing:
             raise CheckError(
@@ -296,46 +285,28 @@ def check_fork(
         )
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--viewer-source",
-        action="append",
-        default=[],
-        metavar="FORK_ID=PATH",
-        help="use a local viewer checkout instead of its pinned submodule",
-    )
-    args = parser.parse_args()
-
-    try:
-        default_fork, forks = load_manifest()
-        overrides = parse_overrides(args.viewer_source, {fork.id for fork in forks})
-        submodule_paths = load_submodule_paths()
-        check_spec()
-        check_agent_guidance()
-        adapters: dict[str, Adapter] = {}
-        for fork in forks:
-            check_fork(
-                fork,
-                overrides.get(fork.id, fork.source.path),
-                submodule_paths,
-                fork.id in overrides,
-            )
-            adapters[fork.id] = load_adapter(fork)
-        check_scenarios(adapters)
-    except CheckError as error:
-        print(f"xui-lab check failed: {error}", file=sys.stderr)
-        return 1
-
+def check_repository(viewer_sources: list[str]) -> str:
+    default_fork, forks = load_manifest()
+    overrides = parse_overrides(viewer_sources, {fork.id for fork in forks})
+    submodule_paths = load_submodule_paths()
+    check_spec()
+    check_agent_guidance()
+    adapters: dict[str, Adapter] = {}
+    for fork in forks:
+        check_fork(
+            fork,
+            overrides.get(fork.id, fork.source.path),
+            submodule_paths,
+            fork.id in overrides,
+        )
+        adapters[fork.id] = load_adapter(fork)
+    check_scenarios(adapters)
+    markdown_findings = audit_markdown()
+    if markdown_findings:
+        details = "\n".join(markdown_findings)
+        raise CheckError(f"Markdown style audit failed:\n{details}")
     fork_names = ", ".join(fork.id for fork in forks)
-    print(
+    return (
         f"xui-lab repository is consistent; default fork: {default_fork}; "
         f"declared forks: {fork_names}"
     )
-    print("C++ source size report:")
-    print_report(source_rows(REPO_ROOT, (".cpp",)), 20)
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

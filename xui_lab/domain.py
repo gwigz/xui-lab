@@ -5,14 +5,12 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
-from pathlib import Path, PurePosixPath, PureWindowsPath
+from pathlib import Path, PurePosixPath
 from typing import Any, NewType
 
 from .errors import InputError
-from .operations import RuntimeOperation, parse_operation
 
 ForkId = NewType("ForkId", str)
-ScenarioId = NewType("ScenarioId", str)
 Capability = NewType("Capability", str)
 _ID_PATTERN = re.compile(r"^[a-z][a-z0-9_-]*$")
 
@@ -50,31 +48,6 @@ def repository_path(root: Path, value: str, label: str) -> Path:
     return root.joinpath(*path.parts)
 
 
-def _validate_capture_step(step: dict[str, Any], label: str) -> None:
-    if "path" in step:
-        value = step["path"]
-        if not isinstance(value, str) or not value:
-            raise InputError(f"{label}.path must be a non-empty capture path")
-        paths = (PurePosixPath(value), PureWindowsPath(value))
-        if any(
-            path.is_absolute() or path.drive or ".." in path.parts for path in paths
-        ):
-            raise InputError(
-                f"{label}.path capture must stay beneath the scenario artifact directory"
-            )
-    if "name" in step:
-        value = step["name"]
-        if not isinstance(value, str) or not value:
-            raise InputError(f"{label}.name must be a non-empty capture name")
-        if (
-            value in {".", ".."}
-            or PureWindowsPath(value).drive
-            or "/" in value
-            or "\\" in value
-        ):
-            raise InputError(f"{label}.name must not create capture subdirectories")
-
-
 @dataclass(frozen=True)
 class ForkSource:
     path: Path
@@ -106,34 +79,6 @@ class Comparison(Enum):
     EQUALS = "equals"
     CONTAINS = "contains"
     EXISTS = "exists"
-
-
-@dataclass(frozen=True)
-class RuntimeStep:
-    operation: RuntimeOperation
-    save_as: str | None
-
-
-@dataclass(frozen=True)
-class AssertionStep:
-    source: str
-    pointer: str
-    comparison: Comparison
-    expected: Any
-
-
-ScenarioStep = RuntimeStep | AssertionStep
-
-
-@dataclass(frozen=True)
-class Scenario:
-    id: ScenarioId
-    fork: ForkId
-    subject: str
-    fixture: Path | None
-    viewport: Viewport
-    required_capabilities: frozenset[Capability]
-    steps: tuple[ScenarioStep, ...]
 
 
 def parse_manifest(root: Path, raw: Any) -> Manifest:
@@ -179,119 +124,3 @@ def parse_manifest(root: Path, raw: Any) -> Manifest:
     if default_id not in forks:
         raise InputError("manifest.defaultFork does not name a declared fork")
     return Manifest(default_id, forks)
-
-
-def _positive_int(value: Any, label: str) -> int:
-    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
-        raise InputError(f"{label} must be a positive integer")
-    return value
-
-
-def parse_scenario(root: Path, raw: Any, label: str = "scenario") -> Scenario:
-    data = _mapping(raw, label)
-    _keys(
-        data,
-        {
-            "$schema",
-            "schemaVersion",
-            "id",
-            "fork",
-            "subject",
-            "fixture",
-            "viewport",
-            "requires",
-            "steps",
-        },
-        label,
-    )
-    if data.get("schemaVersion") != 1:
-        raise InputError(f"{label}.schemaVersion must be 1")
-
-    viewport_data = _mapping(data.get("viewport"), f"{label}.viewport")
-    _keys(viewport_data, {"width", "height", "uiScale"}, f"{label}.viewport")
-    ui_scale = viewport_data.get("uiScale", 1.0)
-    if (
-        not isinstance(ui_scale, (int, float))
-        or isinstance(ui_scale, bool)
-        or ui_scale <= 0
-    ):
-        raise InputError(f"{label}.viewport.uiScale must be positive")
-    viewport = Viewport(
-        _positive_int(viewport_data.get("width"), f"{label}.viewport.width"),
-        _positive_int(viewport_data.get("height"), f"{label}.viewport.height"),
-        float(ui_scale),
-    )
-
-    requires = data.get("requires", [])
-    if not isinstance(requires, list) or any(
-        not isinstance(value, str) or not value for value in requires
-    ):
-        raise InputError(f"{label}.requires must be an array of non-empty strings")
-    if len(requires) != len(set(requires)):
-        raise InputError(f"{label}.requires must not contain duplicates")
-
-    raw_steps = data.get("steps")
-    if not isinstance(raw_steps, list) or not raw_steps:
-        raise InputError(f"{label}.steps must be a non-empty array")
-    steps: list[ScenarioStep] = []
-    for index, value in enumerate(raw_steps):
-        step_label = f"{label}.steps[{index}]"
-        step = _mapping(value, step_label)
-        op = _string(step, "op", step_label)
-        if op == "assert":
-            _keys(
-                step, {"op", "source", "pointer", "comparison", "expected"}, step_label
-            )
-            comparison_text = step.get("comparison", "equals")
-            try:
-                comparison = Comparison(comparison_text)
-            except ValueError as error:
-                allowed = ", ".join(value.value for value in Comparison)
-                raise InputError(
-                    f"{step_label}.comparison must be one of: {allowed}"
-                ) from error
-            if comparison is not Comparison.EXISTS and "expected" not in step:
-                raise InputError(
-                    f"{step_label}.expected is required for {comparison.value}"
-                )
-            pointer = step.get("pointer", "")
-            if not isinstance(pointer, str) or (
-                pointer and not pointer.startswith("/")
-            ):
-                raise InputError(
-                    f"{step_label}.pointer must be an RFC 6901 JSON pointer"
-                )
-            steps.append(
-                AssertionStep(
-                    _string(step, "source", step_label),
-                    pointer,
-                    comparison,
-                    step.get("expected"),
-                )
-            )
-            continue
-        if op == "capture":
-            _validate_capture_step(step, step_label)
-        save_as = step.get("saveAs")
-        if save_as is not None and (not isinstance(save_as, str) or not save_as):
-            raise InputError(f"{step_label}.saveAs must be a non-empty string")
-        operation_data = dict(step)
-        operation_data.pop("saveAs", None)
-        steps.append(RuntimeStep(parse_operation(operation_data, step_label), save_as))
-
-    fixture_value = data.get("fixture")
-    fixture = None
-    if fixture_value is not None:
-        if not isinstance(fixture_value, str) or not fixture_value:
-            raise InputError(f"{label}.fixture must be a non-empty path")
-        fixture = repository_path(root, fixture_value, f"{label}.fixture")
-
-    return Scenario(
-        ScenarioId(_identifier(data, "id", label)),
-        ForkId(_identifier(data, "fork", label)),
-        _string(data, "subject", label),
-        fixture,
-        viewport,
-        frozenset(Capability(value) for value in requires),
-        tuple(steps),
-    )

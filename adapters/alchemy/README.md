@@ -9,19 +9,19 @@ UI target and their no-login constraints.
 The adapter joins Alchemy's supported CMake graph. It must not maintain a
 second list of `indra/newview` source files.
 
-Alchemy must expose one reusable production UI target. That target must contain
-the newview objects required to construct registered floaters while excluding
-the platform application entry point. The adapter will link those objects into
-a fork-specific build of `xui-lab`.
+Alchemy exposes its production newview source list and link settings through
+`ALCHEMY_NEWVIEW_EXTENSION_DIRS`. The adapter derives `alchemy_newview_ui` from
+that build graph. It retains registered subject controllers and excludes the
+platform application entry point and voice runtime.
 
 The runtime side of the adapter must:
 
-- register the fork and its build metadata;
-- initialize the real LLUI, LLXUI, rendering, skin, and floater systems;
-- declare the viewer capabilities available to a scenario;
-- populate real viewer models from deterministic fixtures;
-- intercept unavailable external effects at their system boundaries; and
-- report a clear error when a subject needs an unavailable capability.
+- Register the fork and its build metadata
+- Initialize the real LLUI, LLXUI, rendering, skin, and floater systems
+- Declare the viewer capabilities available to a scenario
+- Populate real viewer models from deterministic fixtures
+- Intercept unavailable external effects at their system boundaries
+- Report a clear error when a subject needs an unavailable capability
 
 The pinned Alchemy submodule is the default source. A local source override can
 select an unpushed branch without changing the submodule pointer.

@@ -20,6 +20,8 @@ public:
     [[nodiscard]] LLSD    inventory(const std::vector<LLUUID>& fixture_object_ids) const;
     [[nodiscard]] LLSD    value(std::string_view path) const;
     [[nodiscard]] LLSD    tree(const LLSD& command) const;
+    [[nodiscard]] LLSD    pick(S32 x, S32 y) const;
+    [[nodiscard]] LLView* pickView(S32 x, S32 y) const;
     [[nodiscard]] LLView* resolvePath(std::string_view path) const;
     [[nodiscard]] LLView* resolveModelId(const LLUUID& id) const;
 

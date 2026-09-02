@@ -5,189 +5,11 @@ the sections in order. Do not declare a capability in
 [`adapter.json`](adapters/alchemy/adapter.json) until a real C++ runtime
 scenario proves it.
 
-The target developer experience resembles Playwright: launch one production
-UI subject, locate controls, send normal input, inspect state, make structural
-assertions, and retain useful evidence after failure. The API must keep LLUI
-semantics where they matter. It must not introduce a parallel widget model.
-
-The repository checks and 15 Python controller tests pass. The public adapter
-currently declares `input` and `inspection` for `test_widgets`. The runtime
-scenario passes against Alchemy commit
-`4e60607d684a4fde253a61129647f4dbd5fa32f5`.
-
-## Stabilize the process boundary
-
-- [x] Contain every runtime capture path beneath the scenario artifact
-  directory. Reject absolute paths, `..` components, and capture names that
-  create subdirectories.
-- [x] Add bounded request and shutdown waits. Report whether the runtime
-  exited, stalled, closed its response stream, or returned an invalid response.
-- [x] Add controller tests for each timeout and process-failure case.
-- [x] Implement the runtime `diagnostics` operation. Include focus, mouse
-  capture, the visible menu, the active subject, viewport state, and graphics
-  information.
-- [x] Force an assertion failure and verify that the runner writes `frame.png`,
-  `ui-tree.json`, `event-trace.json`, `diagnostics.json`,
-  `diagnostics-runtime.json`, and `runtime.log` before it exits nonzero.
-- [x] Keep the runner as the parent process. Each scenario starts a fresh
-  runtime so the runner can enforce timeouts and collect crash evidence.
-
-## Reuse the viewer's event APIs
-
-- [x] Inventory the `LLEventAPI` operations available to the reusable Alchemy
-  UI target. Record which operations work without login, world state, or
-  network services.
-- [x] Add one lab-specific `LLEventAPI` for lifecycle operations that the
-  viewer does not provide: initialize, install capabilities, advance frames,
-  wait for stability, resize, capture, reload, diagnostics, and shutdown.
-- [x] Keep the existing parent-controlled JSON-lines transport. Translate each
-  validated request to LLSD and dispatch it through `LLEventPumps`.
-- [x] Expose event API and operation metadata to the controller. Do not expose
-  an API unless the selected subject declares the capabilities it requires.
-- [x] Prove the bridge with one existing inspection operation, preferably
-  `LLWindow.getSubtree`, before migrating other commands.
-- [x] Reuse or extract the path-addressed input and inspection behavior in
-  `LLWindowListener`. Its current `LLViewerWindow` dependency must not force the
-  lab to construct the normal viewer application.
-- [x] Reuse `LLFloaterReg`, `UI`, and subject-specific event APIs where they
-  preserve the production behavior under test.
-- [x] Delete each duplicate lab implementation after its existing viewer API
-  passes the same runtime scenario. Do not retain two command paths.
-- [x] Use LEAP protocol and introspection code as prior art. Do not make the lab
-  controller a viewer-launched LEAP child process.
-
-## Standardize Python linting and formatting
-
-Use one of these tool combinations:
-
-1. Use Ruff for linting, import sorting, and formatting. This is the preferred
-   choice. Ruff 0.16.5 was current when this task was written. It replaces the
-   Flake8, isort, pyupgrade, and Black roles with one configuration and one
-   executable.
-2. Use Ruff for linting and import sorting, and use Black for formatting. Pick
-   this if exact Black output matters more than having one tool. Ruff formats
-   more than 99.9% of lines identically to Black, but it documents a small set
-   of intentional differences.
-3. Use Pylint, Black, and isort. Pick this only if the project wants Pylint's
-   deeper and more opinionated checks. This stack has more configuration,
-   dependencies, and duplicate diagnostics.
-
-The tasks below assume the Ruff-only choice:
-
-- [x] Choose the minimum supported Python version. The current annotations
-  require Python 3.10 or newer, but the local Python 3.14 installation does not
-  define the project's support policy.
-- [x] Add `pyproject.toml` with an exact Ruff `required-version`, the chosen
-  Python target, and an explicit stable rule set. Include import sorting. Limit
-  discovery to Python files so Ruff 0.16 does not format Markdown code blocks,
-  and exclude `viewers/`, build output, artifacts, and generated files.
-- [x] Pin the same Ruff version in the developer installation path. Do not let
-  a global Ruff installation or a floating CI version choose the result.
-- [x] Run `ruff check --fix` before `ruff format`. Accept safe fixes only, and
-  inspect the semantic diff before committing the format-only baseline.
-- [x] Add `ruff check .` and `ruff format --check .` to CI. Run both commands
-  before the unit tests so style failures finish early.
-- [x] Add optional pre-commit hooks in the same order: `ruff-check --fix`, then
-  `ruff-format`. Keep CI authoritative for contributors who do not use hooks.
-- [x] Document the install, check, fix, and upgrade commands in `README.md`.
-  Upgrade Ruff in a dedicated change that shows the resulting lint and format
-  diff.
-
-Ruff 0.16 expanded its default selection from 59 rules to 413. Pinning an
-explicit rule set keeps a tool upgrade from silently changing repository
-policy. Do not enable preview rules or unsafe fixes in the first pass.
-
-## Split the Alchemy runtime by responsibility
-
-At this commit, `python3 tools/source_inventory.py --suffix .cpp` reports
-[`xui_lab_main.cpp`](adapters/alchemy/xui_lab_main.cpp) as the superproject's
-only C++ source file, at 1,443 lines. Most of the file belongs to the 920-line
-`Runtime` class. Choose a target design before moving code:
-
-1. Split `Runtime` method definitions across several translation units while
-   keeping one class and one shared private header. This is the smallest and
-   safest change, but all responsibilities still share the full runtime state.
-2. Keep `Runtime` as the `LLEventAPI` coordinator and extract owned components
-   for the UI host, deterministic fixtures, and inspection. This is the
-   preferred end state because ownership and shutdown order become visible in
-   types instead of filename conventions.
-3. Group code by capability, such as input, inspection, and inventory. This
-   matches `adapter.json`, but initialization and shutdown cross those groups.
-   Defer this choice until more subjects prove that capability code can stand
-   alone.
-
-Choose option 2. If a component boundary cannot preserve current behavior,
-stop at option 1 for that code instead of adding pass-through wrappers:
-
-- [x] Record a baseline with `python3 tools/source_inventory.py`, the repository
-  checks, the Python tests, the runtime scenario, and the selected Alchemy
-  commit. Keep the same viewer source for every later stage.
-- [x] Leave only argument handling, `--metadata`, and a call to the scenario
-  entry function in `xui_lab_main.cpp`. Keep `Runtime` private to its
-  implementation instead of exposing all runtime state to the entry point.
-- [x] Move event API registration, capability gating, the JSON-lines loop, and
-  error serialization into `xui_lab_runtime.cpp`. Preserve the existing command
-  names and response shapes.
-- [x] Extract the window, shader, image provider, frame rendering, capture, and
-  shutdown order into an owned UI-host component. Preserve RAII and the current
-  production `LLWindowCallbacks` event path.
-- [x] Extract inventory fixture validation and installation into one component.
-  Pass typed fixture input at its boundary, and keep mutations of `gInventory`,
-  agent identity, and the avatar-name cache together with their cleanup.
-- [x] Extract tree construction and target resolution into an inspection
-  component. Keep `LLWindowListener`, `LLUI::resolvePath`, and production view
-  objects as the source of truth.
-- [x] Add the new adapter-owned sources to
-  [`CMakeLists.txt`](adapters/alchemy/CMakeLists.txt). Continue to link the one
-  `alchemy_newview_ui` production target. Do not add a second command router, a
-  copied viewer source list, or a binary plugin seam.
-- [x] Move one responsibility at a time. After each move, run the repository
-  checks, the local Alchemy build, and the affected runtime scenario. Compare
-  the structural trace and diagnostics before the next move.
-- [x] Add a source-size report to the normal checks after the split. Treat
-  unexpected growth as a prompt to inspect ownership, not as a reason to split
-  code at an arbitrary line count.
-
-## Add a Playwright-style Python API
-
-- [x] Introduce `Lab`, `Window`, and `Locator` types over the typed runtime
-  protocol. Keep raw command access available for adapter development.
-- [x] Make locators resolve immediately before every action and assertion. Do
-  not retain runtime view pointers across layout, fixture, or reload changes.
-- [x] Add `get_by_path()` and `get_by_model_id()` first. Add label and role
-  locators only after LLUI supplies an unambiguous production mapping.
-- [x] Fail a locator operation when it resolves to zero or multiple controls.
-  Include matching paths, runtime classes, and source provenance in the error.
-- [x] Add locator actions for click, double-click, right-click, fill, key
-  input, scroll, and drag-to as the runtime supports them.
-- [x] Add structural expectations for visibility, enabled state, value,
-  selection, focus, rectangles, menus, handled events, and recorded effects.
-- [x] Add automatic stability waits around actions and expectations. Report the
-  changing tree state when the wait times out.
-- [x] Let Python tests and JSON scenarios use the same typed operations,
-  assertions, capability declarations, artifact naming, and failure evidence.
-
-## Finish the headed workflow
-
-- [ ] Implement `--interactive` with a visible SDL window and the same subject
-  host, renderer, capabilities, and commands used in scenario mode.
-- [ ] Add exact viewport resizing. Report both pixel size and LLUI size after
-  every resize.
-- [ ] Add pointer picking by screen position and return the frontmost visible
-  control's locator, runtime class, source, and rectangles.
-- [ ] Add keyboard and text input through the production LLUI event path.
-- [ ] Report focus and mouse-capture changes after every input operation.
-- [ ] Add source-XUI reload and scenario replay. Prove that interactive reload
-  does not require a process restart.
-- [ ] Build a companion inspector that does not alter subject layout. Show the
-  selected control, path, class, source, rectangles, visibility chain, enabled
-  chain, focus, mouse capture, and hit-test order.
-- [ ] Add hover highlighting, `copy locator`, fixture selection, subject
-  selection, screenshot capture, and UI-tree export.
-- [ ] Record interactive actions as editable Python locator calls. Treat the
-  recorder as a starting point for a test, not as the assertion oracle.
-- [ ] Keep the inspector overlay out of ordinary captures. Record overlay state
-  in capture metadata.
+The target API launches one production UI subject, locates controls, sends
+normal LLUI input, inspects state, and makes structural assertions. After a
+failure, it keeps the frame, UI tree, event trace, diagnostics, and runtime log.
+The API must preserve LLUI semantics. It must not introduce a parallel widget
+model.
 
 ## Prove the design with Inventory Explorer
 
@@ -215,8 +37,8 @@ stop at option 1 for that code instead of adding pass-through wrappers:
 
 - [ ] Represent each subject requirement as a named capability with typed
   fixture input and an explicit unavailable error.
-- [ ] Add a convenience capability pack only as a composition of named
-  capabilities. Keep its expanded configuration inspectable in artifacts.
+- [ ] Build convenience capability sets by composing named capabilities. Record
+  the expanded configuration in artifacts.
 - [ ] Add avatar-state and cached-name fixtures when a registered subject first
   requires them.
 - [ ] Intercept URL launches, file dialogs, and network requests at their
@@ -253,7 +75,7 @@ stop at option 1 for that code instead of adding pass-through wrappers:
 ## Harden contracts and isolation
 
 - [ ] Define and validate every runtime operation at the Python input boundary.
-  Keep commands typed after parsing.
+  Keep commands typed after validation.
 - [ ] Validate all fixture fields and reject unknown keys before starting the
   C++ process.
 - [ ] Add runtime contract tests for metadata, source mismatch, API metadata,
@@ -264,7 +86,7 @@ stop at option 1 for that code instead of adding pass-through wrappers:
 - [ ] Test that interactive mode and scenario mode dispatch identical typed
   operations through the same subject host.
 
-## Rebuild and hand off
+## Rebuild and verify
 
 - [ ] Select one Alchemy source and use it for checks, build, launch, and every
   scenario. Do not reuse the stale `cd9c6bbd` binary or artifacts.
@@ -273,16 +95,17 @@ stop at option 1 for that code instead of adding pass-through wrappers:
 - [ ] Run the repository checks and controller tests:
 
   ```sh
-  python3 tools/check.py
-  python3 tools/check.py \
-    --viewer-source alchemy=/absolute/path/to/alchemy
+  ./xui-lab check
+  ./xui-lab \
+    --viewer-source alchemy=/absolute/path/to/alchemy \
+    check
   python3 -m unittest discover -s tests -v
   ```
 
 - [ ] Run every scenario against the fresh binary. Inspect every PNG, JSON
   sidecar, event trace, diagnostic file, and runtime log.
 - [ ] Update [`README.md`](README.md),
-  [`scenarios/README.md`](scenarios/README.md), and
+  [`tests/scenarios/README.md`](tests/scenarios/README.md), and
   [`fixtures/README.md`](fixtures/README.md) to describe the implemented API,
   commands, file formats, and interactive workflow. Remove specification-stage
   claims.

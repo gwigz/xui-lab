@@ -19,7 +19,7 @@
 #include <utility>
 #include <variant>
 
-class XUILabInventoryFixtureLoader final
+class LLInventoryModelTestAccess final
 {
 public:
     static void addCategory(LLInventoryModel& inventory, LLViewerInventoryCategory* category) { inventory.addCategory(category); }
@@ -208,7 +208,7 @@ InventoryFixture::InventoryFixture(InventoryFixtureData fixture) : mId(std::move
                 category_fixture->name, fixture.agent.id);
             category->setVersion(LLViewerInventoryCategory::VERSION_INITIAL);
             category->setDescendentCount(descendant_counts[category_fixture->id]);
-            XUILabInventoryFixtureLoader::addCategory(gInventory, category);
+            LLInventoryModelTestAccess::addCategory(gInventory, category);
         }
 
         for (const auto& object : fixture.inventory)
@@ -225,7 +225,7 @@ InventoryFixture::InventoryFixture(InventoryFixtureData fixture) : mId(std::move
                 LLAssetType::AT_NOTECARD, LLInventoryType::IT_NOTECARD, item_fixture->name, "xui-lab deterministic notecard", LLSaleInfo(),
                 0, 1700000000);
             item->setComplete(true);
-            XUILabInventoryFixtureLoader::addItem(gInventory, item);
+            LLInventoryModelTestAccess::addItem(gInventory, item);
             ++descendant_counts[item_fixture->parent_id];
         }
 
@@ -237,7 +237,7 @@ InventoryFixture::InventoryFixture(InventoryFixtureData fixture) : mId(std::move
             new LLViewerInventoryCategory(library_root_id, LLUUID::null, LLFolderType::FT_ROOT_INVENTORY, "Library", library_owner_id);
         library_root->setVersion(LLViewerInventoryCategory::VERSION_INITIAL);
         library_root->setDescendentCount(0);
-        XUILabInventoryFixtureLoader::addCategory(gInventory, library_root);
+        LLInventoryModelTestAccess::addCategory(gInventory, library_root);
 
         for (S32 value = LLFolderType::FT_TEXTURE; value < LLFolderType::FT_COUNT; ++value)
         {
@@ -252,7 +252,7 @@ InventoryFixture::InventoryFixture(InventoryFixtureData fixture) : mId(std::move
                 id, root_id, folder_type, LLViewerFolderType::lookupNewCategoryName(folder_type), fixture.agent.id);
             category->setVersion(LLViewerInventoryCategory::VERSION_INITIAL);
             category->setDescendentCount(0);
-            XUILabInventoryFixtureLoader::addCategory(gInventory, category);
+            LLInventoryModelTestAccess::addCategory(gInventory, category);
             category_ids.insert(id);
             ++descendant_counts[root_id];
         }
@@ -268,8 +268,7 @@ InventoryFixture::InventoryFixture(InventoryFixtureData fixture) : mId(std::move
         if (!gInventory.isInventoryUsable() || !gInventory.getCategory(root_id) || gInventory.getItemCount() == 0)
         {
             throw Error("inventory_model",
-                        "production inventory model rejected the fixture: " +
-                            LlsdToJson(XUILabInventoryFixtureLoader::validate(gInventory)));
+                        "production inventory model rejected the fixture: " + LlsdToJson(LLInventoryModelTestAccess::validate(gInventory)));
         }
     }
     catch (...)

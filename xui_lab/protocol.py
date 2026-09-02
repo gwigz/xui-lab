@@ -18,9 +18,12 @@ class RuntimeProcess:
         executable: Path,
         stderr_path: Path,
         *,
+        mode: str = "scenario",
         request_timeout: float = 10.0,
         shutdown_timeout: float = 10.0,
     ):
+        if mode not in {"scenario", "interactive"}:
+            raise RuntimeFailure(f"unknown runtime process mode: {mode}")
         stderr_path.parent.mkdir(parents=True, exist_ok=True)
         self._stderr: TextIO = stderr_path.open("w", encoding="utf-8")
         self._request_timeout = request_timeout
@@ -31,7 +34,7 @@ class RuntimeProcess:
         self._status: int | None = None
         try:
             self._process = subprocess.Popen(
-                [str(executable), "--scenario"],
+                [str(executable), f"--{mode}"],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=self._stderr,
@@ -51,6 +54,10 @@ class RuntimeProcess:
             target=self._read_responses, name="xui-lab-runtime-reader", daemon=True
         )
         self._reader.start()
+
+    @property
+    def pid(self) -> int:
+        return self._process.pid
 
     def _read_responses(self) -> None:
         assert self._process.stdout is not None

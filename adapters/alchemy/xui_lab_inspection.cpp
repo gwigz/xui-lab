@@ -17,6 +17,7 @@
 #include "llviewermenu.h"
 
 #include <array>
+#include <functional>
 #include <string>
 #include <string_view>
 
@@ -110,6 +111,40 @@ LLSD buildTree(LLView* view)
     node["children"] = children;
     return node;
 }
+
+void collectHitViews(LLView* view, S32 screen_x, S32 screen_y, std::vector<LLView*>& hits)
+{
+    if (!view->isInVisibleChain())
+        return;
+
+    S32 local_x = 0;
+    S32 local_y = 0;
+    view->screenPointToLocal(screen_x, screen_y, &local_x, &local_y);
+    if (!view->pointInView(local_x, local_y, LLView::HIT_TEST_IGNORE_BOUNDING_RECT))
+        return;
+
+    for (LLView* child : *view->getChildList())
+        collectHitViews(child, screen_x, screen_y, hits);
+    if (dynamic_cast<LLUICtrl*>(view) && view->getMouseOpaque())
+        hits.push_back(view);
+}
+
+LLSD describePick(LLView* target, const std::vector<LLView*>& hits, S32 x, S32 y)
+{
+    LLSD result = target ? target->getInfo() : LLSD::emptyMap();
+    result["x"] = x;
+    result["y"] = y;
+    LLSD order  = LLSD::emptyArray();
+    for (std::size_t index = 0; index < hits.size(); ++index)
+    {
+        LLView* view = hits[index];
+        order.append(LLSDMap("order", static_cast<S32>(index))("path", view->getPathname())("class", view->getInfo()["class"])(
+            "source_file",
+            view->getInfo()["source_file"])("source_line", view->getInfo()["source_line"])("screen_rect", view->getInfo()["screen_rect"]));
+    }
+    result["hit_test_order"] = order;
+    return result;
+}
 } // namespace
 
 namespace xui_lab
@@ -165,8 +200,9 @@ LLSD Inspection::inventory(const std::vector<LLUUID>& fixture_object_ids) const
         entry["views"] = views;
         objects.append(entry);
     }
-    return LLSDMap("usable", gInventory.isInventoryUsable())("rootId", gInventory.getRootFolderID())(
-        "itemCount", gInventory.getItemCount())("objects", objects);
+    return LLSDMap("usable", gInventory.isInventoryUsable())("rootId", gInventory.getRootFolderID())("itemCount",
+                                                                                                     gInventory.getItemCount())("objects",
+                                                                                                                                objects);
 }
 
 LLSD Inspection::value(std::string_view path) const
@@ -178,6 +214,23 @@ LLSD Inspection::tree(const LLSD& command) const
     if (command.has("path"))
         request["under"] = command["path"];
     return callEventApi("LLWindow", request);
+}
+
+LLView* Inspection::pickView(S32 x, S32 y) const
+{
+    std::vector<LLView*> hits;
+    collectHitViews(&mRoot, x, y, hits);
+    return hits.empty() ? nullptr : hits.front();
+}
+
+LLSD Inspection::pick(S32 x, S32 y) const
+{
+    if (!mRoot.getLocalRect().pointInRect(x, y))
+        throw Error("pick", "screen position is outside the LLUI viewport");
+    std::vector<LLView*> hits;
+    collectHitViews(&mRoot, x, y, hits);
+    LLView* target = hits.empty() ? nullptr : hits.front();
+    return describePick(target, hits, x, y);
 }
 
 LLView* Inspection::resolvePath(std::string_view requested_path) const

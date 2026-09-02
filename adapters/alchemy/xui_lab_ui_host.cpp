@@ -27,6 +27,7 @@
 #include "llimagepng.h"
 #include "llinitdestroyclass.h"
 #include "lllayoutstack.h"
+#include "llkeyboard.h"
 #include "llmenugl.h"
 #include "llmortician.h"
 #include "llnotifications.h"
@@ -34,6 +35,7 @@
 #include "llrender.h"
 #include "llrender2dutils.h"
 #include "llsdjson.h"
+#include "llsdutil.h"
 #include "llshadermgr.h"
 #include "lltrans.h"
 #include "lltransutil.h"
@@ -229,12 +231,14 @@ private:
 class LabWindow final : public LLWindowCallbacks
 {
 public:
-    LabWindow(S32 width, S32 height)
+    LabWindow(S32 width, S32 height, bool interactive)
     {
-        mWindow = LLWindowManager::createWindow(this, "xui-lab", "xui-lab", 0, 0, width, height, LLWindow::WINDOW_FLAG_HIDDEN, false, true,
-                                                false, true, false);
+        const U32 flags = interactive ? 0 : LLWindow::WINDOW_FLAG_HIDDEN;
+        mWindow = LLWindowManager::createWindow(this, "xui-lab", "xui-lab", 0, 0, width, height, flags, false, true, false, true, false);
         if (!mWindow)
-            throw xui_lab::Error("window", "failed to create the hidden production LLWindow");
+            throw xui_lab::Error("window", "failed to create the production LLWindow");
+        if (interactive)
+            mWindow->show();
     }
 
     ~LabWindow() override
@@ -243,62 +247,162 @@ public:
             LLWindowManager::destroyWindow(mWindow);
     }
 
-    [[nodiscard]] LLWindow* get() const noexcept { return mWindow; }
-    void                    setRoot(LLView* root) noexcept { mRoot = root; }
+    [[nodiscard]] LLWindow*                          get() const noexcept { return mWindow; }
+    void                                             setRoot(LLView* root) noexcept { mRoot = root; }
+    [[nodiscard]] std::optional<std::pair<S32, S32>> takePointerMove() { return std::exchange(mPointerMove, std::nullopt); }
+    [[nodiscard]] std::optional<std::pair<S32, S32>> takeResize() { return std::exchange(mResize, std::nullopt); }
+    [[nodiscard]] bool                               closeRequested() const noexcept { return mCloseRequested; }
+
+    void gatherInput()
+    {
+        mGatheringInput = true;
+        mWindow->gatherInput();
+        mGatheringInput = false;
+    }
+
+    [[nodiscard]] LLSD takeInteractiveActions()
+    {
+        LLSD result         = std::move(mInteractiveActions);
+        mInteractiveActions = LLSD::emptyArray();
+        return result;
+    }
+
+    bool sendKey(KEY key, MASK mask)
+    {
+        const bool down = handleTranslatedKeyDown(key, mask, false);
+        const bool up   = handleTranslatedKeyUp(key, mask);
+        return down || up;
+    }
+
+    bool sendUnicode(llwchar character) { return handleUnicodeChar(character, MASK_NONE); }
 
     bool handleMouseDown(LLWindow*, LLCoordGL position, MASK mask) override
     {
-        setMousePosition(position);
-        return mRoot->handleMouseDown(position.mX, position.mY, mask);
+        const LLCoordGL screen = screenPosition(position);
+        return mRoot->handleMouseDown(screen.mX, screen.mY, mask);
     }
 
     bool handleMouseUp(LLWindow*, LLCoordGL position, MASK mask) override
     {
-        setMousePosition(position);
-        return mRoot->handleMouseUp(position.mX, position.mY, mask);
+        const LLCoordGL screen  = screenPosition(position);
+        const bool      handled = mRoot->handleMouseUp(screen.mX, screen.mY, mask);
+        queuePointerAction("click", screen);
+        return handled;
     }
 
     bool handleRightMouseDown(LLWindow*, LLCoordGL position, MASK mask) override
     {
-        setMousePosition(position);
-        return mRoot->handleRightMouseDown(position.mX, position.mY, mask);
+        const LLCoordGL screen = screenPosition(position);
+        return mRoot->handleRightMouseDown(screen.mX, screen.mY, mask);
     }
 
     bool handleRightMouseUp(LLWindow*, LLCoordGL position, MASK mask) override
     {
-        setMousePosition(position);
-        return mRoot->handleRightMouseUp(position.mX, position.mY, mask);
+        const LLCoordGL screen  = screenPosition(position);
+        const bool      handled = mRoot->handleRightMouseUp(screen.mX, screen.mY, mask);
+        queuePointerAction("right_click", screen);
+        return handled;
     }
 
     bool handleMiddleMouseDown(LLWindow*, LLCoordGL position, MASK mask) override
     {
-        setMousePosition(position);
-        return mRoot->handleMiddleMouseDown(position.mX, position.mY, mask);
+        const LLCoordGL screen = screenPosition(position);
+        return mRoot->handleMiddleMouseDown(screen.mX, screen.mY, mask);
     }
 
     bool handleMiddleMouseUp(LLWindow*, LLCoordGL position, MASK mask) override
     {
-        setMousePosition(position);
-        return mRoot->handleMiddleMouseUp(position.mX, position.mY, mask);
+        const LLCoordGL screen = screenPosition(position);
+        return mRoot->handleMiddleMouseUp(screen.mX, screen.mY, mask);
     }
 
     bool handleDoubleClick(LLWindow*, LLCoordGL position, MASK mask) override
     {
-        setMousePosition(position);
-        return mRoot->handleDoubleClick(position.mX, position.mY, mask);
+        const LLCoordGL screen  = screenPosition(position);
+        const bool      handled = mRoot->handleDoubleClick(screen.mX, screen.mY, mask);
+        queuePointerAction("double_click", screen);
+        return handled;
     }
 
     void handleMouseMove(LLWindow*, LLCoordGL position, MASK mask) override
     {
-        setMousePosition(position);
-        mRoot->handleHover(position.mX, position.mY, mask);
+        const LLCoordGL screen = screenPosition(position);
+        mPointerMove           = std::pair(screen.mX, screen.mY);
+        mRoot->handleHover(screen.mX, screen.mY, mask);
     }
 
-private:
-    void setMousePosition(LLCoordGL position) { LLUI::getInstance()->setMousePositionScreen(position.mX, position.mY); }
+    bool handleTranslatedKeyDown(KEY key, MASK mask, bool) override
+    {
+        LLFocusableElement* focus = gFocusMgr.getKeyboardFocus();
+        if (focus && !(mask & (MASK_CONTROL | MASK_ALT)) && key >= 0x20 && key < 0x7f && !focus->wantsKeyUpKeyDown())
+            return true;
+        const bool handled = (gMenuHolder && gMenuHolder->handleKey(key, mask, true)) || (focus && focus->handleKey(key, mask, false)) ||
+                             mRoot->handleKey(key, mask, true);
+        queueKeyAction(key, focus);
+        return handled;
+    }
 
-    LLWindow* mWindow = nullptr;
-    LLView*   mRoot   = nullptr;
+    bool handleTranslatedKeyUp(KEY key, MASK mask) override
+    {
+        LLFocusableElement* focus = gFocusMgr.getKeyboardFocus();
+        return focus ? focus->handleKeyUp(key, mask, false) : mRoot->handleKeyUp(key, mask, true);
+    }
+
+    bool handleUnicodeChar(llwchar character, MASK) override
+    {
+        LLFocusableElement* focus   = gFocusMgr.getKeyboardFocus();
+        const bool          handled = focus ? focus->handleUnicodeChar(character, false) : mRoot->handleUnicodeChar(character, true);
+        queueTextAction(character, focus);
+        return handled;
+    }
+
+    void handleResize(LLWindow*, S32 width, S32 height) override { mResize = std::pair(width, height); }
+
+    bool handleCloseRequest(LLWindow*, bool) override
+    {
+        mCloseRequested = true;
+        return false;
+    }
+
+    void handleQuit(LLWindow*) override { mCloseRequested = true; }
+
+private:
+    void queuePointerAction(std::string_view action, LLCoordGL position)
+    {
+        if (mGatheringInput)
+            mInteractiveActions.append(LLSDMap("action", std::string(action))("x", position.mX)("y", position.mY));
+    }
+
+    void queueKeyAction(KEY key, LLFocusableElement* focus)
+    {
+        auto* view = dynamic_cast<LLView*>(focus);
+        if (mGatheringInput && view)
+            mInteractiveActions.append(LLSDMap("action", "key")("path", view->getPathname())("key", LLKeyboard::stringFromKey(key, false)));
+    }
+
+    void queueTextAction(llwchar character, LLFocusableElement* focus)
+    {
+        auto* view = dynamic_cast<LLView*>(focus);
+        if (mGatheringInput && view && character >= 0x20 && character != 0x7f)
+            mInteractiveActions.append(
+                LLSDMap("action", "text")("path", view->getPathname())("text", wstring_to_utf8str(LLWString(1, character))));
+    }
+
+    LLCoordGL screenPosition(LLCoordGL position)
+    {
+        S32 screen_x = 0;
+        S32 screen_y = 0;
+        LLUI::getInstance()->glPointToScreen(position.mX, position.mY, &screen_x, &screen_y);
+        return { screen_x, screen_y };
+    }
+
+    LLWindow*                          mWindow = nullptr;
+    LLView*                            mRoot   = nullptr;
+    std::optional<std::pair<S32, S32>> mPointerMove;
+    std::optional<std::pair<S32, S32>> mResize;
+    LLSD                               mInteractiveActions = LLSD::emptyArray();
+    bool                               mGatheringInput     = false;
+    bool                               mCloseRequested     = false;
 };
 
 LLSD describeView(LLView* view)
@@ -315,7 +419,8 @@ public:
         mArtifactDir(std::filesystem::weakly_canonical(std::filesystem::absolute(config.artifact_dir))),
         mWidth(config.pixel_width),
         mHeight(config.pixel_height),
-        mUIScale(config.ui_scale)
+        mUIScale(config.ui_scale),
+        mInteractive(config.interactive)
     {
         if (!std::filesystem::is_directory(mResourceRoot / "skins") || !std::filesystem::is_directory(mResourceRoot / "app_settings"))
         {
@@ -372,7 +477,7 @@ public:
         LLUIColorTable::instance().loadFromSettings();
 
         LLRender::sGLCoreProfile = true;
-        mWindow                  = std::make_unique<LabWindow>(mWidth, mHeight);
+        mWindow                  = std::make_unique<LabWindow>(mWidth, mHeight, mInteractive);
         LLVertexBuffer::initClass(mWindow->get());
         if (!gGL.init(true))
             throw Error("render", "production LLRender failed to initialize");
@@ -449,7 +554,7 @@ public:
         LLMenuGL::sMenuContainer = gMenuHolder;
     }
 
-    void renderFrame(bool swap)
+    void renderFrame(bool swap, bool include_live_overlay = true)
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
         LLFrameTimer::updateFrameTime();
@@ -481,6 +586,8 @@ public:
         LLView::sIsDrawing = false;
         gUIProgram.unbind();
         gGL.flush();
+        if (include_live_overlay && mInteractive && mHighlight)
+            drawHighlight(mHighlight);
         if (swap)
             mWindow->get()->swapBuffers();
     }
@@ -504,19 +611,37 @@ public:
             throw Error("viewport", "resize width, height, and uiScale must be positive");
         }
 
-        mWidth   = width;
-        mHeight  = height;
         mUIScale = ui_scale;
         LLUI::setScaleFactor(LLVector2(static_cast<F32>(mUIScale), static_cast<F32>(mUIScale)));
-        mWindow->get()->setSize(LLCoordWindow(mWidth, mHeight));
-        mRoot->reshape(static_cast<S32>(ll_round(mWidth / mUIScale)), static_cast<S32>(ll_round(mHeight / mUIScale)));
+        if (!mWindow->get()->setSize(LLCoordWindow(width, height)))
+            throw Error("viewport", "production window rejected the requested pixel size");
+        LLCoordWindow measured;
+        if (!mWindow->get()->getSize(&measured) || measured.mX != width || measured.mY != height)
+            throw Error("viewport", "production window did not reach the requested pixel size");
+        reshape(measured);
         renderFrame(true);
         return diagnostics()["viewport"];
+    }
+
+    void reshape(LLCoordWindow size)
+    {
+        mWidth  = size.mX;
+        mHeight = size.mY;
+        mRoot->reshape(static_cast<S32>(ll_round(mWidth / mUIScale)), static_cast<S32>(ll_round(mHeight / mUIScale)));
+    }
+
+    void pumpInteractive()
+    {
+        mWindow->gatherInput();
+        if (const auto resized = mWindow->takeResize())
+            reshape(LLCoordWindow(resized->first, resized->second));
+        renderFrame(true);
     }
 
     LLSD reload()
     {
         const Subject current_subject = subject();
+        mHighlight                    = nullptr;
         gFocusMgr.setKeyboardFocus(nullptr);
         postEventApi("LLFloaterReg", LLSDMap("op", "hideInstance")("name", std::string(subjectName(current_subject))));
         mFloater = nullptr;
@@ -540,13 +665,15 @@ public:
         const LLRect  llui_rect       = mRoot->getRect();
         LLSD          graphics;
         gGLManager.asLLSD(graphics);
+        const LLSD overlay =
+            LLSDMap("visible", mInteractive && mHighlight != nullptr)("path", mHighlight ? mHighlight->getPathname() : std::string());
         return LLSDMap("focus", describeView(dynamic_cast<LLView*>(gFocusMgr.getKeyboardFocus())))(
             "mouseCapture", describeView(dynamic_cast<LLView*>(gFocusMgr.getMouseCapture())))(
             "visibleMenu", describeView(gMenuHolder ? gMenuHolder->getVisibleMenu() : nullptr))(
             "subject", LLSDMap("id", std::string(subjectName(current_subject)))("view", describeView(mFloater)))(
             "viewport", LLSDMap("pixelWidth", pixel_size.mX)("pixelHeight", pixel_size.mY)("windowMeasured", measured_window)(
-                            "lluiWidth", llui_rect.getWidth())("lluiHeight", llui_rect.getHeight())("uiScale", mUIScale))("graphics",
-                                                                                                                          graphics);
+                            "lluiWidth", llui_rect.getWidth())("lluiHeight", llui_rect.getHeight())("uiScale", mUIScale))(
+            "graphics", graphics)("overlay", overlay)("recording", mRecordedActions);
     }
 
     void drawHighlight(LLView* target)
@@ -610,7 +737,7 @@ public:
         }
         std::filesystem::create_directories(path.parent_path());
 
-        renderFrame(false);
+        renderFrame(false, false);
         std::string highlighted_path;
         if (highlighted)
         {
@@ -626,9 +753,12 @@ public:
         }
         mWindow->get()->swapBuffers();
 
+        const LLSD live_overlay =
+            LLSDMap("visible", mInteractive && mHighlight != nullptr)("path", mHighlight ? mHighlight->getPathname() : std::string());
         const LLSD metadata = LLSDMap("fork", std::string(kFork))("forkCommit", std::string(kForkCommit))(
             "subject", std::string(subjectName(current_subject)))("fixture", std::string(fixture_id))(
-            "viewport", LLSDMap("width", mWidth)("height", mHeight)("uiScale", mUIScale));
+            "viewport", LLSDMap("width", mWidth)("height", mHeight)("uiScale", mUIScale))(
+            "overlay", LLSDMap("included", highlighted != nullptr)("highlightedPath", highlighted_path)("interactiveState", live_overlay));
         std::ofstream sidecar(path.string() + ".json");
         sidecar << LlsdToJson(metadata) << '\n';
         return LLSDMap("path", path.string())("metadata", metadata)("highlightedPath", highlighted_path);
@@ -686,6 +816,60 @@ public:
         return mSubject.value();
     }
 
+    [[nodiscard]] bool closeRequested() const noexcept { return mWindow->closeRequested(); }
+
+    [[nodiscard]] std::optional<std::pair<S32, S32>> takePointerMove() { return mWindow->takePointerMove(); }
+
+    [[nodiscard]] LLSD takeInteractiveActions() { return mWindow->takeInteractiveActions(); }
+
+    void setHighlight(LLView* target) noexcept { mHighlight = target; }
+
+    LLSD inputKey(std::string_view requested_key, const LLSD& modifiers)
+    {
+        KEY key = KEY_NONE;
+        if (!LLKeyboard::keyFromString(std::string(requested_key), &key))
+            throw Error("input", "unknown keyboard key: " + std::string(requested_key));
+        MASK mask = MASK_NONE;
+        for (const LLSD& modifier : llsd::inArray(modifiers))
+        {
+            const std::string name = modifier.asString();
+            if (name == "shift")
+                mask |= MASK_SHIFT;
+            else if (name == "control")
+                mask |= MASK_CONTROL;
+            else if (name == "alt")
+                mask |= MASK_ALT;
+            else
+                throw Error("input", "unknown keyboard modifier: " + name);
+        }
+        bool handled = mWindow->sendKey(key, mask);
+        if (key == KEY_RETURN)
+            handled = mWindow->sendUnicode('\r') || handled;
+        return LLSDMap("handled", handled)("key", std::string(requested_key))("modifiers", modifiers);
+    }
+
+    LLSD inputText(std::string_view text, bool replace)
+    {
+        bool handled = false;
+        if (replace)
+        {
+            handled = mWindow->sendKey('A', MASK_CONTROL) || handled;
+            handled = mWindow->sendKey(KEY_BACKSPACE, MASK_NONE) || handled;
+        }
+        for (const llwchar character : utf8str_to_wstring(std::string(text)))
+            handled = mWindow->sendUnicode(character) || handled;
+        return LLSDMap("handled", handled)("text", std::string(text))("replace", replace);
+    }
+
+    void recordAction(LLSD action)
+    {
+        if (mRecordedActions.isUndefined())
+            mRecordedActions = LLSD::emptyArray();
+        mRecordedActions.append(std::move(action));
+    }
+
+    [[nodiscard]] const LLSD& recordedActions() const noexcept { return mRecordedActions; }
+
     std::unique_ptr<LabWindow>        mWindow;
     std::unique_ptr<LLWindowListener> mWindowListener;
     std::unique_ptr<LabShaderMgr>     mShaderMgr;
@@ -699,7 +883,10 @@ public:
     S32                               mFrameCount = 0;
     F64                               mUIScale;
     bool                              mInitialized = false;
+    bool                              mInteractive = false;
     std::optional<Subject>            mSubject;
+    LLView*                           mHighlight       = nullptr;
+    LLSD                              mRecordedActions = LLSD::emptyArray();
 };
 
 UIHost::UIHost(const UIHostConfig& config) : mImpl(std::make_unique<Impl>(config))
@@ -722,6 +909,24 @@ LLSD UIHost::diagnostics() const
 { return mImpl->diagnostics(); }
 LLSD UIHost::capture(const LLSD& command, LLView* highlighted, std::string_view fixture_id)
 { return mImpl->capture(command, highlighted, fixture_id); }
+void UIHost::pumpInteractive()
+{ mImpl->pumpInteractive(); }
+bool UIHost::closeRequested() const noexcept
+{ return mImpl->closeRequested(); }
+std::optional<std::pair<S32, S32>> UIHost::takePointerMove()
+{ return mImpl->takePointerMove(); }
+LLSD UIHost::takeInteractiveActions()
+{ return mImpl->takeInteractiveActions(); }
+void UIHost::setHighlight(LLView* target) noexcept
+{ mImpl->setHighlight(target); }
+LLSD UIHost::inputKey(std::string_view key, const LLSD& modifiers)
+{ return mImpl->inputKey(key, modifiers); }
+LLSD UIHost::inputText(std::string_view text, bool replace)
+{ return mImpl->inputText(text, replace); }
+void UIHost::recordAction(LLSD action)
+{ mImpl->recordAction(std::move(action)); }
+const LLSD& UIHost::recordedActions() const noexcept
+{ return mImpl->recordedActions(); }
 LLPanel* UIHost::root() const noexcept
 { return mImpl->mRoot; }
 LLFloater* UIHost::floater() const noexcept

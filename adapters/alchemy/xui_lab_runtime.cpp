@@ -10,18 +10,23 @@
 #include "xui_lab_ui_host.h"
 
 #include "lleventapi.h"
+#include "llapp.h"
 #include "llsdjson.h"
 #include "llsdutil.h"
 #include "llview.h"
 #include "llviewermenu.h"
 
+#include <chrono>
+#include <deque>
 #include <exception>
 #include <initializer_list>
 #include <iostream>
 #include <memory>
+#include <mutex>
 #include <set>
 #include <string>
 #include <string_view>
+#include <thread>
 
 namespace
 {
@@ -36,7 +41,9 @@ using xui_lab::subjectName;
 class Runtime final : public LLEventAPI
 {
 public:
-    Runtime() : LLEventAPI("XUILab", "Lifecycle operations for the standalone production UI host")
+    explicit Runtime(bool interactive = false) :
+        LLEventAPI("XUILab", "Lifecycle operations for the standalone production UI host"),
+        mInteractive(interactive)
     {
         add("initialize", "Initialize the selected fork, resources, window, and subject.", &Runtime::initialize);
         add("installCapabilities", "Install the capabilities requested by the scenario.", &Runtime::installCapabilities);
@@ -59,11 +66,40 @@ public:
         add("shutdown", "Acknowledge shutdown so the parent can collect the process.", &Runtime::requestShutdown);
         add("query", "Translate high-level inspection requests to production event APIs.", &Runtime::query);
         add("input", "Translate high-level input requests to the production LLWindow event API.", &Runtime::input);
+        add("pick", "Return the frontmost visible control at an LLUI screen position.", &Runtime::pick);
+        add("highlight", "Select the control drawn by the headed hover overlay.", &Runtime::highlight);
     }
 
     ~Runtime() override { shutdown(); }
 
     bool done() const noexcept { return mDone; }
+
+    void pumpInteractive()
+    {
+        if (!mInitialized)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            return;
+        }
+        mUIHost->pumpInteractive();
+        for (const LLSD& action : llsd::inArray(mUIHost->takeInteractiveActions()))
+        {
+            if (action.has("x") && action.has("y"))
+            {
+                LLView* target = mInspection->pickView(action["x"].asInteger(), action["y"].asInteger());
+                if (target && !target->getPathname().empty())
+                    mUIHost->recordAction(LLSDMap("action", action["action"])("path", target->getPathname()));
+            }
+            else
+            {
+                mUIHost->recordAction(action);
+            }
+        }
+        if (const auto position = mUIHost->takePointerMove())
+            mUIHost->setHighlight(mInspection->pickView(position->first, position->second));
+        if (mUIHost->closeRequested())
+            mDone = true;
+    }
 
 private:
     static Subject parseSubject(const LLSD& value)
@@ -109,6 +145,7 @@ private:
             .pixel_width   = viewport["width"].asInteger(),
             .pixel_height  = viewport["height"].asInteger(),
             .ui_scale      = viewport["uiScale"].asReal(),
+            .interactive   = mInteractive,
         });
         if (mSubject == Subject::InventoryExplorer)
         {
@@ -237,6 +274,7 @@ private:
         LLSD result                  = mUIHost->diagnostics();
         result["subject"]["fixture"] = fixtureId();
         result["eventApis"]          = exposedEventApiMetadata();
+        result["processId"]          = LLApp::getPid();
         return result;
     }
 
@@ -272,9 +310,9 @@ private:
     LLSD exposedEventApiMetadata() const
     {
         LLSD result = LLSD::emptyMap();
-        addEventApiMetadata(
-            result, "XUILab",
-            { "initialize", "installCapabilities", "frames", "stable", "resize", "capture", "reload", "diagnostics", "shutdown" });
+        addEventApiMetadata(result, "XUILab",
+                            { "initialize", "installCapabilities", "frames", "stable", "resize", "capture", "reload", "diagnostics",
+                              "shutdown", "pick", "highlight" });
         addEventApiMetadata(result, "LLFloaterReg",
                             { "getBuildMap", "showInstance", "hideInstance", "toggleInstance", "toggleInstanceOrBringToFront",
                               "instanceVisible", "clickButton" });
@@ -310,11 +348,27 @@ private:
         requireInitialized();
         requireCapability("input");
         const std::string event = command["event"].asString();
-        if (event != "click" && event != "doubleClick")
+        if (event != "click" && event != "doubleClick" && event != "key" && event != "text" && event != "fill")
         {
-            throw LabError("input", "the proven input slice supports click and doubleClick events");
+            throw LabError("input", "unsupported input event: " + event);
         }
-        LLView*           target = resolveTarget(command);
+        LLView*    target = resolveTarget(command);
+        const LLSD before = inputState();
+        if (event == "key" || event == "text" || event == "fill")
+        {
+            const std::string path = target->getPathname();
+            (void)callEventApi("LLWindow", LLSDMap("op", "mouseDown")("button", "LEFT")("path", path));
+            (void)callEventApi("LLWindow", LLSDMap("op", "mouseUp")("button", "LEFT")("path", path));
+            LLSD result     = event == "key" ? mUIHost->inputKey(command["key"].asString(), command["modifiers"])
+                                             : mUIHost->inputText(command["text"].asString(), event == "fill");
+            result["path"]  = path;
+            result["event"] = event;
+            addInputState(result, before);
+            mUIHost->recordAction(
+                LLSDMap("action", event)("path", path)(event == "key" ? "key" : "text", event == "key" ? command["key"] : command["text"]));
+            mUIHost->renderFrame(true);
+            return result;
+        }
         const std::string button = command["button"].asString();
         if (button != "left" && button != "right")
             throw LabError("input", "button must be left or right");
@@ -331,10 +385,51 @@ private:
         const LLSD        up = callEventApi("LLWindow", LLSDMap("op", "mouseUp")("button", production_button)("path", path));
         mUIHost->renderFrame(true);
 
-        return LLSDMap("path", path)("modelId", command["modelId"])("event", event)("button", button)(
+        LLSD result = LLSDMap("path", path)("modelId", command["modelId"])("event", event)("button", button)(
             "handled", down["handled"].asBoolean() || up["handled"].asBoolean())("downHandled", down["handled"])(
             "upHandled", up["handled"])("menuVisibleAfterDown", menu_visible_after_down)(
             "menuVisibleAfterUp", gMenuHolder && gMenuHolder->hasVisibleMenu())("down", down)("up", up);
+        addInputState(result, before);
+        const std::string action = event == "doubleClick" ? "double_click" : (button == "right" ? "right_click" : "click");
+        mUIHost->recordAction(LLSDMap("action", action)("path", path));
+        return result;
+    }
+
+    LLSD inputState() const
+    {
+        return LLSDMap("focus", dynamic_cast<LLView*>(gFocusMgr.getKeyboardFocus())
+                                    ? dynamic_cast<LLView*>(gFocusMgr.getKeyboardFocus())->getInfo()
+                                    : LLSD())("mouseCapture", dynamic_cast<LLView*>(gFocusMgr.getMouseCapture())
+                                                                  ? dynamic_cast<LLView*>(gFocusMgr.getMouseCapture())->getInfo()
+                                                                  : LLSD());
+    }
+
+    void addInputState(LLSD& result, const LLSD& before) const
+    {
+        const LLSD after              = inputState();
+        result["focusBefore"]         = before["focus"];
+        result["focusAfter"]          = after["focus"];
+        result["focusChanged"]        = before["focus"] != after["focus"];
+        result["mouseCaptureBefore"]  = before["mouseCapture"];
+        result["mouseCaptureAfter"]   = after["mouseCapture"];
+        result["mouseCaptureChanged"] = before["mouseCapture"] != after["mouseCapture"];
+    }
+
+    LLSD pick(const LLSD& command)
+    {
+        requireInitialized();
+        requireCapability("inspection");
+        return mInspection->pick(command["x"].asInteger(), command["y"].asInteger());
+    }
+
+    LLSD highlight(const LLSD& command)
+    {
+        requireInitialized();
+        requireCapability("inspection");
+        LLView* target = command["target"].isMap() ? resolveTarget(command["target"]) : nullptr;
+        mUIHost->setHighlight(target);
+        mUIHost->renderFrame(true);
+        return LLSDMap("visible", target != nullptr)("path", target ? target->getPathname() : std::string());
     }
 
     LLSD capture(const LLSD& command)
@@ -367,6 +462,7 @@ private:
     std::unique_ptr<xui_lab::Inspection>       mInspection;
     bool                                       mInitialized = false;
     bool                                       mDone        = false;
+    bool                                       mInteractive = false;
     std::set<std::string>                      mCapabilities;
     Subject                                    mSubject = Subject::TestWidgets;
 };
@@ -408,7 +504,73 @@ int scenarioMain()
     }
     return 0;
 }
+
+struct InteractiveInput
+{
+    std::mutex              mutex;
+    std::deque<std::string> lines;
+    bool                    closed = false;
+};
+
+int interactiveMain()
+{
+    Runtime runtime(true);
+    auto    input = std::make_shared<InteractiveInput>();
+    std::thread(
+        [input]()
+        {
+            std::string line;
+            while (std::getline(std::cin, line))
+            {
+                const std::scoped_lock lock(input->mutex);
+                input->lines.push_back(std::move(line));
+            }
+            const std::scoped_lock lock(input->mutex);
+            input->closed = true;
+        })
+        .detach();
+
+    while (!runtime.done())
+    {
+        std::deque<std::string> lines;
+        bool                    closed = false;
+        {
+            const std::scoped_lock lock(input->mutex);
+            lines.swap(input->lines);
+            closed = input->closed;
+        }
+        for (const std::string& line : lines)
+        {
+            LLSD        command;
+            std::string parse_error;
+            if (!LlsdFromJsonString(line, command, &parse_error) || !command.isMap())
+            {
+                writeResponse(failure("json", parse_error));
+                continue;
+            }
+            try
+            {
+                writeResponse(LLSDMap("ok", true)("result", callEventApi("XUILab", command)));
+            }
+            catch (const LabError& error)
+            {
+                writeResponse(failure(error.code(), error.what()));
+            }
+            catch (const std::exception& error)
+            {
+                writeResponse(failure("internal", error.what()));
+            }
+        }
+        if (closed && lines.empty())
+            break;
+        runtime.pumpInteractive();
+    }
+    return 0;
+}
 } // namespace
 
 int xui_lab::runScenario()
 { return scenarioMain(); }
+
+int xui_lab::runInteractive()
+{ return interactiveMain(); }

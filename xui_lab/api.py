@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import shutil
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from .assertions import check_observation
@@ -20,14 +20,19 @@ from .operations import (
     Capture,
     Diagnostics,
     Frames,
+    Highlight,
+    KeyInput,
     MouseButton,
     PathSelector,
+    Pick,
     PointerAction,
     PointerEvent,
     QueryMenus,
     QueryTree,
-    RuntimeOperation,
+    Reload,
+    Resize,
     Selector,
+    TextInput,
     WaitForStable,
     model_id_selector,
     path_selector,
@@ -134,12 +139,17 @@ class Lab:
         capabilities: frozenset[Capability],
         fixture: Path | None = None,
         stability: WaitForStable = WaitForStable(),
+        interactive: bool = False,
     ) -> Window:
         artifact_dir = artifact_directory(self.artifact_root, artifact_id)
         if artifact_dir.exists():
             shutil.rmtree(artifact_dir)
         artifact_dir.mkdir(parents=True)
-        runtime = RuntimeProcess(self.executable, artifact_dir / "runtime.log")
+        runtime = RuntimeProcess(
+            self.executable,
+            artifact_dir / "runtime.log",
+            mode="interactive" if interactive else "scenario",
+        )
         window = Window(runtime, artifact_dir, stability)
         try:
             fixture_data = read_json(fixture) if fixture else None
@@ -234,15 +244,6 @@ class Window:
     def raw(self, command: dict[str, Any]) -> Any:
         return self._request(dict(command))
 
-    def execute(self, operation: RuntimeOperation) -> Any:
-        if isinstance(operation, PointerAction):
-            return (
-                self.locator(operation.selector)
-                ._perform(operation.event, operation.button)
-                .data
-            )
-        return self._request(operation.to_command())
-
     def get_by_path(self, path: str) -> Locator:
         return Locator(self, path_selector(path))
 
@@ -251,6 +252,79 @@ class Window:
 
     def locator(self, selector: Selector) -> Locator:
         return Locator(self, selector)
+
+    def advance_frames(self, count: int) -> dict[str, Any]:
+        if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+            raise InputError("frame count must be a non-negative integer")
+        result = self._request(Frames(count).to_command())
+        return _mapping(result, "frames result")
+
+    def resize(
+        self, width: int, height: int, *, ui_scale: float | None = None
+    ) -> dict[str, Any]:
+        if (
+            not isinstance(width, int)
+            or isinstance(width, bool)
+            or width <= 0
+            or not isinstance(height, int)
+            or isinstance(height, bool)
+            or height <= 0
+        ):
+            raise InputError("resize width and height must be positive integers")
+        if ui_scale is not None and (
+            not isinstance(ui_scale, (int, float))
+            or isinstance(ui_scale, bool)
+            or ui_scale <= 0
+        ):
+            raise InputError("resize ui_scale must be positive")
+        result = self._request(Resize(width, height, ui_scale).to_command())
+        return _mapping(result, "resize result")
+
+    def reload(self) -> dict[str, Any]:
+        result = self._request(Reload().to_command())
+        return _mapping(result, "reload result")
+
+    def query_tree(self) -> dict[str, Any]:
+        result = self._request(QueryTree().to_command())
+        return _mapping(result, "tree result")
+
+    def diagnostics(self) -> dict[str, Any]:
+        result = self._request(Diagnostics().to_command())
+        return _mapping(result, "diagnostics result")
+
+    def capture(self, name: str, *, highlight: Locator | None = None) -> dict[str, Any]:
+        if (
+            not isinstance(name, str)
+            or not name
+            or name in {".", ".."}
+            or PureWindowsPath(name).drive
+            or "/" in name
+            or "\\" in name
+        ):
+            raise InputError("capture name must not create subdirectories")
+        result = self._request(
+            Capture(
+                name=name,
+                include_overlay=highlight is not None,
+                highlight=highlight.selector if highlight is not None else None,
+            ).to_command()
+        )
+        return _mapping(result, "capture result")
+
+    def pick(self, x: int, y: int) -> Control:
+        self._require_capability("inspection")
+        result = _mapping(self._request(Pick(x, y).to_command()), "pick result")
+        path = result.get("path")
+        if not isinstance(path, str) or not path:
+            raise AssertionFailure(f"no visible control at screen position ({x}, {y})")
+        return Control(path_selector(path), result)
+
+    def highlight(self, locator: Locator | None) -> dict[str, Any]:
+        self._require_capability("inspection")
+        result = self._request(
+            Highlight(locator.selector if locator is not None else None).to_command()
+        )
+        return _mapping(result, "highlight result")
 
     def _require_capability(self, capability: str) -> None:
         if Capability(capability) not in self.capabilities:
@@ -431,11 +505,30 @@ class Locator:
     def _unsupported(self, action: str) -> None:
         raise CapabilityError(f"runtime does not expose the locator action {action!r}")
 
-    def fill(self, _value: str) -> None:
-        self._unsupported("fill")
+    def fill(self, value: str) -> ActionResult:
+        return self._perform_text(TextInput(value, self.selector, replace=True))
 
-    def press(self, _key: str) -> None:
-        self._unsupported("key input")
+    def press(self, key: str, *, modifiers: tuple[str, ...] = ()) -> ActionResult:
+        self.window._require_capability("input")
+        self.window._require_operation("XUILab", "input")
+        self.window.wait_for_stable()
+        self.resolve()
+        operation = KeyInput(key, self.selector, modifiers)
+        result = _mapping(self.window._request(operation.to_command()), "key result")
+        self.window.wait_for_stable()
+        return ActionResult("key", result)
+
+    def type_text(self, value: str) -> ActionResult:
+        return self._perform_text(TextInput(value, self.selector))
+
+    def _perform_text(self, operation: TextInput) -> ActionResult:
+        self.window._require_capability("input")
+        self.window._require_operation("XUILab", "input")
+        self.window.wait_for_stable()
+        self.resolve()
+        result = _mapping(self.window._request(operation.to_command()), "text result")
+        self.window.wait_for_stable()
+        return ActionResult("fill" if operation.replace else "text", result)
 
     def scroll(self, _clicks: int) -> None:
         self._unsupported("scroll")

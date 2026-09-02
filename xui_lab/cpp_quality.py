@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Format and lint the adapter-owned C++ files with pinned LLVM tools."""
 
 from __future__ import annotations
@@ -12,6 +11,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from .errors import XUILabError
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ADAPTER_ROOT = REPO_ROOT / "adapters"
 LLVM_VERSION = "22.1.8"
@@ -19,7 +20,7 @@ CPP_SUFFIXES = frozenset({".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp"})
 TRANSLATION_UNIT_SUFFIXES = frozenset({".c", ".cc", ".cpp", ".cxx"})
 
 
-class QualityError(RuntimeError):
+class QualityError(XUILabError):
     """Report invalid tool or compile-database input at the command boundary."""
 
 
@@ -53,12 +54,15 @@ def llvm_tool(name: str) -> str:
         raise QualityError(
             f"{name} {LLVM_VERSION} is required; install requirements-dev.txt"
         )
-    version = subprocess.run(
-        [executable, "--version"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
+    try:
+        version = subprocess.run(
+            [executable, "--version"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise QualityError(f"cannot run {name}: {error}") from error
     match = re.search(r"\bversion ([0-9]+(?:\.[0-9]+){2})\b", version)
     actual = match.group(1) if match else "unknown"
     if actual != LLVM_VERSION:
@@ -131,41 +135,3 @@ def tidy_cpp(args: argparse.Namespace) -> int:
             *(str(path) for path in files),
         ]
     ).returncode
-
-
-def parser() -> argparse.ArgumentParser:
-    result = argparse.ArgumentParser(
-        description="Run the pinned formatter and linter on adapter-owned C++."
-    )
-    commands = result.add_subparsers(dest="command", required=True)
-
-    format_command = commands.add_parser("format", help="Check or apply formatting.")
-    format_command.add_argument("--check", action="store_true")
-    format_command.add_argument("files", nargs="*")
-    format_command.set_defaults(handler=format_cpp)
-
-    tidy_command = commands.add_parser(
-        "tidy", help="Run clang-tidy with a real build database."
-    )
-    tidy_command.add_argument(
-        "--compile-commands",
-        required=True,
-        metavar="PATH",
-        help="Path to compile_commands.json or its directory.",
-    )
-    tidy_command.add_argument("files", nargs="*")
-    tidy_command.set_defaults(handler=tidy_cpp)
-    return result
-
-
-def main(argv: list[str] | None = None) -> int:
-    try:
-        args = parser().parse_args(argv)
-        return args.handler(args)
-    except (QualityError, subprocess.CalledProcessError) as error:
-        print(f"cpp-quality: {error}", file=sys.stderr)
-        return 2
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

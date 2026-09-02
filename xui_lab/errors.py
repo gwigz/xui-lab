@@ -6,7 +6,7 @@ class XUILabError(Exception):
 
 
 class InputError(XUILabError):
-    """A manifest, fixture, scenario, or command is invalid."""
+    """A manifest, fixture, Python scenario, or command is invalid."""
 
 
 class CapabilityError(XUILabError):
@@ -18,4 +18,4 @@ class RuntimeFailure(XUILabError):
 
 
 class AssertionFailure(XUILabError):
-    """A structural scenario assertion failed."""
+    """A structural expectation failed."""
