@@ -108,8 +108,9 @@ branches without changing the submodule commit.
   registered floater or panel inside a lab-owned root view, and the lab drives
   that subject through normal LLUI events. Lower-level mocks do not bypass that
   path.
-- Each fork exposes its production source list and build settings to an
-  out-of-tree adapter. The adapter derives a reusable production UI target that
+- Each adapter joins the fork's CMake graph from an external project include.
+  After the production viewer target exists, the adapter reads its source and
+  build properties and derives a reusable production UI target. That target
   includes the required viewer controllers and excludes the normal application
   entry point. The lab does not keep a copied source list.
 - The Alchemy adapter adds its executable through the viewer's supported CMake
@@ -219,9 +220,9 @@ Then add the inventory fixture capability and open Inventory Explorer. Add
 Python scenarios only after those interactive operations work through the
 public API.
 
-The first Alchemy change must expose reusable runtime seams and one generic
-out-of-tree build hook. Keep that change separate from Inventory Explorer fixes
-so other UI work can use the lab.
+The first Alchemy change must expose reusable runtime seams. The adapter must
+join the build from outside Alchemy. Keep those runtime changes separate from
+Inventory Explorer fixes so other UI work can use them.
 
 The `to-spec` workflow publishes this specification to a configured issue
 tracker and applies the `ready-for-agent` label. This workspace has no issue

@@ -6,13 +6,21 @@ the machine-readable capability contract.
 [`EVENT_APIS.md`](EVENT_APIS.md) records the event APIs retained by the reusable
 UI target and their no-login constraints.
 
-The adapter joins Alchemy's supported CMake graph. It must not maintain a
-second list of `indra/newview` source files.
+The adapter joins Alchemy's supported CMake graph through `inject.cmake`. Pass
+that file as `CMAKE_PROJECT_Alchemy_INCLUDE`. It defers this adapter until the
+production viewer target exists. The adapter must not maintain a second list of
+`indra/newview` source files.
 
-Alchemy exposes its production newview source list and link settings through
-`ALCHEMY_NEWVIEW_EXTENSION_DIRS`. The adapter derives `alchemy_newview_ui` from
-that build graph. It retains registered subject controllers and excludes the
-platform application entry point and voice runtime.
+The adapter reads the production target's source, link, source-directory,
+binary-directory, and output-directory properties. It derives
+`alchemy_newview_ui` from those values, retains registered subject controllers,
+and excludes the platform application entry point and voice runtime.
+
+Keep the lab build tree outside the viewer source and reuse it for the working
+branch and configuration. The first build compiles the reduced production
+runtime. Later adapter or fixture edits compile only the affected sources and
+relink the lab. Cross-build-root compiler caches are optional and are not part
+of the adapter contract.
 
 The runtime side of the adapter must:
 
