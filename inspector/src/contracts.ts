@@ -6,9 +6,18 @@ export type TreeNode = Readonly<{
   raw: Readonly<Record<string, unknown>>;
 }>;
 
+export type FrameRect = Readonly<{
+  left: number;
+  right: number;
+  bottom: number;
+  top: number;
+}>;
+
 export type CaptureState =
   | Readonly<{ kind: "empty"; version: number }>
   | Readonly<{ kind: "available"; version: number }>;
+
+export type KeyboardModifier = "shift" | "control" | "alt";
 
 export type InspectorState = Readonly<{
   tree: TreeNode;
@@ -41,7 +50,12 @@ export type InspectorAction =
       endY: number;
     }>
   | Readonly<{ action: "fill"; controlId: string; text: string }>
-  | Readonly<{ action: "press"; controlId: string; key: string }>
+  | Readonly<{
+      action: "press";
+      controlId: string;
+      key: string;
+      modifiers?: readonly KeyboardModifier[];
+    }>
   | Readonly<{ action: "replay"; scenario: string }>
   | Readonly<{ action: "switch"; subject: string; fixture: string }>;
 
@@ -187,4 +201,82 @@ export function findTreeNodeByControlId(node: TreeNode, controlId: string): Tree
   }
 
   return undefined;
+}
+
+function frameRect(value: unknown): FrameRect | undefined {
+  const record = recordValue(value);
+  const left = record?.left;
+  const right = record?.right;
+  const bottom = record?.bottom;
+  const top = record?.top;
+
+  if (
+    typeof left !== "number" ||
+    !Number.isFinite(left) ||
+    typeof right !== "number" ||
+    !Number.isFinite(right) ||
+    typeof bottom !== "number" ||
+    !Number.isFinite(bottom) ||
+    typeof top !== "number" ||
+    !Number.isFinite(top)
+  ) {
+    return undefined;
+  }
+
+  return { left, right, bottom, top };
+}
+
+export function treeNodeVisibleRect(node: TreeNode): FrameRect | undefined {
+  if (node.raw.visible_chain !== true) {
+    return undefined;
+  }
+
+  const screen = frameRect(node.raw.screen_rect);
+  if (screen === undefined) {
+    return undefined;
+  }
+
+  const clipping = frameRect(node.raw.clipping_rect) ?? screen;
+  const visible = {
+    left: Math.max(screen.left, clipping.left),
+    right: Math.min(screen.right, clipping.right),
+    bottom: Math.max(screen.bottom, clipping.bottom),
+    top: Math.min(screen.top, clipping.top),
+  };
+
+  return visible.right > visible.left && visible.top > visible.bottom ? visible : undefined;
+}
+
+export function findTreeNodeAtPoint(
+  node: TreeNode,
+  point: Readonly<{ x: number; y: number }>,
+): TreeNode | undefined {
+  let best: Readonly<{ node: TreeNode; area: number; depth: number }> | undefined;
+
+  function visit(candidate: TreeNode, depth: number): void {
+    if (candidate.raw.visible_chain !== true) {
+      return;
+    }
+
+    const rect = treeNodeVisibleRect(candidate);
+    if (
+      rect !== undefined &&
+      point.x >= rect.left &&
+      point.x <= rect.right &&
+      point.y >= rect.bottom &&
+      point.y <= rect.top
+    ) {
+      const area = (rect.right - rect.left) * (rect.top - rect.bottom);
+      if (best === undefined || area < best.area || (area === best.area && depth > best.depth)) {
+        best = { node: candidate, area, depth };
+      }
+    }
+
+    for (const child of candidate.children) {
+      visit(child, depth + 1);
+    }
+  }
+
+  visit(node, 0);
+  return best?.node;
 }

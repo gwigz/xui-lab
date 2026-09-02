@@ -11,7 +11,7 @@ from urllib.request import urlopen
 
 from xui_lab.api import Lab
 from xui_lab.domain import Capability, Viewport, parse_manifest
-from xui_lab.errors import AssertionFailure, RuntimeFailure
+from xui_lab.errors import AssertionFailure, InputError, RuntimeFailure
 from xui_lab.interactive import (
     InspectorHandler,
     InspectorServer,
@@ -334,6 +334,7 @@ class PlaywrightApiTests(unittest.TestCase):
                 f"window.get_by_path({CHECKBOX_PATH!r}).click()",
                 f"window.get_by_path({CHECKBOX_PATH!r}).fill('hello')",
                 f"window.get_by_path({CHECKBOX_PATH!r}).press('Enter')",
+                f"window.get_by_path({CHECKBOX_PATH!r}).press('Left', modifiers=('shift', 'control'))",
                 "window.get_by_control_id('resize-handle').drag_by(dx=40, dy=-30)",
             ],
             recorded_python(
@@ -341,6 +342,12 @@ class PlaywrightApiTests(unittest.TestCase):
                     {"action": "click", "path": CHECKBOX_PATH},
                     {"action": "fill", "path": CHECKBOX_PATH, "text": "hello"},
                     {"action": "key", "path": CHECKBOX_PATH, "key": "Enter"},
+                    {
+                        "action": "key",
+                        "path": CHECKBOX_PATH,
+                        "key": "Left",
+                        "modifiers": ["shift", "control"],
+                    },
                     {
                         "action": "drag",
                         "path": RESIZE_HANDLE_PATH,
@@ -415,6 +422,7 @@ class PlaywrightApiTests(unittest.TestCase):
         capture.parent.mkdir(parents=True)
         capture.write_bytes(b"png bytes")
         capture_names: list[str] = []
+        presses: list[tuple[str, tuple[str, ...]]] = []
 
         class ActionStub:
             data = {"handled": True}
@@ -429,7 +437,8 @@ class PlaywrightApiTests(unittest.TestCase):
                 return ActionStub()
 
             @staticmethod
-            def press(_key: str) -> ActionStub:
+            def press(key: str, *, modifiers: tuple[str, ...] = ()) -> ActionStub:
+                presses.append((key, modifiers))
                 return ActionStub()
 
         class WindowStub:
@@ -466,7 +475,14 @@ class PlaywrightApiTests(unittest.TestCase):
         session._capture_version = 0
 
         session.action({"action": "click", "controlId": "checkbox"})
-        session.action({"action": "press", "controlId": "line-editor", "key": "Enter"})
+        session.action(
+            {
+                "action": "press",
+                "controlId": "line-editor",
+                "key": "Enter",
+                "modifiers": ["control"],
+            }
+        )
         session.action({"action": "replay", "scenario": "test_floater"})
         session.action({"action": "clickAt", "x": 10, "y": 20})
         session.action({"action": "rightClickAt", "x": 10, "y": 20})
@@ -482,8 +498,18 @@ class PlaywrightApiTests(unittest.TestCase):
         session.action(
             {"action": "fill", "controlId": "line-editor", "text": "Known text"}
         )
+        with self.assertRaisesRegex(InputError, "modifiers must contain only"):
+            session.action(
+                {
+                    "action": "press",
+                    "controlId": "line-editor",
+                    "key": "Enter",
+                    "modifiers": ["meta"],
+                }
+            )
 
         self.assertEqual(7, len(capture_names))
+        self.assertEqual([("Enter", ("control",))], presses)
         self.assertEqual(capture.resolve(), session.latest_capture)
         self.assertEqual(7, session._capture_version)
 

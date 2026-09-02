@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { findTreeNodeByControlId, parseActionResponse, parseInspectorState } from "./contracts";
+import {
+  findTreeNodeAtPoint,
+  findTreeNodeByControlId,
+  parseActionResponse,
+  parseInspectorState,
+  treeNodeVisibleRect,
+} from "./contracts";
 
 const validState = {
   tree: {
@@ -75,5 +81,61 @@ describe("parseActionResponse", () => {
 
   it("turns API failures into errors", () => {
     expect(() => parseActionResponse({ ok: false, error: "not found" })).toThrow("not found");
+  });
+});
+
+describe("findTreeNodeAtPoint", () => {
+  it("chooses the smallest visible clipped element under the pointer", () => {
+    const state = parseInspectorState({
+      ...validState,
+      tree: {
+        ...validState.tree,
+        visible_chain: true,
+        screen_rect: { left: 0, right: 800, bottom: 0, top: 600 },
+        clipping_rect: { left: 0, right: 800, bottom: 0, top: 600 },
+        children: [
+          {
+            control_id: "panel",
+            path: "/root/panel",
+            class: "LLPanel",
+            visible_chain: true,
+            screen_rect: { left: 100, right: 500, bottom: 100, top: 400 },
+            clipping_rect: { left: 100, right: 450, bottom: 100, top: 400 },
+            children: [
+              {
+                control_id: "save-button",
+                path: "/root/panel/save",
+                label: "Save",
+                class: "LLButton",
+                visible_chain: true,
+                screen_rect: { left: 350, right: 475, bottom: 150, top: 200 },
+                clipping_rect: { left: 350, right: 450, bottom: 150, top: 200 },
+                children: [],
+              },
+            ],
+          },
+          {
+            control_id: "hidden-overlay",
+            path: "/root/hidden-overlay",
+            class: "LLPanel",
+            visible_chain: false,
+            screen_rect: { left: 0, right: 800, bottom: 0, top: 600 },
+            clipping_rect: { left: 0, right: 800, bottom: 0, top: 600 },
+            children: [],
+          },
+        ],
+      },
+    });
+
+    const target = findTreeNodeAtPoint(state.tree, { x: 425, y: 175 });
+
+    expect(target?.controlId).toBe("save-button");
+    expect(target === undefined ? undefined : treeNodeVisibleRect(target)).toEqual({
+      left: 350,
+      right: 450,
+      bottom: 150,
+      top: 200,
+    });
+    expect(findTreeNodeAtPoint(state.tree, { x: 460, y: 175 })?.controlId).toBe("root");
   });
 });

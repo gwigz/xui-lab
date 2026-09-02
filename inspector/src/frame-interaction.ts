@@ -1,4 +1,75 @@
+import type { KeyboardModifier } from "./contracts";
+
 export type FramePoint = Readonly<{ x: number; y: number }>;
+
+export type BrowserKeyPress = Readonly<{
+  key: string;
+  modifiers: readonly KeyboardModifier[];
+}>;
+
+export type FrameOutline = Readonly<{
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}>;
+
+const browserKeyNames: Readonly<Record<string, string>> = {
+  ArrowDown: "Down",
+  ArrowLeft: "Left",
+  ArrowRight: "Right",
+  ArrowUp: "Up",
+  Backspace: "Backsp",
+  Delete: "Del",
+  Escape: "Esc",
+  Insert: "Ins",
+  PageDown: "PgDn",
+  PageUp: "PgUp",
+  " ": "Space",
+};
+
+const browserOnlyKeys = new Set([
+  "Alt",
+  "Control",
+  "Dead",
+  "Meta",
+  "Process",
+  "Shift",
+  "Unidentified",
+]);
+
+export function browserKeyPress(
+  event: Readonly<{
+    key: string;
+    shiftKey: boolean;
+    ctrlKey: boolean;
+    altKey: boolean;
+    metaKey: boolean;
+    isComposing: boolean;
+  }>,
+): BrowserKeyPress | undefined {
+  if (
+    event.isComposing ||
+    event.metaKey ||
+    event.key.length === 0 ||
+    browserOnlyKeys.has(event.key)
+  ) {
+    return undefined;
+  }
+
+  const modifiers: KeyboardModifier[] = [];
+  if (event.shiftKey) {
+    modifiers.push("shift");
+  }
+  if (event.ctrlKey) {
+    modifiers.push("control");
+  }
+  if (event.altKey) {
+    modifiers.push("alt");
+  }
+
+  return { key: browserKeyNames[event.key] ?? event.key, modifiers };
+}
 
 export function framePoint(
   clientX: number,
@@ -17,5 +88,31 @@ export function framePoint(
   return {
     x: Math.round((imageX / bounds.width) * lluiWidth),
     y: Math.round((1 - imageY / bounds.height) * lluiHeight),
+  };
+}
+
+export function frameOutline(
+  rect: Readonly<{ left: number; right: number; bottom: number; top: number }>,
+  imageBounds: Readonly<{ left: number; top: number; width: number; height: number }>,
+  containerBounds: Readonly<{ left: number; top: number }>,
+  lluiWidth: number,
+  lluiHeight: number,
+): FrameOutline {
+  if (imageBounds.width <= 0 || imageBounds.height <= 0 || lluiWidth <= 0 || lluiHeight <= 0) {
+    throw new Error("captured frame geometry must be positive");
+  }
+
+  const left = Math.min(Math.max(rect.left, 0), lluiWidth);
+  const right = Math.min(Math.max(rect.right, left), lluiWidth);
+  const bottom = Math.min(Math.max(rect.bottom, 0), lluiHeight);
+  const top = Math.min(Math.max(rect.top, bottom), lluiHeight);
+  const scaleX = imageBounds.width / lluiWidth;
+  const scaleY = imageBounds.height / lluiHeight;
+
+  return {
+    left: imageBounds.left - containerBounds.left + left * scaleX,
+    top: imageBounds.top - containerBounds.top + (lluiHeight - top) * scaleY,
+    width: (right - left) * scaleX,
+    height: (top - bottom) * scaleY,
   };
 }

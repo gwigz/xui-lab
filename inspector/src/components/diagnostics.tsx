@@ -1,10 +1,29 @@
 import { Maximize2, Minimize2 } from "lucide-react";
-import { type MouseEvent, type PointerEvent, useEffect, useRef, useState } from "react";
+import {
+  type MouseEvent,
+  type PointerEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
-import { findTreeNodeByControlId, type InspectorState, recordValue } from "../contracts";
-import { type FramePoint, framePoint } from "../frame-interaction";
+import {
+  findTreeNodeAtPoint,
+  findTreeNodeByControlId,
+  type InspectorState,
+  recordValue,
+  treeNodeVisibleRect,
+} from "../contracts";
+import {
+  browserKeyPress,
+  type FrameOutline,
+  type FramePoint,
+  frameOutline,
+  framePoint,
+} from "../frame-interaction";
 import type { InspectorTab, RunInspectorAction } from "../model";
 
 const tabs = [
@@ -24,14 +43,20 @@ function isInspectorTab(value: unknown): value is InspectorTab {
 
 type SnapshotProps = Readonly<{
   state: InspectorState | null;
+  selectedControlId: string;
   runAction: RunInspectorAction;
   onSelectedControlId: (controlId: string) => void;
 }>;
 
-function Snapshot({ state, runAction, onSelectedControlId }: SnapshotProps) {
+function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: SnapshotProps) {
   const [expanded, setExpanded] = useState(false);
   const [mode, setMode] = useState<"inspect" | "interact">("inspect");
+  const [hovered, setHovered] = useState<
+    Readonly<{ controlId: string; outline: FrameOutline }> | undefined
+  >();
+  const container = useRef<HTMLDivElement>(null);
   const pointerStart = useRef<Readonly<{ pointerId: number; point: FramePoint }> | null>(null);
+  const keyQueue = useRef<Promise<void>>(Promise.resolve());
   const capture = state?.capture;
   const viewport = recordValue(state?.diagnostics.viewport);
   const lluiWidth = typeof viewport?.lluiWidth === "number" ? viewport.lluiWidth : 0;
@@ -59,13 +84,71 @@ function Snapshot({ state, runAction, onSelectedControlId }: SnapshotProps) {
     if (lluiWidth <= 0 || lluiHeight <= 0) {
       return undefined;
     }
-    return framePoint(
-      event.clientX,
-      event.clientY,
-      event.currentTarget.getBoundingClientRect(),
-      lluiWidth,
-      lluiHeight,
-    );
+    const bounds = event.currentTarget.getBoundingClientRect();
+    if (bounds.width <= 0 || bounds.height <= 0) {
+      return undefined;
+    }
+    return framePoint(event.clientX, event.clientY, bounds, lluiWidth, lluiHeight);
+  }
+
+  function updateHovered(event: PointerEvent<HTMLImageElement>) {
+    if (mode !== "inspect" || state === null || container.current === null) {
+      return;
+    }
+    const targetPoint = point(event);
+    if (targetPoint === undefined) {
+      setHovered(undefined);
+      return;
+    }
+    const target = findTreeNodeAtPoint(state.tree, targetPoint);
+    const rect = target === undefined ? undefined : treeNodeVisibleRect(target);
+    if (target === undefined || rect === undefined) {
+      setHovered(undefined);
+      return;
+    }
+    setHovered({
+      controlId: target.controlId,
+      outline: frameOutline(
+        rect,
+        event.currentTarget.getBoundingClientRect(),
+        container.current.getBoundingClientRect(),
+        lluiWidth,
+        lluiHeight,
+      ),
+    });
+  }
+
+  function pressKey(event: ReactKeyboardEvent<HTMLImageElement>) {
+    if (
+      mode !== "interact" ||
+      selectedControlId.length === 0 ||
+      !state?.inputOperations.includes("key")
+    ) {
+      return;
+    }
+    const press = browserKeyPress({
+      key: event.key,
+      shiftKey: event.shiftKey,
+      ctrlKey: event.ctrlKey,
+      altKey: event.altKey,
+      metaKey: event.metaKey,
+      isComposing: event.nativeEvent.isComposing,
+    });
+    if (press === undefined) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    keyQueue.current = keyQueue.current
+      .catch(() => undefined)
+      .then(async () => {
+        await runAction({
+          action: "press",
+          controlId: selectedControlId,
+          key: press.key,
+          modifiers: press.modifiers,
+        });
+      });
   }
 
   async function finishGesture(event: PointerEvent<HTMLImageElement>) {
@@ -111,6 +194,7 @@ function Snapshot({ state, runAction, onSelectedControlId }: SnapshotProps) {
       return;
     }
     event.preventDefault();
+    event.currentTarget.focus();
     const target = point(event);
     if (target === undefined) {
       return;
@@ -132,6 +216,7 @@ function Snapshot({ state, runAction, onSelectedControlId }: SnapshotProps) {
           : "relative h-full min-h-44 rounded-xl border border-white/8 p-3 pt-12",
       )}
       data-expanded={expanded}
+      ref={container}
     >
       <Button
         aria-pressed={expanded}
@@ -146,7 +231,10 @@ function Snapshot({ state, runAction, onSelectedControlId }: SnapshotProps) {
       <div className="absolute start-3 top-3 z-10 flex gap-1">
         <Button
           aria-pressed={mode === "inspect"}
-          onClick={() => setMode("inspect")}
+          onClick={() => {
+            setHovered(undefined);
+            setMode("inspect");
+          }}
           size="xs"
           variant={mode === "inspect" ? "default" : "outline"}
         >
@@ -155,25 +243,41 @@ function Snapshot({ state, runAction, onSelectedControlId }: SnapshotProps) {
         <Button
           aria-pressed={mode === "interact"}
           disabled={!state?.inputOperations.includes("click")}
-          onClick={() => setMode("interact")}
+          onClick={() => {
+            setHovered(undefined);
+            setMode("interact");
+          }}
           size="xs"
           variant={mode === "interact" ? "default" : "outline"}
         >
           Interact
         </Button>
       </div>
+      {hovered === undefined ? null : (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute z-[5] border-2 border-sky-400 bg-sky-400/10 shadow-[0_0_0_1px_rgba(2,6,23,0.85)]"
+          data-hovered-control-id={hovered.controlId}
+          style={hovered.outline}
+        />
+      )}
       <img
         alt="Latest xui-lab screenshot"
         className={cn(
-          "block max-h-full max-w-full touch-none select-none object-contain",
+          "block max-h-full max-w-full touch-none select-none object-contain outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-black",
           mode === "inspect" ? "cursor-crosshair" : "cursor-default",
         )}
         draggable={false}
         onContextMenu={(event) => void rightClick(event)}
+        onKeyDown={pressKey}
+        onLoad={() => setHovered(undefined)}
         onPointerCancel={() => {
           pointerStart.current = null;
         }}
         onPointerDown={(event) => {
+          if (mode === "interact") {
+            event.currentTarget.focus();
+          }
           if (event.button !== 0) {
             return;
           }
@@ -183,8 +287,11 @@ function Snapshot({ state, runAction, onSelectedControlId }: SnapshotProps) {
             pointerStart.current = { pointerId: event.pointerId, point: start };
           }
         }}
+        onPointerLeave={() => setHovered(undefined)}
+        onPointerMove={updateHovered}
         onPointerUp={(event) => void finishGesture(event)}
         src={`/api/capture?v=${capture.version}`}
+        tabIndex={mode === "interact" && state?.inputOperations.includes("key") ? 0 : -1}
       />
     </div>
   );
@@ -274,7 +381,12 @@ export function Diagnostics({
       </TabsList>
 
       <TabsPanel className="min-h-0" id="snapshotPanel" value="snapshot">
-        <Snapshot onSelectedControlId={onSelectedControlId} runAction={runAction} state={state} />
+        <Snapshot
+          onSelectedControlId={onSelectedControlId}
+          runAction={runAction}
+          selectedControlId={selectedControlId}
+          state={state}
+        />
       </TabsPanel>
       <TabsPanel className="min-h-0" id="selectedPanel" value="selected">
         <SelectedControl value={selected} />

@@ -16,8 +16,9 @@ services at explicit boundaries.
 - A Python API for exact control targeting, pointer gestures, structural
   assertions, UI inspection, and failure artifacts.
 - A headed inspector that captures the initial frame and refreshes it after UI
-  actions. Interact mode routes left-click, right-click, and drag gestures
-  through LLUI.
+  actions. Interact mode routes left-clicks, right-clicks, drags, and key
+  presses through LLUI. Inspect mode outlines hovered controls from the current
+  production UI tree.
 - Hidden scenario runs through the same production UI path.
 
 ## Inspector frontend

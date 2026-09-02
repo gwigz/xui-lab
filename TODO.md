@@ -49,8 +49,24 @@ The browser inspector remains optional for a person to view. Agents use the CLI.
   commands which reuse the same typed operations as Python scenarios.
 - [ ] Accept selectors through unambiguous flags such as `--control-id`,
   `--model-id`, and `--path`. Reject conflicting selector flags at parsing.
-- [ ] Prefer control IDs in returned commands and recordings. Preserve XUI
-  paths as provenance and explain when a structural ID became stale.
+- [ ] Define one selector contract for the Python API, CLI, inspector, recorder,
+  and replay. Follow Playwright's guidance to
+  [prioritize user-visible behavior](https://playwright.dev/docs/best-practices#test-user-visible-behavior):
+  prefer control type or role plus accessible label or name, then associated
+  label, placeholder, visible text, or visible model identity. Use a control ID
+  only when no unique user-visible selector exists. Keep XUI paths as
+  provenance, not as the default selector.
+- [ ] Add typed `get_by_role`, `get_by_label`, `get_by_placeholder`, and
+  `get_by_text` locators with explicit uniqueness and actionability rules.
+  Derive their signals from the production tree instead of a browser-only
+  accessibility model.
+- [ ] Make Copy Locator and Recorded Python use the same selector-ranking
+  implementation. Record the chosen signals, match count, and fallback reason
+  so generated code is reviewable and selector changes are explainable.
+- [ ] Add selector contract tests for duplicate labels, generated siblings,
+  hidden controls, model-backed rows, and controls without user-visible names.
+  Verify that layout and tree refactors do not change a locator when visible
+  behavior stays the same.
 - [ ] Add `--fields` and `--jq`-style projection so agents can request a small
   tree slice or a few result fields without ingesting an entire UI tree.
 - [ ] Return concise tree excerpts by default. Put full trees, frames, traces,
@@ -121,6 +137,16 @@ The browser inspector remains optional for a person to view. Agents use the CLI.
   state.
 - [ ] Record the scenario step, graphics environment, fixture, UI scale, fork,
   commit, and overlay state in every capture sidecar.
+- [ ] Write an ordered capture manifest that links every automatic screenshot
+  to its action, selector, sequence number, timestamp, tree, diagnostics,
+  recording, and result or error.
+- [ ] Add a scrubbable screenshot filmstrip modeled on Playwright UI Mode's
+  [timeline view](https://playwright.dev/docs/test-ui-mode#timeline-view).
+  Support pointer scrubbing, keyboard stepping, and jumping to the failed
+  action.
+- [ ] When a user scrubs to a historical screenshot, show the matching tree,
+  selection, focus, recording, and diagnostics without mutating the live
+  viewer. Clearly distinguish the live step from historical steps.
 - [ ] Make locator and expectation failures include the smallest relevant tree
   excerpt instead of requiring the user to search the complete UI tree.
 

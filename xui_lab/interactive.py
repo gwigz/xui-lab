@@ -25,6 +25,7 @@ from .scenarios import Scenario
 _ACTIONS_WITHOUT_AUTOMATIC_CAPTURE = frozenset(
     {"capture", "export", "highlight", "pick"}
 )
+_KEY_MODIFIERS = frozenset({"shift", "control", "alt"})
 
 
 def recorded_python(actions: list[dict[str, Any]]) -> list[str]:
@@ -48,7 +49,18 @@ def recorded_python(actions: list[dict[str, Any]]) -> list[str]:
             method = "fill" if kind == "fill" else "type_text"
             lines.append(f"{locator}.{method}({action['text']!r})")
         elif kind == "key" and isinstance(action.get("key"), str):
-            lines.append(f"{locator}.press({action['key']!r})")
+            modifiers = action.get("modifiers")
+            if (
+                isinstance(modifiers, list)
+                and modifiers
+                and all(isinstance(modifier, str) for modifier in modifiers)
+            ):
+                lines.append(
+                    f"{locator}.press({action['key']!r}, "
+                    f"modifiers={tuple(modifiers)!r})"
+                )
+            else:
+                lines.append(f"{locator}.press({action['key']!r})")
         elif (
             kind == "drag"
             and isinstance(action.get("deltaX"), int)
@@ -211,7 +223,13 @@ class InteractiveSession:
             key = request.get("key")
             if not isinstance(key, str) or not key:
                 raise InputError("key must be a non-empty string")
-            return self._locator(request).press(key).data
+            modifiers = request.get("modifiers", [])
+            if not isinstance(modifiers, list) or any(
+                not isinstance(modifier, str) or modifier not in _KEY_MODIFIERS
+                for modifier in modifiers
+            ):
+                raise InputError("modifiers must contain only shift, control, and alt")
+            return self._locator(request).press(key, modifiers=tuple(modifiers)).data
         if action == "replay":
             scenario_id = request.get("scenario")
             scenario = (
