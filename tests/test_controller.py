@@ -47,6 +47,12 @@ class DomainTests(unittest.TestCase):
         with self.assertRaisesRegex(InputError, "unknown keys"):
             parse_scenario(ROOT, raw)
 
+    def test_scenario_rejects_invalid_runtime_operation(self) -> None:
+        raw = read_json(ROOT / "scenarios" / "test-floater.json")
+        raw["steps"] = [{"op": "frames", "count": 1, "typo": True}]
+        with self.assertRaisesRegex(InputError, "unknown keys"):
+            parse_scenario(ROOT, raw)
+
     def test_scenario_rejects_artifact_path_escape(self) -> None:
         raw = read_json(ROOT / "scenarios" / "test-floater.json")
         raw["id"] = "../outside"

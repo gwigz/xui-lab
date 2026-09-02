@@ -46,3 +46,52 @@ or the submodule commit.
 Read `SPEC.md` before extending the executable. The implementation uses one
 production-code test seam in Alchemy instead of compiling a copied list of
 viewer source files.
+
+## Use the Python API
+
+The Python API opens one runtime process and exposes `Window` and `Locator`
+objects. Locators identify controls by XUI path or model UUID. They resolve
+against a fresh production view tree before every action and expectation.
+
+```python
+from pathlib import Path
+
+from xui_lab import Capability, Lab, Viewport
+from xui_lab.domain import parse_manifest
+from xui_lab.io import read_json
+
+root = Path.cwd()
+manifest = parse_manifest(root, read_json(root / "forks.json"))
+fork = manifest.forks[manifest.default_fork]
+lab = Lab(
+    root,
+    fork,
+    root / "viewers" / "alchemy",
+    root / "viewers" / "alchemy" / ".gwigz" / "remote-artifacts" / "xui-lab",
+    root / "artifacts",
+)
+
+with lab.open(
+    artifact_id="python-test-floater",
+    subject="test_widgets",
+    viewport=Viewport(1024, 700, 1.0),
+    capabilities=frozenset({Capability("input"), Capability("inspection")}),
+) as window:
+    checkbox = window.get_by_path(
+        "/Floater View/floater_test_widgets/test_checkbox/CheckboxCtrl Button"
+    )
+    checkbox.expect_visible()
+    checkbox.click().expect_handled()
+    checkbox.expect_value(True)
+```
+
+Actions and expectations wait for stable tree state automatically. A timeout
+reports the paths whose structural state changed. A locator that finds zero or
+multiple controls reports the matching paths, runtime classes, and XUI source
+locations. Failures retain the frame, UI tree, event trace, runtime diagnostics,
+and runtime log under the artifact ID.
+
+The current Alchemy runtime supports locator clicks, double-clicks, and
+right-clicks. `fill()`, `press()`, `scroll()`, and `drag_to()` raise a capability
+error until their production LLUI event paths are available. Use `Window.raw()`
+to send an untyped command while developing an adapter.

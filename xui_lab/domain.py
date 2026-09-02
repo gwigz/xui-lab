@@ -9,6 +9,7 @@ import re
 from typing import Any, NewType
 
 from .errors import InputError
+from .operations import RuntimeOperation, parse_operation
 
 
 ForkId = NewType("ForkId", str)
@@ -101,8 +102,7 @@ class Comparison(Enum):
 
 @dataclass(frozen=True)
 class RuntimeStep:
-    op: str
-    payload: dict[str, Any]
+    operation: RuntimeOperation
     save_as: str | None
 
 
@@ -222,9 +222,9 @@ def parse_scenario(root: Path, raw: Any, label: str = "scenario") -> Scenario:
         save_as = step.get("saveAs")
         if save_as is not None and (not isinstance(save_as, str) or not save_as):
             raise InputError(f"{step_label}.saveAs must be a non-empty string")
-        payload = dict(step)
-        payload.pop("saveAs", None)
-        steps.append(RuntimeStep(op, payload, save_as))
+        operation_data = dict(step)
+        operation_data.pop("saveAs", None)
+        steps.append(RuntimeStep(parse_operation(operation_data, step_label), save_as))
 
     fixture_value = data.get("fixture")
     fixture = None

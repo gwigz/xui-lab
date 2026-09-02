@@ -34,6 +34,7 @@
 #include "llkeyboard.h"
 #include "lllayoutstack.h"
 #include "llmenugl.h"
+#include "llmortician.h"
 #include "llnotifications.h"
 #include "llpanel.h"
 #include "llrender.h"
@@ -908,6 +909,7 @@ private:
         LLImageGL::updateClass();
         LLUIImage::updateClass();
         gIdleCallbacks.callFunctions();
+        LLMortician::updateClass();
         LLAccordionCtrl::updateClass();
         LLLayoutStack::updateClass();
         mRoot->updateBoundingRect();
@@ -989,7 +991,7 @@ private:
             "LLFloaterReg",
             LLSDMap("op", "hideInstance")("name", std::string(subjectName())));
         mFloater = nullptr;
-        LLFloaterReg::destroyInstance(std::string(subjectName()));
+        LLMortician::updateClass();
         postEventApi(
             "LLFloaterReg",
             LLSDMap("op", "showInstance")("name", std::string(subjectName()))("focus", true));

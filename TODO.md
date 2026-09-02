@@ -58,21 +58,21 @@ scenario passes against Alchemy commit
 
 ## Add a Playwright-style Python API
 
-- [ ] Introduce `Lab`, `Window`, and `Locator` types over the typed runtime
+- [x] Introduce `Lab`, `Window`, and `Locator` types over the typed runtime
   protocol. Keep raw command access available for adapter development.
-- [ ] Make locators resolve immediately before every action and assertion. Do
+- [x] Make locators resolve immediately before every action and assertion. Do
   not retain runtime view pointers across layout, fixture, or reload changes.
-- [ ] Add `get_by_path()` and `get_by_model_id()` first. Add label and role
+- [x] Add `get_by_path()` and `get_by_model_id()` first. Add label and role
   locators only after LLUI supplies an unambiguous production mapping.
-- [ ] Fail a locator operation when it resolves to zero or multiple controls.
+- [x] Fail a locator operation when it resolves to zero or multiple controls.
   Include matching paths, runtime classes, and source provenance in the error.
-- [ ] Add locator actions for click, double-click, right-click, fill, key
+- [x] Add locator actions for click, double-click, right-click, fill, key
   input, scroll, and drag-to as the runtime supports them.
-- [ ] Add structural expectations for visibility, enabled state, value,
+- [x] Add structural expectations for visibility, enabled state, value,
   selection, focus, rectangles, menus, handled events, and recorded effects.
-- [ ] Add automatic stability waits around actions and expectations. Report the
+- [x] Add automatic stability waits around actions and expectations. Report the
   changing tree state when the wait times out.
-- [ ] Let Python tests and JSON scenarios use the same typed operations,
+- [x] Let Python tests and JSON scenarios use the same typed operations,
   assertions, capability declarations, artifact naming, and failure evidence.
 
 ## Finish the headed workflow
