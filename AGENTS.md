@@ -128,5 +128,10 @@ Before finishing, inspect the status of the superproject and every viewer
 checkout touched by the task. Report the selected fork and commit, commands
 run, observed behavior, artifact locations, and remaining placeholders.
 
+Write every commit in Commitizen-compatible Conventional Commits format:
+`type(scope): summary` or `type: summary`. Use the established `feat`, `fix`,
+`docs`, `build`, and `chore` types. Mark breaking changes with `!` and add a
+`BREAKING CHANGE:` footer.
+
 Do not push commits, tags, submodule pointers, artifacts, or branches unless the
 user explicitly asks for a push.

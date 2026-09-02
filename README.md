@@ -11,15 +11,44 @@ services at explicit boundaries.
 
 ## What exists
 
-- A Python API for input, structural assertions, UI inspection, and failure
-  artifacts.
-- A headed inspector for picking controls, reloading XUI, resizing subjects,
-  and replaying scenarios.
+- A Python API for exact control targeting, pointer gestures, structural
+  assertions, UI inspection, and failure artifacts.
+- A headed inspector for direct inspection and interaction with captured
+  frames, reloading XUI, resizing viewports or subjects, and replaying
+  scenarios.
 - Hidden scenario runs through the same production UI path.
+
+## Inspector frontend
+
+The browser inspector is a React and TypeScript application in `inspector/`.
+Vite builds it into the embedded `xui_lab/_inspector/` assets served by the
+Python controller. Its Button, Input, Select, Tabs, and Toolbar components are vendored
+from the Coss UI registry and use Base UI behavior with Coss neutral tokens.
+Tailwind CSS supplies the generated utility styles.
+
+Install the pinned frontend dependencies and run its complete check with:
+
+```sh
+npm ci --prefix inspector
+npm run check --prefix inspector
+```
+
+For frontend work with hot reload, start an inspector backend on port 8765 and
+then run `npm run dev --prefix inspector`. A viewer-free backend is available
+for layout work:
+
+```sh
+python3 tests/integration/preview_inspector.py --capture /path/to/capture.png
+npm run dev --prefix inspector
+```
+
+The production build records a source fingerprint. `./xui-lab check` fails
+with the rebuild command when the embedded client is missing or stale.
 
 > [!WARNING]
 > Only the Alchemy adapter and its `test_widgets` subject are usable today.
-> Scrolling and drag-and-drop are not wired up.
+> Scrolling and semantic drag-and-drop are not wired up. Pointer drag is
+> available for production interactions such as floater resizing.
 
 ## Build performance
 

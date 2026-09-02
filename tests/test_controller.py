@@ -76,7 +76,11 @@ class LabIsolationTests(unittest.TestCase):
                     if command["op"] == "initialize":
                         result = {{"supportedCapabilities": ["inspection"]}}
                     elif command["op"] == "installCapabilities":
-                        result = {{"capabilities": command["capabilities"], "eventApis": {{}}}}
+                        result = {{
+                            "capabilities": command["capabilities"],
+                            "eventApis": {{}},
+                            "inputOperations": [],
+                        }}
                     else:
                         result = {{}}
                     print(json.dumps({{"ok": True, "result": result}}), flush=True)

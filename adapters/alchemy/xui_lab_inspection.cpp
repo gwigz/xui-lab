@@ -9,8 +9,11 @@
 #include "llfolderviewmodelinventory.h"
 #include "llinventorymodel.h"
 #include "llinventorypanel.h"
+#include "lldraghandle.h"
 #include "llmenugl.h"
 #include "llpanel.h"
+#include "llresizebar.h"
+#include "llresizehandle.h"
 #include "llui.h"
 #include "lluictrl.h"
 #include "llview.h"
@@ -20,6 +23,7 @@
 #include <functional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 
 namespace
 {
@@ -45,9 +49,20 @@ void addFolderState(LLSD& node, LLFolderViewItem* item)
     }
 }
 
-LLSD buildFolderTree(LLFolderViewItem* item, const std::string& parent_path)
+using ControlIds = std::unordered_map<LLView*, std::string>;
+
+const std::string& requireControlId(const ControlIds& control_ids, LLView* view)
 {
-    LLSD node = item->getInfo();
+    const auto found = control_ids.find(view);
+    if (found == control_ids.end())
+        throw xui_lab::Error("control_id", "view is missing its structural control identity");
+    return found->second;
+}
+
+LLSD buildFolderTree(LLFolderViewItem* item, const std::string& parent_path, const ControlIds& control_ids)
+{
+    LLSD node          = item->getInfo();
+    node["control_id"] = requireControlId(control_ids, item);
     addFolderState(node, item);
     const std::string segment = node.has("model_id") ? "@" + node["model_id"].asString() : item->getName();
     node["path"]              = parent_path + "/" + segment;
@@ -58,13 +73,13 @@ LLSD buildFolderTree(LLFolderViewItem* item, const std::string& parent_path)
     {
         for (auto iterator = folder->getFoldersBegin(); iterator != folder->getFoldersEnd(); ++iterator)
         {
-            LLSD child              = buildFolderTree(*iterator, node["path"].asString());
+            LLSD child              = buildFolderTree(*iterator, node["path"].asString(), control_ids);
             child["hit_test_order"] = hit_order++;
             children.append(child);
         }
         for (auto iterator = folder->getItemsBegin(); iterator != folder->getItemsEnd(); ++iterator)
         {
-            LLSD child              = buildFolderTree(*iterator, node["path"].asString());
+            LLSD child              = buildFolderTree(*iterator, node["path"].asString(), control_ids);
             child["hit_test_order"] = hit_order++;
             children.append(child);
         }
@@ -73,9 +88,10 @@ LLSD buildFolderTree(LLFolderViewItem* item, const std::string& parent_path)
     return node;
 }
 
-LLSD buildTree(LLView* view)
+LLSD buildTree(LLView* view, const ControlIds& control_ids)
 {
-    LLSD node = view->getInfo();
+    LLSD node          = view->getInfo();
+    node["control_id"] = requireControlId(control_ids, view);
     if (auto* control = dynamic_cast<LLUICtrl*>(view))
         node["value"] = control->getValue();
     if (auto* menu_item = dynamic_cast<LLMenuItemGL*>(view))
@@ -88,13 +104,13 @@ LLSD buildTree(LLView* view)
     {
         for (auto iterator = folder->getFoldersBegin(); iterator != folder->getFoldersEnd(); ++iterator)
         {
-            LLSD child_node              = buildFolderTree(*iterator, node["path"].asString());
+            LLSD child_node              = buildFolderTree(*iterator, node["path"].asString(), control_ids);
             child_node["hit_test_order"] = hit_order++;
             children.append(child_node);
         }
         for (auto iterator = folder->getItemsBegin(); iterator != folder->getItemsEnd(); ++iterator)
         {
-            LLSD child_node              = buildFolderTree(*iterator, node["path"].asString());
+            LLSD child_node              = buildFolderTree(*iterator, node["path"].asString(), control_ids);
             child_node["hit_test_order"] = hit_order++;
             children.append(child_node);
         }
@@ -103,7 +119,9 @@ LLSD buildTree(LLView* view)
     {
         for (auto* child : *view->getChildList())
         {
-            LLSD child_node              = buildTree(child);
+            if (!child)
+                continue;
+            LLSD child_node              = buildTree(child, control_ids);
             child_node["hit_test_order"] = hit_order++;
             children.append(child_node);
         }
@@ -124,23 +142,65 @@ void collectHitViews(LLView* view, S32 screen_x, S32 screen_y, std::vector<LLVie
         return;
 
     for (LLView* child : *view->getChildList())
-        collectHitViews(child, screen_x, screen_y, hits);
-    if (dynamic_cast<LLUICtrl*>(view) && view->getMouseOpaque())
+    {
+        if (child)
+            collectHitViews(child, screen_x, screen_y, hits);
+    }
+    // Inspection follows interactive production views, not only LLUICtrl.
+    // Floater drag and resize surfaces deliberately derive directly from
+    // LLView but still handle pointer events and capture the mouse.
+    const bool pointer_surface =
+        dynamic_cast<LLDragHandle*>(view) || dynamic_cast<LLResizeBar*>(view) || dynamic_cast<LLResizeHandle*>(view);
+    const bool inactive_menu_holder = view == gMenuHolder && !gMenuHolder->hasVisibleMenu();
+    if (!inactive_menu_holder && (dynamic_cast<LLUICtrl*>(view) || pointer_surface))
         hits.push_back(view);
 }
 
-LLSD describePick(LLView* target, const std::vector<LLView*>& hits, S32 x, S32 y)
+void indexView(LLView* view, const std::string& control_id, std::unordered_map<std::string, LLView*>& views_by_id, ControlIds& ids_by_view)
+{
+    if (!view)
+        return;
+    views_by_id.emplace(control_id, view);
+    ids_by_view.emplace(view, control_id);
+
+    S32         child_index = 0;
+    const auto* children    = view->getChildList();
+    const auto  index_child = [&](LLView* child)
+    {
+        if (!child)
+            return;
+        indexView(child, control_id + "." + std::to_string(child_index++), views_by_id, ids_by_view);
+    };
+    if (auto* folder = dynamic_cast<LLFolderViewFolder*>(view))
+    {
+        for (auto iterator = folder->getFoldersBegin(); iterator != folder->getFoldersEnd(); ++iterator)
+            index_child(*iterator);
+        for (auto iterator = folder->getItemsBegin(); iterator != folder->getItemsEnd(); ++iterator)
+            index_child(*iterator);
+        return;
+    }
+    if (!children)
+        return;
+    for (LLView* child : *children)
+        index_child(child);
+}
+
+LLSD describePick(LLView* target, const std::vector<LLView*>& hits, S32 x, S32 y, const ControlIds& control_ids)
 {
     LLSD result = target ? target->getInfo() : LLSD::emptyMap();
+    if (target)
+        result["control_id"] = requireControlId(control_ids, target);
     result["x"] = x;
     result["y"] = y;
     LLSD order  = LLSD::emptyArray();
     for (std::size_t index = 0; index < hits.size(); ++index)
     {
         LLView* view = hits[index];
-        order.append(LLSDMap("order", static_cast<S32>(index))("path", view->getPathname())("class", view->getInfo()["class"])(
-            "source_file",
-            view->getInfo()["source_file"])("source_line", view->getInfo()["source_line"])("screen_rect", view->getInfo()["screen_rect"]));
+        order.append(LLSDMap("order", static_cast<S32>(index))("control_id", requireControlId(control_ids, view))(
+            "path",
+            view->getPathname())("class", view->getInfo()["class"])("source_file", view->getInfo()["source_file"])(
+            "source_line",
+            view->getInfo()["source_line"])("screen_rect", view->getInfo()["screen_rect"]));
     }
     result["hit_test_order"] = order;
     return result;
@@ -161,14 +221,18 @@ LLSD Inspection::menus() const
     {
         for (LLView* child : *gMenuHolder->getChildList())
         {
+            if (!child)
+                continue;
             if (dynamic_cast<LLMenuGL*>(child))
-                menus.append(buildTree(child));
+                rebuildControlIndex();
+            menus.append(buildTree(child, mControlIdsByView));
         }
     }
     result["menus"] = menus;
     if (gMenuHolder && gMenuHolder->getVisibleMenu())
     {
-        result["tree"] = buildTree(gMenuHolder->getVisibleMenu());
+        rebuildControlIndex();
+        result["tree"] = buildTree(gMenuHolder->getVisibleMenu(), mControlIdsByView);
     }
     return result;
 }
@@ -210,10 +274,9 @@ LLSD Inspection::value(std::string_view path) const
 
 LLSD Inspection::tree(const LLSD& command) const
 {
-    LLSD request = LLSDMap("op", "getSubtree");
-    if (command.has("path"))
-        request["under"] = command["path"];
-    return callEventApi("LLWindow", request);
+    rebuildControlIndex();
+    LLView* root = command.has("path") ? resolvePath(command["path"].asString()) : &mRoot;
+    return buildTree(root, mControlIdsByView);
 }
 
 LLView* Inspection::pickView(S32 x, S32 y) const
@@ -230,7 +293,15 @@ LLSD Inspection::pick(S32 x, S32 y) const
     std::vector<LLView*> hits;
     collectHitViews(&mRoot, x, y, hits);
     LLView* target = hits.empty() ? nullptr : hits.front();
-    return describePick(target, hits, x, y);
+    rebuildControlIndex();
+    return describePick(target, hits, x, y, mControlIdsByView);
+}
+
+void Inspection::rebuildControlIndex() const
+{
+    mViewsByControlId.clear();
+    mControlIdsByView.clear();
+    indexView(&mRoot, "control:0", mViewsByControlId, mControlIdsByView);
 }
 
 LLView* Inspection::resolvePath(std::string_view requested_path) const
@@ -242,6 +313,26 @@ LLView* Inspection::resolvePath(std::string_view requested_path) const
     if (!target || target->getPathname() != path)
         throw Error("path", "view not found: " + path);
     return target;
+}
+
+LLView* Inspection::resolveControlId(std::string_view requested_control_id) const
+{
+    if (requested_control_id.empty())
+        throw Error("control_id", "controlId must not be empty");
+    rebuildControlIndex();
+    const auto found = mViewsByControlId.find(std::string(requested_control_id));
+    if (found == mViewsByControlId.end())
+        throw Error("control_id", "view not found: " + std::string(requested_control_id));
+    return found->second;
+}
+
+std::string Inspection::controlId(LLView* view) const
+{
+    if (!view)
+        return {};
+    rebuildControlIndex();
+    const auto found = mControlIdsByView.find(view);
+    return found == mControlIdsByView.end() ? std::string() : found->second;
 }
 
 LLView* Inspection::resolveModelId(const LLUUID& id) const

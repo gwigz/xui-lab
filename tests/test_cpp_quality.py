@@ -42,6 +42,27 @@ class CppQualityTests(unittest.TestCase):
             with patch.object(cpp_quality.sys, "executable", str(python)):
                 self.assertEqual(str(tool), cpp_quality.llvm_tool("clang-format"))
 
+    def test_tool_lookup_uses_the_project_venv_from_system_python(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_text:
+            directory = Path(directory_text)
+            python = directory / "system" / "python"
+            tool = directory / ".venv" / "bin" / "clang-format"
+            python.parent.mkdir()
+            tool.parent.mkdir(parents=True)
+            python.touch()
+            tool.write_text(
+                "#!/bin/sh\necho 'clang-format version 22.1.8'\n",
+                encoding="utf-8",
+            )
+            os.chmod(tool, 0o755)
+
+            with (
+                patch.object(cpp_quality.sys, "executable", str(python)),
+                patch.object(cpp_quality, "REPO_ROOT", directory),
+                patch.object(cpp_quality.shutil, "which", return_value=None),
+            ):
+                self.assertEqual(str(tool), cpp_quality.llvm_tool("clang-format"))
+
 
 if __name__ == "__main__":
     unittest.main()

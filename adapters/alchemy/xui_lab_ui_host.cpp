@@ -248,7 +248,8 @@ public:
     LabWindow(S32 width, S32 height, bool interactive)
     {
         const U32 flags = interactive ? 0 : LLWindow::WINDOW_FLAG_HIDDEN;
-        mWindow = LLWindowManager::createWindow(this, "xui-lab", "xui-lab", 0, 0, width, height, flags, false, true, false, true, false);
+        mWindow = LLWindowManager::createWindow(this, "Alchemy Viewer XUI Lab", "xui-lab", 0, 0, width, height, flags, false, true, false,
+                                                true, false);
         if (!mWindow)
             throw xui_lab::Error("window", "failed to create the production LLWindow");
         if (interactive)
@@ -298,13 +299,31 @@ public:
     bool handleMouseDown(LLWindow*, LLCoordGL position, MASK mask) override
     {
         const LLCoordGL screen = screenPosition(position);
+        if (LLMouseHandler* capture = gFocusMgr.getMouseCapture())
+        {
+            S32 local_x = 0;
+            S32 local_y = 0;
+            capture->screenPointToLocal(screen.mX, screen.mY, &local_x, &local_y);
+            return capture->handleMouseDown(local_x, local_y, mask);
+        }
         return mRoot->handleMouseDown(screen.mX, screen.mY, mask);
     }
 
     bool handleMouseUp(LLWindow*, LLCoordGL position, MASK mask) override
     {
-        const LLCoordGL screen  = screenPosition(position);
-        const bool      handled = mRoot->handleMouseUp(screen.mX, screen.mY, mask);
+        const LLCoordGL screen = screenPosition(position);
+        bool            handled;
+        if (LLMouseHandler* capture = gFocusMgr.getMouseCapture())
+        {
+            S32 local_x = 0;
+            S32 local_y = 0;
+            capture->screenPointToLocal(screen.mX, screen.mY, &local_x, &local_y);
+            handled = capture->handleMouseUp(local_x, local_y, mask);
+        }
+        else
+        {
+            handled = mRoot->handleMouseUp(screen.mX, screen.mY, mask);
+        }
         queuePointerAction("click", screen);
         return handled;
     }
@@ -312,13 +331,31 @@ public:
     bool handleRightMouseDown(LLWindow*, LLCoordGL position, MASK mask) override
     {
         const LLCoordGL screen = screenPosition(position);
+        if (LLMouseHandler* capture = gFocusMgr.getMouseCapture())
+        {
+            S32 local_x = 0;
+            S32 local_y = 0;
+            capture->screenPointToLocal(screen.mX, screen.mY, &local_x, &local_y);
+            return capture->handleRightMouseDown(local_x, local_y, mask);
+        }
         return mRoot->handleRightMouseDown(screen.mX, screen.mY, mask);
     }
 
     bool handleRightMouseUp(LLWindow*, LLCoordGL position, MASK mask) override
     {
-        const LLCoordGL screen  = screenPosition(position);
-        const bool      handled = mRoot->handleRightMouseUp(screen.mX, screen.mY, mask);
+        const LLCoordGL screen = screenPosition(position);
+        bool            handled;
+        if (LLMouseHandler* capture = gFocusMgr.getMouseCapture())
+        {
+            S32 local_x = 0;
+            S32 local_y = 0;
+            capture->screenPointToLocal(screen.mX, screen.mY, &local_x, &local_y);
+            handled = capture->handleRightMouseUp(local_x, local_y, mask);
+        }
+        else
+        {
+            handled = mRoot->handleRightMouseUp(screen.mX, screen.mY, mask);
+        }
         queuePointerAction("right_click", screen);
         return handled;
     }
@@ -326,12 +363,26 @@ public:
     bool handleMiddleMouseDown(LLWindow*, LLCoordGL position, MASK mask) override
     {
         const LLCoordGL screen = screenPosition(position);
+        if (LLMouseHandler* capture = gFocusMgr.getMouseCapture())
+        {
+            S32 local_x = 0;
+            S32 local_y = 0;
+            capture->screenPointToLocal(screen.mX, screen.mY, &local_x, &local_y);
+            return capture->handleMiddleMouseDown(local_x, local_y, mask);
+        }
         return mRoot->handleMiddleMouseDown(screen.mX, screen.mY, mask);
     }
 
     bool handleMiddleMouseUp(LLWindow*, LLCoordGL position, MASK mask) override
     {
         const LLCoordGL screen = screenPosition(position);
+        if (LLMouseHandler* capture = gFocusMgr.getMouseCapture())
+        {
+            S32 local_x = 0;
+            S32 local_y = 0;
+            capture->screenPointToLocal(screen.mX, screen.mY, &local_x, &local_y);
+            return capture->handleMiddleMouseUp(local_x, local_y, mask);
+        }
         return mRoot->handleMiddleMouseUp(screen.mX, screen.mY, mask);
     }
 
@@ -347,6 +398,14 @@ public:
     {
         const LLCoordGL screen = screenPosition(position);
         mPointerMove           = std::pair(screen.mX, screen.mY);
+        if (LLMouseHandler* capture = gFocusMgr.getMouseCapture())
+        {
+            S32 local_x = 0;
+            S32 local_y = 0;
+            capture->screenPointToLocal(screen.mX, screen.mY, &local_x, &local_y);
+            capture->handleHover(local_x, local_y, mask);
+            return;
+        }
         mRoot->handleHover(screen.mX, screen.mY, mask);
     }
 
@@ -602,7 +661,7 @@ public:
         mRoot->updateBoundingRect();
 
         glViewport(0, 0, mWidth, mHeight);
-        glClearColor(0.12f, 0.12f, 0.12f, 1.f);
+        glClearColor(0.f, 0.f, 0.f, 1.f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
         gl_state_for_2d(mWidth, mHeight);
         LLGLSUIDefault ui_state;
@@ -633,7 +692,7 @@ public:
         return LLSDMap("frames", count)("frameCount", mFrameCount);
     }
 
-    LLSD resize(const LLSD& command)
+    LLSD resizeViewport(const LLSD& command)
     {
         const S32 width    = command["width"].asInteger();
         const S32 height   = command["height"].asInteger();
@@ -655,6 +714,25 @@ public:
         reshape(measured_pixels);
         renderFrame(true);
         return diagnostics()["viewport"];
+    }
+
+    LLSD resizeSubject(const LLSD& command)
+    {
+        if (!mFloater)
+            throw Error("subject", "no subject floater is open");
+        const S32 width  = command["width"].asInteger();
+        const S32 height = command["height"].asInteger();
+        if (width < mFloater->getMinWidth() || height < mFloater->getMinHeight())
+        {
+            throw Error("subject",
+                        "subject size must be at least " + std::to_string(mFloater->getMinWidth()) + "x" +
+                            std::to_string(mFloater->getMinHeight()));
+        }
+        mFloater->reshape(width, height);
+        mFloater->center();
+        renderFrame(true);
+        return LLSDMap("width", mFloater->getRect().getWidth())("height", mFloater->getRect().getHeight())(
+            "minWidth", mFloater->getMinWidth())("minHeight", mFloater->getMinHeight())("view", mFloater->getInfo());
     }
 
     void reshape(LLCoordWindow size)
@@ -955,8 +1033,11 @@ LLSD UIHost::advanceFrames(S32 count)
 { return mImpl->advanceFrames(count); }
 void UIHost::renderFrame(bool swap)
 { mImpl->renderFrame(swap); }
-LLSD UIHost::resize(const LLSD& command)
-{ return mImpl->resize(command); }
+LLSD UIHost::resizeViewport(const LLSD& command)
+{ return mImpl->resizeViewport(command); }
+
+LLSD UIHost::resizeSubject(const LLSD& command)
+{ return mImpl->resizeSubject(command); }
 LLSD UIHost::reload()
 { return mImpl->reload(); }
 LLSD UIHost::diagnostics() const

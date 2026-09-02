@@ -39,7 +39,8 @@ public:
     void                                             openSubject(Subject subject);
     [[nodiscard]] LLSD                               advanceFrames(S32 count);
     void                                             renderFrame(bool swap);
-    [[nodiscard]] LLSD                               resize(const LLSD& command);
+    [[nodiscard]] LLSD                               resizeViewport(const LLSD& command);
+    [[nodiscard]] LLSD                               resizeSubject(const LLSD& command);
     [[nodiscard]] LLSD                               reload();
     [[nodiscard]] LLSD                               diagnostics() const;
     [[nodiscard]] LLSD                               capture(const LLSD& command, LLView* highlighted, std::string_view fixture_id);

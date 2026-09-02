@@ -35,9 +35,10 @@ external effects only at system boundaries.
 
 The lab has an interactive mode for visual work and a scenario mode for
 repeatable tests. Both modes use the same subject host, input path, inspection
-API, and renderer. A scenario can resize a floater, click a control, type text,
-open a context menu, inspect the UI tree, assert visible behavior, and capture a
-frame with its diagnostics.
+API, and renderer. A scenario can set floater geometry, resize it through a
+production pointer drag, click a control, type text, open a context menu,
+inspect the UI tree, assert visible behavior, and capture a frame with its
+diagnostics.
 
 The first adapter targets Alchemy. Developers can use the pinned Alchemy
 submodule or select a local checkout. The local override supports unpushed
@@ -67,7 +68,7 @@ branches without changing the submodule commit.
 20. As a UI developer, I want to see keyboard focus and mouse capture, so that I can diagnose input routed to the wrong control.
 21. As a UI developer, I want the lab to outline a selected control, so that I can connect inspector data to the rendered frame.
 22. As a UI developer, I want overlap and text-clipping diagnostics, so that the lab can point out common layout defects.
-23. As a scenario author, I want to address controls by XUI path, so that tests do not depend on screen coordinates alone.
+23. As a scenario author, I want every live control to have a unique runtime identity while retaining its XUI path as provenance, so that generated siblings with the same path remain independently targetable.
 24. As a scenario author, I want to target model objects by stable identifiers, so that inventory tests remain valid when layout changes.
 25. As a scenario author, I want to send normal mouse and keyboard events, so that tests use production event dispatch.
 26. As a scenario author, I want to assert whether an input event was handled, so that a swallowed context-menu event is visible in test output.

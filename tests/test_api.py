@@ -4,13 +4,20 @@ import json
 import os
 import tempfile
 import textwrap
+import threading
 import unittest
 from pathlib import Path
+from urllib.request import urlopen
 
 from xui_lab.api import Lab
 from xui_lab.domain import Capability, Viewport, parse_manifest
-from xui_lab.errors import AssertionFailure
-from xui_lab.interactive import HTML, recorded_python
+from xui_lab.errors import AssertionFailure, RuntimeFailure
+from xui_lab.interactive import (
+    InspectorHandler,
+    InspectorServer,
+    InteractiveSession,
+    recorded_python,
+)
 from xui_lab.io import read_json
 from xui_lab.scenarios import load_scenario
 
@@ -18,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CHECKBOX_PATH = "/root/checkbox"
 PRODUCTION_CHECKBOX = "/Floater View/floater_test_widgets/test_checkbox"
 PRODUCTION_CHECKBOX_BUTTON = f"{PRODUCTION_CHECKBOX}/CheckboxCtrl Button"
+RESIZE_HANDLE_PATH = "/root/resize_handle"
 
 
 def fake_runtime(directory: Path, command_log: Path) -> Path:
@@ -33,8 +41,9 @@ def fake_runtime(directory: Path, command_log: Path) -> Path:
             subject = ""
             tree_version = 0
 
-            def node(path, value, model_id=None, runtime_class="LLCheckBoxCtrl", source_line=12):
+            def node(path, value, model_id=None, runtime_class="LLCheckBoxCtrl", source_line=12, control_id=None):
                 result = {{
+                    "control_id": control_id or f"control-{{source_line}}",
                     "path": path,
                     "class": runtime_class,
                     "source_file": "floater_test.xml",
@@ -70,6 +79,7 @@ def fake_runtime(directory: Path, command_log: Path) -> Path:
                             "LLWindow": {{"operations": [{{"name": "getSubtree"}}, {{"name": "mouseDown"}}]}},
                             "XUILab": {{"operations": [{{"name": "query"}}, {{"name": "input"}}]}},
                         }},
+                        "inputOperations": ["click", "doubleClick", "rightClick", "fill", "text", "key", "drag"],
                     }}
                 elif op == "stable":
                     result = {{"stable": subject != "unstable", "frames": command["maximumFrames"]}}
@@ -82,6 +92,11 @@ def fake_runtime(directory: Path, command_log: Path) -> Path:
                             node("/root/first", False, "11111111-1111-1111-1111-111111111111", "LLButton", 21),
                             node("/root/second", False, "11111111-1111-1111-1111-111111111111", "LLMenuItemGL", 34),
                         ]
+                    elif subject == "duplicate_paths":
+                        children = [
+                            node({RESIZE_HANDLE_PATH!r}, False, runtime_class="LLResizeHandle", source_line=41, control_id="handle-top-left"),
+                            node({RESIZE_HANDLE_PATH!r}, False, runtime_class="LLResizeHandle", source_line=42, control_id="handle-bottom-right"),
+                        ]
                     else:
                         value = bool(tree_version % 2) if subject == "unstable" else checked
                         children = [node({CHECKBOX_PATH!r}, value)]
@@ -90,7 +105,7 @@ def fake_runtime(directory: Path, command_log: Path) -> Path:
                                 node({PRODUCTION_CHECKBOX!r}, value),
                                 node({PRODUCTION_CHECKBOX_BUTTON!r}, value, runtime_class="LLButton"),
                             ])
-                    result = {{"path": "/root", "class": "LLPanel", "children": children}}
+                    result = {{"control_id": "root", "path": "/root", "class": "LLPanel", "children": children}}
                 elif op == "query" and command["kind"] == "menus":
                     result = {{"visible": True, "menus": [{{"label": "Open"}}]}}
                 elif op == "input":
@@ -98,6 +113,7 @@ def fake_runtime(directory: Path, command_log: Path) -> Path:
                     result = {{
                         "handled": True,
                         "path": command.get("path"),
+                        "controlId": command.get("controlId"),
                         "event": command["event"],
                         "focusBefore": None,
                         "focusAfter": {{"path": command.get("path")}},
@@ -107,11 +123,13 @@ def fake_runtime(directory: Path, command_log: Path) -> Path:
                         "mouseCaptureChanged": False,
                     }}
                 elif op == "pick":
-                    result = {{"path": {CHECKBOX_PATH!r}, "class": "LLCheckBoxCtrl"}}
+                    result = {{"control_id": "control-12", "path": {CHECKBOX_PATH!r}, "class": "LLCheckBoxCtrl"}}
                 elif op == "highlight":
                     result = {{"visible": command.get("target") is not None}}
-                elif op == "resize":
+                elif op == "resizeViewport":
                     result = {{"pixelWidth": command["width"], "pixelHeight": command["height"]}}
+                elif op == "resizeSubject":
+                    result = {{"width": command["width"], "height": command["height"]}}
                 elif op == "reload":
                     checked = False
                     result = {{"subject": subject}}
@@ -234,6 +252,20 @@ class PlaywrightApiTests(unittest.TestCase):
         self.assertIn("/root/first (LLButton, floater_test.xml:21)", message)
         self.assertIn("/root/second (LLMenuItemGL, floater_test.xml:34)", message)
 
+    def test_control_id_locator_distinguishes_duplicate_paths(self) -> None:
+        with self.open("duplicate_paths") as window:
+            handle = window.get_by_control_id("handle-bottom-right")
+            self.assertEqual("handle-bottom-right", handle.resolve().control_id)
+            handle.drag_by(dx=40, dy=-30).expect_handled()
+
+        drag = next(
+            command
+            for command in self.commands()
+            if command.get("op") == "input" and command.get("event") == "drag"
+        )
+        self.assertEqual("handle-bottom-right", drag["controlId"])
+        self.assertEqual((40, -30), (drag["deltaX"], drag["deltaY"]))
+
     def test_missing_locator_reports_zero_matches(self) -> None:
         with self.open() as window:
             with self.assertRaisesRegex(AssertionFailure, "resolved to 0 controls"):
@@ -263,7 +295,8 @@ class PlaywrightApiTests(unittest.TestCase):
     def test_window_exposes_runtime_operations_without_command_objects(self) -> None:
         with self.open() as window:
             self.assertEqual(3, window.advance_frames(3)["frames"])
-            self.assertEqual(640, window.resize(640, 480)["pixelWidth"])
+            self.assertEqual(640, window.resize_viewport(640, 480)["pixelWidth"])
+            self.assertEqual(900, window.resize_subject(900, 520)["width"])
             self.assertEqual("test_widgets", window.reload()["subject"])
             self.assertEqual("/root", window.query_tree()["path"])
             self.assertIn("effects", window.diagnostics())
@@ -278,25 +311,108 @@ class PlaywrightApiTests(unittest.TestCase):
         self.assertEqual({"path": CHECKBOX_PATH}, capture_command["highlight"])
         self.assertTrue(capture_command["includeOverlay"])
 
+        operations = [command["op"] for command in self.commands()]
+        self.assertIn("resizeViewport", operations)
+        self.assertIn("resizeSubject", operations)
+        self.assertNotIn("resize", operations)
+
     def test_recorded_actions_render_as_editable_locator_calls(self) -> None:
         self.assertEqual(
             [
                 f"window.get_by_path({CHECKBOX_PATH!r}).click()",
                 f"window.get_by_path({CHECKBOX_PATH!r}).fill('hello')",
                 f"window.get_by_path({CHECKBOX_PATH!r}).press('Enter')",
+                "window.get_by_control_id('resize-handle').drag_by(dx=40, dy=-30)",
             ],
             recorded_python(
                 [
                     {"action": "click", "path": CHECKBOX_PATH},
                     {"action": "fill", "path": CHECKBOX_PATH, "text": "hello"},
                     {"action": "key", "path": CHECKBOX_PATH, "key": "Enter"},
+                    {
+                        "action": "drag",
+                        "path": RESIZE_HANDLE_PATH,
+                        "controlId": "resize-handle",
+                        "deltaX": 40,
+                        "deltaY": -30,
+                    },
                 ]
             ),
         )
 
-    def test_inspector_emits_an_escaped_recorder_line_separator(self) -> None:
-        self.assertIn(".join('\\n')", HTML)
-        self.assertNotIn(".join('" + "\n" + "')", HTML)
+    def test_interactive_capture_is_available_to_the_browser(self) -> None:
+        capture = self.directory / "artifacts" / "latest.png"
+        capture.parent.mkdir(parents=True)
+        capture.write_bytes(b"png bytes")
+        session = object.__new__(InteractiveSession)
+        session.window = type(
+            "WindowStub",
+            (),
+            {
+                "artifact_dir": capture.parent,
+                "capture": staticmethod(lambda _name: {"path": str(capture)}),
+            },
+        )()
+        session._latest_capture = None
+        session._capture_version = 0
+
+        result = session.action({"action": "capture"})
+
+        self.assertEqual(str(capture), result["path"])
+        self.assertEqual(capture.resolve(), session.latest_capture)
+        self.assertEqual(1, session._capture_version)
+
+    def test_interactive_capture_rejects_a_path_outside_its_artifacts(self) -> None:
+        capture = self.directory / "outside.png"
+        capture.write_bytes(b"png bytes")
+        artifact_dir = self.directory / "artifacts"
+        artifact_dir.mkdir()
+        session = object.__new__(InteractiveSession)
+        session.window = type(
+            "WindowStub",
+            (),
+            {
+                "artifact_dir": artifact_dir,
+                "capture": staticmethod(lambda _name: {"path": str(capture)}),
+            },
+        )()
+        session._latest_capture = None
+        session._capture_version = 0
+
+        with self.assertRaisesRegex(RuntimeFailure, "outside the artifact directory"):
+            session.action({"action": "capture"})
+
+    def test_inspector_serves_the_latest_capture_as_an_image(self) -> None:
+        capture = self.directory / "latest.png"
+        capture.write_bytes(b"png bytes")
+        server = InspectorServer(("127.0.0.1", 0), InspectorHandler)
+        server.session = type("SessionStub", (), {"latest_capture": capture})()
+        thread = threading.Thread(target=server.handle_request)
+        thread.start()
+        try:
+            host, port = server.server_address
+            with urlopen(f"http://{host}:{port}/api/capture", timeout=2) as response:
+                self.assertEqual("image/png", response.headers.get_content_type())
+                self.assertEqual(b"png bytes", response.read())
+        finally:
+            thread.join(timeout=2)
+            server.server_close()
+
+    def test_inspector_serves_the_built_react_client(self) -> None:
+        server = InspectorServer(("127.0.0.1", 0), InspectorHandler)
+        server.session = type("SessionStub", (), {})()
+        thread = threading.Thread(target=server.handle_request)
+        thread.start()
+        try:
+            host, port = server.server_address
+            with urlopen(f"http://{host}:{port}/", timeout=2) as response:
+                body = response.read().decode()
+                self.assertEqual("text/html", response.headers.get_content_type())
+                self.assertIn('<div id="root"></div>', body)
+                self.assertIn("/assets/app.js", body)
+        finally:
+            thread.join(timeout=2)
+            server.server_close()
 
     def test_python_scenario_runs_through_window_and_locator(self) -> None:
         scenario = load_scenario(ROOT, ROOT / "tests" / "scenarios" / "test_floater.py")
@@ -310,7 +426,7 @@ class PlaywrightApiTests(unittest.TestCase):
             scenario.run(window)
 
         commands = self.commands()
-        self.assertTrue(any(command["op"] == "resize" for command in commands))
+        self.assertTrue(any(command["op"] == "resizeViewport" for command in commands))
         self.assertTrue(any(command["op"] == "reload" for command in commands))
         self.assertTrue(any(command["op"] == "capture" for command in commands))
 

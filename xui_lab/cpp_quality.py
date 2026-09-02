@@ -49,7 +49,15 @@ def adapter_files(values: list[str], suffixes: frozenset[str]) -> list[Path]:
 
 def llvm_tool(name: str) -> str:
     beside_python = Path(sys.executable).with_name(name)
-    executable = str(beside_python) if beside_python.is_file() else shutil.which(name)
+    project_venv = REPO_ROOT / ".venv" / "bin" / name
+    executable = next(
+        (
+            str(candidate)
+            for candidate in (beside_python, project_venv)
+            if candidate.is_file()
+        ),
+        None,
+    ) or shutil.which(name)
     if not executable:
         raise QualityError(
             f"{name} {LLVM_VERSION} is required; install requirements-dev.txt"

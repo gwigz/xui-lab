@@ -9,7 +9,7 @@ CHECKBOX_BUTTON = f"{CHECKBOX}/CheckboxCtrl Button"
 def run(window: Window) -> None:
     window.advance_frames(2)
     window.wait_for_stable()
-    window.resize(1024, 700, ui_scale=1.0)
+    window.resize_viewport(1024, 700, ui_scale=1.0)
     window.reload()
 
     checkbox = window.get_by_path(CHECKBOX)

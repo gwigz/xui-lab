@@ -18,7 +18,10 @@ from .errors import (
 from .io import git_commit, read_json, write_json
 from .operations import (
     Capture,
+    ControlIdSelector,
+    CoordinatePointerAction,
     Diagnostics,
+    DragAction,
     Frames,
     Highlight,
     KeyInput,
@@ -30,10 +33,12 @@ from .operations import (
     QueryMenus,
     QueryTree,
     Reload,
-    Resize,
+    ResizeSubject,
+    ResizeViewport,
     Selector,
     TextInput,
     WaitForStable,
+    control_id_selector,
     model_id_selector,
     path_selector,
 )
@@ -69,8 +74,14 @@ def _node_state(tree: Any) -> dict[str, dict[str, Any]]:
     result: dict[str, dict[str, Any]] = {}
     for node in _tree_nodes(tree):
         path = node.get("path")
-        if isinstance(path, str):
-            result[path] = {
+        control_id = node.get("control_id")
+        identity = (
+            f"{path} [{control_id}]"
+            if isinstance(path, str) and isinstance(control_id, str)
+            else path
+        )
+        if isinstance(identity, str):
+            result[identity] = {
                 key: value for key, value in node.items() if key != "children"
             }
     return result
@@ -80,6 +91,10 @@ def _node_state(tree: Any) -> dict[str, dict[str, Any]]:
 class Control:
     selector: Selector
     info: dict[str, Any]
+
+    @property
+    def control_id(self) -> str:
+        return str(self.info.get("control_id", ""))
 
     @property
     def path(self) -> str:
@@ -191,6 +206,7 @@ class Lab:
             installed_map = _mapping(installed, "installCapabilities result")
             installed_capabilities = installed_map.get("capabilities")
             event_apis = installed_map.get("eventApis")
+            input_operations = installed_map.get("inputOperations")
             if not isinstance(installed_capabilities, list) or any(
                 not isinstance(value, str) for value in installed_capabilities
             ):
@@ -200,6 +216,12 @@ class Lab:
             if not isinstance(event_apis, dict):
                 raise RuntimeFailure(
                     "installCapabilities response has invalid eventApis"
+                )
+            if not isinstance(input_operations, list) or any(
+                not isinstance(value, str) for value in input_operations
+            ):
+                raise RuntimeFailure(
+                    "installCapabilities response has invalid inputOperations"
                 )
             missing = sorted(
                 str(value) for value in capabilities - set(installed_capabilities)
@@ -211,6 +233,7 @@ class Lab:
             window._install(
                 frozenset(Capability(value) for value in installed_capabilities),
                 event_apis,
+                frozenset(input_operations),
             )
             return window
         except BaseException as error:
@@ -228,13 +251,18 @@ class Window:
         self.trace: list[dict[str, Any]] = []
         self.capabilities: frozenset[Capability] = frozenset()
         self.event_apis: dict[str, Any] = {}
+        self.input_operations: frozenset[str] = frozenset()
         self._finished = False
 
     def _install(
-        self, capabilities: frozenset[Capability], event_apis: dict[str, Any]
+        self,
+        capabilities: frozenset[Capability],
+        event_apis: dict[str, Any],
+        input_operations: frozenset[str],
     ) -> None:
         self.capabilities = capabilities
         self.event_apis = event_apis
+        self.input_operations = input_operations
 
     def _request(self, command: dict[str, Any]) -> Any:
         response = self.runtime.request(command)
@@ -250,6 +278,9 @@ class Window:
     def get_by_model_id(self, model_id: str) -> Locator:
         return Locator(self, model_id_selector(model_id))
 
+    def get_by_control_id(self, control_id: str) -> Locator:
+        return Locator(self, control_id_selector(control_id))
+
     def locator(self, selector: Selector) -> Locator:
         return Locator(self, selector)
 
@@ -259,7 +290,7 @@ class Window:
         result = self._request(Frames(count).to_command())
         return _mapping(result, "frames result")
 
-    def resize(
+    def resize_viewport(
         self, width: int, height: int, *, ui_scale: float | None = None
     ) -> dict[str, Any]:
         if (
@@ -270,15 +301,59 @@ class Window:
             or isinstance(height, bool)
             or height <= 0
         ):
-            raise InputError("resize width and height must be positive integers")
+            raise InputError("viewport width and height must be positive integers")
         if ui_scale is not None and (
             not isinstance(ui_scale, (int, float))
             or isinstance(ui_scale, bool)
             or ui_scale <= 0
         ):
-            raise InputError("resize ui_scale must be positive")
-        result = self._request(Resize(width, height, ui_scale).to_command())
-        return _mapping(result, "resize result")
+            raise InputError("viewport ui_scale must be positive")
+        result = self._request(ResizeViewport(width, height, ui_scale).to_command())
+        return _mapping(result, "resize viewport result")
+
+    def resize_subject(self, width: int, height: int) -> dict[str, Any]:
+        self._validate_positive_size(width, height, "subject")
+        result = self._request(ResizeSubject(width, height).to_command())
+        return _mapping(result, "resize subject result")
+
+    def click_at(self, x: int, y: int) -> ActionResult:
+        self._validate_coordinates((x, y))
+        return self._perform_input(
+            CoordinatePointerAction(PointerEvent.CLICK, MouseButton.LEFT, x, y),
+            "click",
+        )
+
+    def drag(self, start_x: int, start_y: int, end_x: int, end_y: int) -> ActionResult:
+        self._validate_coordinates((start_x, start_y, end_x, end_y))
+        return self._perform_input(DragAction(start_x, start_y, end_x, end_y), "drag")
+
+    @staticmethod
+    def _validate_positive_size(width: int, height: int, label: str) -> None:
+        if (
+            not isinstance(width, int)
+            or isinstance(width, bool)
+            or width <= 0
+            or not isinstance(height, int)
+            or isinstance(height, bool)
+            or height <= 0
+        ):
+            raise InputError(f"{label} width and height must be positive integers")
+
+    @staticmethod
+    def _validate_coordinates(values: tuple[int, ...]) -> None:
+        if any(
+            not isinstance(value, int) or isinstance(value, bool) for value in values
+        ):
+            raise InputError("pointer coordinates must be integers")
+
+    def _perform_input(self, operation: Any, action: str) -> ActionResult:
+        self._require_capability("input")
+        self._require_operation("XUILab", "input")
+        self._require_input_operation(action)
+        self.wait_for_stable()
+        result = _mapping(self._request(operation.to_command()), f"{action} result")
+        self.wait_for_stable()
+        return ActionResult(action, result)
 
     def reload(self) -> dict[str, Any]:
         result = self._request(Reload().to_command())
@@ -317,7 +392,13 @@ class Window:
         path = result.get("path")
         if not isinstance(path, str) or not path:
             raise AssertionFailure(f"no visible control at screen position ({x}, {y})")
-        return Control(path_selector(path), result)
+        control_id = result.get("control_id")
+        selector = (
+            control_id_selector(control_id)
+            if isinstance(control_id, str) and control_id
+            else path_selector(path)
+        )
+        return Control(selector, result)
 
     def highlight(self, locator: Locator | None) -> dict[str, Any]:
         self._require_capability("inspection")
@@ -340,6 +421,12 @@ class Window:
         )
         if operation not in names:
             raise CapabilityError(f"runtime does not expose {api}.{operation}")
+
+    def _require_input_operation(self, operation: str) -> None:
+        if operation not in self.input_operations:
+            raise CapabilityError(
+                f"runtime does not expose the input operation {operation!r}"
+            )
 
     def wait_for_stable(self, stability: WaitForStable | None = None) -> dict[str, Any]:
         policy = stability or self.stability
@@ -459,6 +546,12 @@ class Locator:
                 for node in _tree_nodes(tree)
                 if node.get("path") == self.selector.path
             ]
+        elif isinstance(self.selector, ControlIdSelector):
+            matches = [
+                node
+                for node in _tree_nodes(tree)
+                if node.get("control_id") == self.selector.control_id
+            ]
         else:
             matches = [
                 node
@@ -484,6 +577,7 @@ class Locator:
     def _perform(self, event: PointerEvent, button: MouseButton) -> ActionResult:
         self.window._require_capability("input")
         self.window._require_operation("XUILab", "input")
+        self.window._require_input_operation(event.value)
         self.window.wait_for_stable()
         self.resolve()
         operation = PointerAction(event, button, self.selector)
@@ -511,6 +605,7 @@ class Locator:
     def press(self, key: str, *, modifiers: tuple[str, ...] = ()) -> ActionResult:
         self.window._require_capability("input")
         self.window._require_operation("XUILab", "input")
+        self.window._require_input_operation("key")
         self.window.wait_for_stable()
         self.resolve()
         operation = KeyInput(key, self.selector, modifiers)
@@ -524,6 +619,7 @@ class Locator:
     def _perform_text(self, operation: TextInput) -> ActionResult:
         self.window._require_capability("input")
         self.window._require_operation("XUILab", "input")
+        self.window._require_input_operation("fill" if operation.replace else "text")
         self.window.wait_for_stable()
         self.resolve()
         result = _mapping(self.window._request(operation.to_command()), "text result")
@@ -533,8 +629,43 @@ class Locator:
     def scroll(self, _clicks: int) -> None:
         self._unsupported("scroll")
 
-    def drag_to(self, _target: Locator) -> None:
-        self._unsupported("drag-to")
+    def drag_by(self, *, dx: int, dy: int) -> ActionResult:
+        if any(
+            not isinstance(value, int) or isinstance(value, bool) for value in (dx, dy)
+        ):
+            raise InputError("drag deltas must be integers")
+        self.window._require_capability("input")
+        self.window._require_operation("XUILab", "input")
+        self.window._require_input_operation("drag")
+        self.window.wait_for_stable()
+        self.resolve()
+        result = _mapping(
+            self.window._request(
+                DragAction(selector=self.selector, delta_x=dx, delta_y=dy).to_command()
+            ),
+            "drag result",
+        )
+        self.window.wait_for_stable()
+        return ActionResult("drag", result)
+
+    def drag_to(self, target: Locator) -> ActionResult:
+        source_control = self.resolve()
+        target_control = target.resolve()
+        source_rect = source_control.info.get("screen_rect")
+        target_rect = target_control.info.get("screen_rect")
+        if not isinstance(source_rect, dict) or not isinstance(target_rect, dict):
+            raise AssertionFailure("drag endpoints do not expose screen rectangles")
+
+        def center(rect: dict[str, Any]) -> tuple[int, int]:
+            values = tuple(rect.get(key) for key in ("left", "right", "bottom", "top"))
+            if any(not isinstance(value, int) for value in values):
+                raise AssertionFailure("drag endpoint has an invalid screen rectangle")
+            left, right, bottom, top = values
+            return ((left + right) // 2, (bottom + top) // 2)
+
+        start_x, start_y = center(source_rect)
+        end_x, end_y = center(target_rect)
+        return self.window.drag(start_x, start_y, end_x, end_y)
 
     def expect(
         self, field: str, expected: Any, comparison: Comparison = Comparison.EQUALS

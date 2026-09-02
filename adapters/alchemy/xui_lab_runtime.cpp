@@ -28,6 +28,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <tuple>
 
 namespace
 {
@@ -55,7 +56,8 @@ public:
                 return mUIHost->advanceFrames(command["count"].asInteger());
             });
         add("stable", "Advance frames until the production UI tree stops changing.", &Runtime::stabilize);
-        add("resize", "Resize the host viewport and production LLUI root.", &Runtime::resize);
+        add("resizeViewport", "Resize the host viewport and production LLUI root.", &Runtime::resizeViewport);
+        add("resizeSubject", "Resize the open production floater.", &Runtime::resizeSubject);
         add("capture", "Capture the production UI framebuffer.", &Runtime::capture);
         add("reload", "Destroy and recreate the registered subject from source XUI.", &Runtime::reload);
         add("diagnostics", "Report runtime, subject, viewport, focus, and graphics state.",
@@ -89,7 +91,8 @@ public:
             {
                 LLView* target = mInspection->pickView(action["x"].asInteger(), action["y"].asInteger());
                 if (target && !target->getPathname().empty())
-                    mUIHost->recordAction(LLSDMap("action", action["action"])("path", target->getPathname()));
+                    mUIHost->recordAction(
+                        LLSDMap("action", action["action"])("path", target->getPathname())("controlId", mInspection->controlId(target)));
             }
             else
             {
@@ -201,7 +204,7 @@ private:
         LLSD installed = LLSD::emptyArray();
         for (const std::string& capability : mCapabilities)
             installed.append(capability);
-        return LLSDMap("capabilities", installed)("eventApis", exposedEventApiMetadata());
+        return LLSDMap("capabilities", installed)("eventApis", exposedEventApiMetadata())("inputOperations", inputOperations());
     }
 
     LLSD stabilize(const LLSD& command)
@@ -226,10 +229,16 @@ private:
         return LLSDMap("stable", false)("frames", maximum);
     }
 
-    LLSD resize(const LLSD& command)
+    LLSD resizeViewport(const LLSD& command)
     {
         requireInitialized();
-        return mUIHost->resize(command);
+        return mUIHost->resizeViewport(command);
+    }
+
+    LLSD resizeSubject(const LLSD& command)
+    {
+        requireInitialized();
+        return mUIHost->resizeSubject(command);
     }
 
     LLSD reload(const LLSD&)
@@ -312,8 +321,8 @@ private:
     {
         LLSD result = LLSD::emptyMap();
         addEventApiMetadata(result, "XUILab",
-                            { "initialize", "installCapabilities", "frames", "stable", "resize", "capture", "reload", "diagnostics",
-                              "shutdown", "pick", "highlight" });
+                            { "initialize", "installCapabilities", "frames", "stable", "resizeViewport", "resizeSubject", "capture",
+                              "reload", "diagnostics", "shutdown", "pick", "highlight" });
         addEventApiMetadata(result, "LLFloaterReg",
                             { "getBuildMap", "showInstance", "hideInstance", "toggleInstance", "toggleInstanceOrBringToFront",
                               "instanceVisible", "clickButton" });
@@ -326,7 +335,8 @@ private:
         if (hasCapability("input"))
         {
             addEventApiMetadata(result, "XUILab", { "input" });
-            addEventApiMetadata(result, "LLWindow", { "mouseDown", "mouseDoubleClick", "mouseUp", "mouseMove", "mouseScroll" });
+            addEventApiMetadata(result, "LLWindow",
+                                { "mouseDown", "mouseDoubleClick", "mouseUp", "mouseMove", "mouseScroll", "selectAll", "pasteText" });
             addEventApiMetadata(result, "UI", { "setSelectedByValue" });
         }
         return result;
@@ -334,6 +344,8 @@ private:
 
     LLView* resolveTarget(const LLSD& command) const
     {
+        if (command.has("controlId"))
+            return mInspection->resolveControlId(command["controlId"].asString());
         if (command.has("modelId"))
         {
             requireCapability("inventory_model");
@@ -344,13 +356,45 @@ private:
         return mInspection->resolvePath(command["path"].asString());
     }
 
+    static LLSD pointerEventAt(std::string_view operation, std::string_view button, S32 screen_x, S32 screen_y)
+    {
+        S32 gl_x = 0;
+        S32 gl_y = 0;
+        LLUI::getInstance()->screenPointToGL(screen_x, screen_y, &gl_x, &gl_y);
+        return LLSDMap("op", std::string(operation))("button", std::string(button))("x", gl_x)("y", gl_y);
+    }
+
     static LLSD pointerEvent(std::string_view operation, std::string_view button, LLView* target)
     {
         const LLRect screen_rect = target->calcScreenRect();
-        S32          gl_x        = 0;
-        S32          gl_y        = 0;
-        LLUI::getInstance()->screenPointToGL(screen_rect.getCenterX(), screen_rect.getCenterY(), &gl_x, &gl_y);
-        return LLSDMap("op", std::string(operation))("button", std::string(button))("path", target->getPathname())("x", gl_x)("y", gl_y);
+        return pointerEventAt(operation, button, screen_rect.getCenterX(), screen_rect.getCenterY());
+    }
+
+    LLSD inputOperations() const
+    {
+        LLSD operations = LLSD::emptyArray();
+        if (!hasCapability("input"))
+            return operations;
+        for (const std::string_view operation : { "click", "doubleClick", "rightClick", "fill", "text", "key", "drag" })
+            operations.append(std::string(operation));
+        return operations;
+    }
+
+    LLSD describeControl(LLView* view) const
+    {
+        if (!view)
+            return {};
+        LLSD result          = view->getInfo();
+        result["control_id"] = mInspection->controlId(view);
+        return result;
+    }
+
+    std::pair<S32, S32> commandPosition(const LLSD& command, LLView* target) const
+    {
+        if (command.has("x") && command.has("y"))
+            return { command["x"].asInteger(), command["y"].asInteger() };
+        const LLRect rect = target->calcScreenRect();
+        return { rect.getCenterX(), rect.getCenterY() };
     }
 
     LLSD input(const LLSD& command)
@@ -358,25 +402,86 @@ private:
         requireInitialized();
         requireCapability("input");
         const std::string event = command["event"].asString();
-        if (event != "click" && event != "doubleClick" && event != "key" && event != "text" && event != "fill")
+        if (event != "click" && event != "doubleClick" && event != "key" && event != "text" && event != "fill" && event != "drag")
         {
             throw LabError("input", "unsupported input event: " + event);
         }
-        LLView*    target = resolveTarget(command);
+        const bool has_target_selector = command.has("path") || command.has("modelId") || command.has("controlId");
+        LLView*    target              = has_target_selector ? resolveTarget(command) : nullptr;
+        if (!target && event == "click" && command.has("x") && command.has("y"))
+            target = mInspection->pickView(command["x"].asInteger(), command["y"].asInteger());
+        if (!target && event == "drag" && command.has("startX") && command.has("startY"))
+            target = mInspection->pickView(command["startX"].asInteger(), command["startY"].asInteger());
+        if (!target && event != "click" && event != "drag")
+            throw LabError("input", "input event requires a target control");
         const LLSD before = inputState();
         if (event == "key" || event == "text" || event == "fill")
         {
             const std::string path = target->getPathname();
             (void)callEventApi("LLWindow", pointerEvent("mouseDown", "LEFT", target));
             (void)callEventApi("LLWindow", pointerEvent("mouseUp", "LEFT", target));
-            LLSD result     = event == "key" ? mUIHost->inputKey(command["key"].asString(), command["modifiers"])
-                                             : mUIHost->inputText(command["text"].asString(), event == "fill");
-            result["path"]  = path;
-            result["event"] = event;
+            LLSD result;
+            if (event == "key")
+            {
+                result = mUIHost->inputKey(command["key"].asString(), command["modifiers"]);
+            }
+            else if (event == "fill")
+            {
+                const LLSD select_all = callEventApi("LLWindow", LLSDMap("op", "selectAll"));
+                const LLSD paste_text = callEventApi("LLWindow", LLSDMap("op", "pasteText")("text", command["text"]));
+                result =
+                    LLSDMap("handled", true)("text", command["text"])("replace", true)("selectAll", select_all)("pasteText", paste_text);
+            }
+            else
+            {
+                result = mUIHost->inputText(command["text"].asString(), false);
+            }
+            result["path"]      = path;
+            result["controlId"] = mInspection->controlId(target);
+            result["event"]     = event;
             addInputState(result, before);
-            mUIHost->recordAction(
-                LLSDMap("action", event)("path", path)(event == "key" ? "key" : "text", event == "key" ? command["key"] : command["text"]));
+            mUIHost->recordAction(LLSDMap("action", event)("path", path)("controlId", mInspection->controlId(target))(
+                event == "key" ? "key" : "text", event == "key" ? command["key"] : command["text"]));
             mUIHost->renderFrame(true);
+            return result;
+        }
+        if (event == "drag")
+        {
+            S32 start_x = 0;
+            S32 start_y = 0;
+            S32 end_x   = 0;
+            S32 end_y   = 0;
+            if (has_target_selector)
+            {
+                std::tie(start_x, start_y) = commandPosition(command, target);
+                end_x                      = start_x + command["deltaX"].asInteger();
+                end_y                      = start_y + command["deltaY"].asInteger();
+            }
+            else
+            {
+                start_x = command["startX"].asInteger();
+                start_y = command["startY"].asInteger();
+                end_x   = command["endX"].asInteger();
+                end_y   = command["endY"].asInteger();
+            }
+            const LLSD down           = callEventApi("LLWindow", pointerEventAt("mouseDown", "LEFT", start_x, start_y));
+            const LLSD after_down     = inputState();
+            LLView*    gesture_target = dynamic_cast<LLView*>(gFocusMgr.getMouseCapture());
+            if (!gesture_target)
+                gesture_target = target;
+            const LLSD move       = callEventApi("LLWindow", pointerEventAt("mouseMove", "LEFT", end_x, end_y));
+            const LLSD after_move = inputState();
+            const LLSD up         = callEventApi("LLWindow", pointerEventAt("mouseUp", "LEFT", end_x, end_y));
+            mUIHost->renderFrame(true);
+            LLSD result = LLSDMap("path", gesture_target ? gesture_target->getPathname() : std::string())(
+                "controlId", gesture_target ? mInspection->controlId(gesture_target) : std::string())("event", event)(
+                "handled", down["handled"].asBoolean() || move["handled"].asBoolean() || up["handled"].asBoolean())("down", down)(
+                "move", move)("up", up)("start", LLSDMap("x", start_x)("y", start_y))("end", LLSDMap("x", end_x)("y", end_y))(
+                "mouseCaptureAfterDown", after_down["mouseCapture"])("mouseCaptureAfterMove", after_move["mouseCapture"]);
+            addInputState(result, before);
+            if (gesture_target)
+                mUIHost->recordAction(LLSDMap("action", "drag")("path", gesture_target->getPathname())(
+                    "controlId", mInspection->controlId(gesture_target))("deltaX", end_x - start_x)("deltaY", end_y - start_y));
             return result;
         }
         const std::string button = command["button"].asString();
@@ -387,31 +492,31 @@ private:
             throw LabError("input", "doubleClick supports only the left button");
         }
 
-        const std::string path                    = target->getPathname();
-        const std::string production_button       = button == "left" ? "LEFT" : "RIGHT";
-        const std::string down_operation          = event == "doubleClick" ? "mouseDoubleClick" : "mouseDown";
-        const LLSD        down                    = callEventApi("LLWindow", pointerEvent(down_operation, production_button, target));
+        const std::string path              = target ? target->getPathname() : std::string();
+        const auto [screen_x, screen_y]     = commandPosition(command, target);
+        const std::string production_button = button == "left" ? "LEFT" : "RIGHT";
+        const std::string down_operation    = event == "doubleClick" ? "mouseDoubleClick" : "mouseDown";
+        const LLSD        down = callEventApi("LLWindow", pointerEventAt(down_operation, production_button, screen_x, screen_y));
         const bool        menu_visible_after_down = gMenuHolder && gMenuHolder->hasVisibleMenu();
-        const LLSD        up                      = callEventApi("LLWindow", pointerEvent("mouseUp", production_button, target));
+        const LLSD        up = callEventApi("LLWindow", pointerEventAt("mouseUp", production_button, screen_x, screen_y));
         mUIHost->renderFrame(true);
 
-        LLSD result = LLSDMap("path", path)("modelId", command["modelId"])("event", event)("button", button)(
-            "handled", down["handled"].asBoolean() || up["handled"].asBoolean())("downHandled", down["handled"])(
-            "upHandled", up["handled"])("menuVisibleAfterDown", menu_visible_after_down)(
-            "menuVisibleAfterUp", gMenuHolder && gMenuHolder->hasVisibleMenu())("down", down)("up", up);
+        LLSD result =
+            LLSDMap("path", path)("controlId", target ? mInspection->controlId(target) : std::string())("modelId", command["modelId"])(
+                "event", event)("button", button)("handled", down["handled"].asBoolean() || up["handled"].asBoolean())(
+                "downHandled", down["handled"])("upHandled", up["handled"])("menuVisibleAfterDown", menu_visible_after_down)(
+                "menuVisibleAfterUp", gMenuHolder && gMenuHolder->hasVisibleMenu())("down", down)("up", up);
         addInputState(result, before);
         const std::string action = event == "doubleClick" ? "double_click" : (button == "right" ? "right_click" : "click");
-        mUIHost->recordAction(LLSDMap("action", action)("path", path));
+        mUIHost->recordAction(
+            LLSDMap("action", action)("path", path)("controlId", target ? mInspection->controlId(target) : std::string()));
         return result;
     }
 
     LLSD inputState() const
     {
-        return LLSDMap("focus", dynamic_cast<LLView*>(gFocusMgr.getKeyboardFocus())
-                                    ? dynamic_cast<LLView*>(gFocusMgr.getKeyboardFocus())->getInfo()
-                                    : LLSD())("mouseCapture", dynamic_cast<LLView*>(gFocusMgr.getMouseCapture())
-                                                                  ? dynamic_cast<LLView*>(gFocusMgr.getMouseCapture())->getInfo()
-                                                                  : LLSD());
+        return LLSDMap("focus", describeControl(dynamic_cast<LLView*>(gFocusMgr.getKeyboardFocus())))(
+            "mouseCapture", describeControl(dynamic_cast<LLView*>(gFocusMgr.getMouseCapture())));
     }
 
     void addInputState(LLSD& result, const LLSD& before) const

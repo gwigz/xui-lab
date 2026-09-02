@@ -42,7 +42,18 @@ class ModelIdSelector:
         return f"model id {self.model_id!r}"
 
 
-Selector: TypeAlias = PathSelector | ModelIdSelector
+@dataclass(frozen=True)
+class ControlIdSelector:
+    control_id: str
+
+    def target(self) -> dict[str, Any]:
+        return {"controlId": self.control_id}
+
+    def describe(self) -> str:
+        return f"control id {self.control_id!r}"
+
+
+Selector: TypeAlias = PathSelector | ModelIdSelector | ControlIdSelector
 
 
 @dataclass(frozen=True)
@@ -67,20 +78,33 @@ class WaitForStable:
 
 
 @dataclass(frozen=True)
-class Resize:
+class ResizeViewport:
     width: int
     height: int
     ui_scale: float | None = None
 
     def to_command(self) -> dict[str, Any]:
         command: dict[str, Any] = {
-            "op": "resize",
+            "op": "resizeViewport",
             "width": self.width,
             "height": self.height,
         }
         if self.ui_scale is not None:
             command["uiScale"] = self.ui_scale
         return command
+
+
+@dataclass(frozen=True)
+class ResizeSubject:
+    width: int
+    height: int
+
+    def to_command(self) -> dict[str, Any]:
+        return {
+            "op": "resizeSubject",
+            "width": self.width,
+            "height": self.height,
+        }
 
 
 @dataclass(frozen=True)
@@ -119,6 +143,51 @@ class PointerAction:
             "button": self.button.value,
             **self.selector.target(),
         }
+
+
+@dataclass(frozen=True)
+class CoordinatePointerAction:
+    event: PointerEvent
+    button: MouseButton
+    x: int
+    y: int
+
+    def to_command(self) -> dict[str, Any]:
+        return {
+            "op": "input",
+            "event": self.event.value,
+            "button": self.button.value,
+            "x": self.x,
+            "y": self.y,
+        }
+
+
+@dataclass(frozen=True)
+class DragAction:
+    start_x: int | None = None
+    start_y: int | None = None
+    end_x: int | None = None
+    end_y: int | None = None
+    selector: Selector | None = None
+    delta_x: int | None = None
+    delta_y: int | None = None
+
+    def to_command(self) -> dict[str, Any]:
+        command: dict[str, Any] = {"op": "input", "event": "drag"}
+        if self.selector is not None:
+            command.update(self.selector.target())
+            command["deltaX"] = self.delta_x
+            command["deltaY"] = self.delta_y
+        else:
+            command.update(
+                {
+                    "startX": self.start_x,
+                    "startY": self.start_y,
+                    "endX": self.end_x,
+                    "endY": self.end_y,
+                }
+            )
+        return command
 
 
 @dataclass(frozen=True)
@@ -213,3 +282,9 @@ def model_id_selector(value: Any, label: str = "modelId") -> ModelIdSelector:
     except ValueError as error:
         raise InputError(f"{label} must be a UUID string") from error
     return ModelIdSelector(str(parsed))
+
+
+def control_id_selector(value: Any, label: str = "controlId") -> ControlIdSelector:
+    if not isinstance(value, str) or not value:
+        raise InputError(f"{label} must be a non-empty string")
+    return ControlIdSelector(value)

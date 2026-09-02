@@ -11,6 +11,68 @@ failure, it keeps the frame, UI tree, event trace, diagnostics, and runtime log.
 The API must preserve LLUI semantics. It must not introduce a parallel widget
 model.
 
+## Make the CLI the agent control plane
+
+The design should follow the stream separation and exit-status guidance in the
+[Command Line Interface Guidelines](https://clig.dev/), the discoverable field
+selection in [GitHub CLI JSON output](https://cli.github.com/manual/gh_help_formatting),
+and the JSONL and output-schema patterns exposed by
+[`codex exec`](https://github.com/openai/codex/blob/main/codex-rs/exec/src/cli.rs).
+The browser inspector remains optional for a person to view. Agents use the CLI.
+
+- [ ] Define a versioned CLI contract before adding commands. Specify stdout,
+  stderr, exit statuses, error codes, timestamps, and compatibility rules.
+- [ ] Add `xui-lab subjects --json` to list subjects, required capabilities,
+  source provenance, and whether the selected runtime can open each subject.
+- [ ] Add `xui-lab operations --json` to discover every supported query and
+  input operation, its arguments, and the runtime capability that enables it.
+- [ ] Add `xui-lab schema` to emit the JSON Schemas for commands, results,
+  events, errors, tree nodes, selectors, and artifact manifests.
+- [ ] Add a noninteractive `xui-lab session start` command that returns a stable
+  session ID, viewer PID, fork commit, subject, viewport, and capabilities.
+- [ ] Back sessions with a local authenticated socket or similarly narrow IPC
+  boundary. Do not require a browser or expose a network listener by default.
+- [ ] Add `session status`, `session close`, and stale-session cleanup. Make
+  close idempotent and report whether a process was actually terminated.
+- [ ] Add a JSONL session mode that reads one typed command per stdin line and
+  writes one correlated result or event per stdout line without restarting the
+  viewer.
+- [ ] Give every request a caller-supplied or generated request ID. Echo it in
+  results, progress events, errors, and artifact manifests.
+- [ ] Keep structured results on stdout and diagnostics on stderr. Disable
+  prompts, progress animation, color, and terminal-dependent wording in JSON
+  and JSONL modes.
+- [ ] Add `--timeout` and deterministic cancellation semantics to every command
+  that waits for startup, stability, rendering, input, or shutdown.
+- [ ] Add one-shot `tree`, `pick`, `get`, `click`, `fill`, `press`, `drag-by`,
+  `resize-viewport`, `resize-subject`, `capture`, `reload`, and `diagnostics`
+  commands which reuse the same typed operations as Python scenarios.
+- [ ] Accept selectors through unambiguous flags such as `--control-id`,
+  `--model-id`, and `--path`. Reject conflicting selector flags at parsing.
+- [ ] Prefer control IDs in returned commands and recordings. Preserve XUI
+  paths as provenance and explain when a structural ID became stale.
+- [ ] Add `--fields` and `--jq`-style projection so agents can request a small
+  tree slice or a few result fields without ingesting an entire UI tree.
+- [ ] Return concise tree excerpts by default. Put full trees, frames, traces,
+  and logs in artifacts and return their absolute paths, sizes, and hashes.
+- [ ] Add an explicit `--include-tree` escape hatch with a documented size
+  warning. Never inline image bytes in ordinary JSON results.
+- [ ] Emit stable machine errors with `code`, `message`, `operation`, selector,
+  capability, retryability, and relevant artifact paths. Do not require parsing
+  prose to choose the next action.
+- [ ] Make capability and input-operation preflight a first-class CLI command
+  and include suggested valid operations when one is unavailable.
+- [ ] Add `--dry-run` to commands that can reload state, prune artifacts, or
+  terminate a session. Keep input gestures explicit rather than labeling them
+  as harmless dry runs.
+- [ ] Add `xui-lab record --output FILE` and `xui-lab replay FILE` using a
+  versioned, selector-stable command format suitable for review and editing.
+- [ ] Add shell-level contract tests for exit status, stdout purity, stderr
+  diagnostics, JSON Schema validation, request correlation, timeouts, signals,
+  stale sessions, and paths containing spaces or Unicode.
+- [ ] Publish short copy-paste examples for discovery, one-shot inspection, a
+  persistent resize gesture, capture, scenario execution, and cleanup.
+
 ## Prove the design with Inventory Explorer
 
 - [ ] Make model-ID targeting choose a visible `LLFolderViewItem` with a usable

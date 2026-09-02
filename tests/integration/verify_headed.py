@@ -29,6 +29,7 @@ ROOT = Path(__file__).resolve().parents[2]
 LINE_EDITOR = "/Floater View/floater_test_widgets/test_line_editor"
 CHECKBOX_BUTTON = "/Floater View/floater_test_widgets/test_checkbox/CheckboxCtrl Button"
 COLOR_SWATCH = "/Floater View/floater_test_widgets/group_tab_container/panel2/swatch1"
+FLOATER = "/Floater View/floater_test_widgets"
 
 
 def require(condition: bool, message: str) -> None:
@@ -57,6 +58,16 @@ def rectangle_center(rectangle: Any) -> tuple[int, int]:
     )
     left, right, bottom, top = values
     return ((left + right) // 2, (bottom + top) // 2)
+
+
+def tree_nodes(node: Any) -> list[dict[str, Any]]:
+    require(isinstance(node, dict), "UI tree node must be an object")
+    nodes = [node]
+    children = node.get("children")
+    require(isinstance(children, list), "UI tree children must be an array")
+    for child in children:
+        nodes.extend(tree_nodes(child))
+    return nodes
 
 
 def scale_rectangle(rectangle: Any, scale: float) -> dict[str, int]:
@@ -171,7 +182,7 @@ def main() -> int:
         lab,
         InteractiveConfig(
             subject="test_widgets",
-            viewport=Viewport(800, 600, 1.0),
+            viewport=Viewport(1200, 800, 1.0),
             fixture=None,
             artifact_id="headed-verification",
         ),
@@ -187,8 +198,8 @@ def main() -> int:
         require(initial["processId"] == process_id, "runtime PID diagnostic mismatch")
         initial_viewport = initial["viewport"]
         require(
-            initial_viewport["windowWidth"] == 800
-            and initial_viewport["windowHeight"] == 600,
+            initial_viewport["windowWidth"] == 1200
+            and initial_viewport["windowHeight"] == 800,
             "initial window did not keep the requested screen size",
         )
         system_scale = initial_viewport["systemUIScale"]
@@ -198,19 +209,24 @@ def main() -> int:
             "initial effective UI scale omitted the system UI scale",
         )
         require(
-            initial_viewport["lluiWidth"] == 800
-            and initial_viewport["lluiHeight"] == 600,
+            initial_viewport["lluiWidth"] == 1200
+            and initial_viewport["lluiHeight"] == 800,
             "initial LLUI size changed with the display density",
         )
 
         viewport = session.action(
-            {"action": "resize", "width": 900, "height": 700, "uiScale": 1.25}
+            {
+                "action": "resizeViewport",
+                "width": 1280,
+                "height": 840,
+                "uiScale": 1.0,
+            }
         )
         require(
-            viewport["windowWidth"] == 900 and viewport["windowHeight"] == 700,
+            viewport["windowWidth"] == 1280 and viewport["windowHeight"] == 840,
             "resize did not reach the requested screen size",
         )
-        effective_scale = 1.25 * system_scale
+        effective_scale = system_scale
         require(
             viewport["effectiveUIScale"] == effective_scale,
             "resize reported the wrong effective UI scale",
@@ -220,6 +236,70 @@ def main() -> int:
             and viewport["lluiHeight"]
             == round(viewport["pixelHeight"] / effective_scale),
             "resize reported the wrong LLUI size",
+        )
+
+        subject_size = session.action(
+            {"action": "resizeSubject", "width": 900, "height": 540}
+        )
+        require(
+            subject_size["width"] == 900 and subject_size["height"] == 540,
+            "subject did not reach its deterministic setup size",
+        )
+
+        tree = session.window.query_tree()
+        resize_handles = [
+            node
+            for node in tree_nodes(tree)
+            if str(node.get("class", "")).lstrip("0123456789") == "LLResizeHandle"
+        ]
+        require(len(resize_handles) >= 2, "floater did not expose its resize handles")
+        require(
+            len({node["control_id"] for node in resize_handles}) == len(resize_handles),
+            "resize handles do not have unique control identities",
+        )
+        require(
+            len({node["path"] for node in resize_handles}) < len(resize_handles),
+            "verification subject no longer exercises duplicate generated paths",
+        )
+        bottom_right = max(
+            resize_handles,
+            key=lambda node: (
+                rectangle_center(node.get("screen_rect"))[0],
+                -rectangle_center(node.get("screen_rect"))[1],
+            ),
+        )
+        handle_x, handle_y = rectangle_center(bottom_right["screen_rect"])
+        picked_handle = session.window.pick(handle_x, handle_y)
+        require(
+            picked_handle.control_id == bottom_right["control_id"],
+            "inspection did not select the non-opaque resize handle",
+        )
+        floater_before = (
+            session.window.get_by_path(FLOATER).resolve().info["screen_rect"]
+        )
+        drag = (
+            session.window.get_by_control_id(bottom_right["control_id"])
+            .drag_by(dx=60, dy=-40)
+            .expect_handled()
+            .data
+        )
+        require(
+            drag["mouseCaptureAfterDown"]["control_id"] == bottom_right["control_id"],
+            "resize drag did not acquire the selected handle",
+        )
+        require(
+            drag["mouseCaptureAfter"] is None,
+            "resize drag did not release mouse capture",
+        )
+        floater_after = (
+            session.window.get_by_path(FLOATER).resolve().info["screen_rect"]
+        )
+        require(
+            floater_after["right"] - floater_after["left"]
+            > floater_before["right"] - floater_before["left"]
+            and floater_after["top"] - floater_after["bottom"]
+            > floater_before["top"] - floater_before["bottom"],
+            "resize-handle drag did not enlarge the floater",
         )
 
         line_editor = session.window.get_by_path(LINE_EDITOR)
@@ -273,7 +353,13 @@ def main() -> int:
             "capture highlight did not convert its screen rectangle to framebuffer coordinates",
         )
 
+        session.window.get_by_path(LINE_EDITOR).type_text("replace me")
         filled = session.window.get_by_path(LINE_EDITOR).fill("headed input").data
+        require(
+            session.window.get_by_path(LINE_EDITOR).resolve().info["value"]
+            == "headed input",
+            "fill appended instead of replacing the editor value",
+        )
         pressed = session.window.get_by_path(LINE_EDITOR).press("Enter").data
         clicked = session.window.get_by_path(CHECKBOX_BUTTON).click().data
         for name, result in (("fill", filled), ("key", pressed), ("click", clicked)):
@@ -304,6 +390,7 @@ def main() -> int:
         export = session.action({"action": "export"})
         require(Path(export["path"]).is_file(), "UI-tree export was not written")
         state = session.state()
+        require("drag" in state["inputOperations"], "state omitted drag support")
         recording = state["recording"]
         require(any("fill(" in line for line in recording), "recorder omitted fill")
         require(
@@ -314,6 +401,11 @@ def main() -> int:
             {
                 "processId": process_id,
                 "viewport": viewport,
+                "subjectSize": subject_size,
+                "resizeHandle": bottom_right,
+                "resizeDrag": drag,
+                "floaterBeforeDrag": floater_before,
+                "floaterAfterDrag": floater_after,
                 "pick": picked.info,
                 "capture": capture,
                 "swatchPixel": swatch_pixel,
@@ -321,7 +413,7 @@ def main() -> int:
                 "reload": reload_result,
                 "replay": replay,
                 "recording": recording,
-                "tree": session.window.query_tree(),
+                "treeNodeCount": len(tree_nodes(state["tree"])),
                 "uiTreeExport": export["path"],
             }
         )

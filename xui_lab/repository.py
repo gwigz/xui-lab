@@ -11,6 +11,7 @@ from typing import Any
 
 from .domain import Fork, parse_manifest
 from .errors import InputError, XUILabError
+from .inspector_assets import inspector_assets_problem, inspector_build_instruction
 from .markdown_style import audit_markdown
 from .scenarios import discover_scenarios
 
@@ -301,6 +302,9 @@ def check_repository(viewer_sources: list[str]) -> str:
         )
         adapters[fork.id] = load_adapter(fork)
     check_scenarios(adapters)
+    assets_problem = inspector_assets_problem()
+    if assets_problem is not None:
+        raise CheckError(f"{assets_problem}; {inspector_build_instruction()}")
     markdown_findings = audit_markdown()
     if markdown_findings:
         details = "\n".join(markdown_findings)
