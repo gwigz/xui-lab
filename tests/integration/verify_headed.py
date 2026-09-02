@@ -9,6 +9,7 @@ import math
 import struct
 import subprocess
 import sys
+import zlib
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,7 @@ from xui_lab.scenarios import discover_scenarios
 ROOT = Path(__file__).resolve().parents[2]
 LINE_EDITOR = "/Floater View/floater_test_widgets/test_line_editor"
 CHECKBOX_BUTTON = "/Floater View/floater_test_widgets/test_checkbox/CheckboxCtrl Button"
+COLOR_SWATCH = "/Floater View/floater_test_widgets/group_tab_container/panel2/swatch1"
 
 
 def require(condition: bool, message: str) -> None:
@@ -79,6 +81,67 @@ def png_dimensions(path: Path) -> tuple[int, int]:
     require(header[:8] == b"\x89PNG\r\n\x1a\n", "capture is not a PNG")
     require(len(header) == 24 and header[12:16] == b"IHDR", "PNG header is incomplete")
     return struct.unpack(">II", header[16:24])
+
+
+def png_pixel(path: Path, x: int, y: int) -> tuple[int, int, int, int]:
+    data = path.read_bytes()
+    require(data[:8] == b"\x89PNG\r\n\x1a\n", "capture is not a PNG")
+    cursor = 8
+    width = height = 0
+    compressed = bytearray()
+    while cursor < len(data):
+        length = struct.unpack(">I", data[cursor : cursor + 4])[0]
+        chunk_type = data[cursor + 4 : cursor + 8]
+        chunk = data[cursor + 8 : cursor + 8 + length]
+        cursor += length + 12
+        if chunk_type == b"IHDR":
+            width, height, depth, color, compression, filtering, interlace = (
+                struct.unpack(">IIBBBBB", chunk)
+            )
+            require(
+                (depth, color, compression, filtering, interlace) == (8, 6, 0, 0, 0),
+                "capture is not an 8-bit non-interlaced RGBA PNG",
+            )
+        elif chunk_type == b"IDAT":
+            compressed.extend(chunk)
+        elif chunk_type == b"IEND":
+            break
+
+    require(0 <= x < width and 0 <= y < height, "pixel is outside the capture")
+    decoded = zlib.decompress(compressed)
+    stride = width * 4
+    previous = bytearray(stride)
+    offset = 0
+    for row_index in range(height):
+        filter_type = decoded[offset]
+        row = bytearray(decoded[offset + 1 : offset + 1 + stride])
+        offset += stride + 1
+        for index, value in enumerate(row):
+            left = row[index - 4] if index >= 4 else 0
+            above = previous[index]
+            upper_left = previous[index - 4] if index >= 4 else 0
+            if filter_type == 1:
+                row[index] = (value + left) & 0xFF
+            elif filter_type == 2:
+                row[index] = (value + above) & 0xFF
+            elif filter_type == 3:
+                row[index] = (value + ((left + above) // 2)) & 0xFF
+            elif filter_type == 4:
+                estimate = left + above - upper_left
+                distances = (
+                    abs(estimate - left),
+                    abs(estimate - above),
+                    abs(estimate - upper_left),
+                )
+                nearest = (left, above, upper_left)[distances.index(min(distances))]
+                row[index] = (value + nearest) & 0xFF
+            else:
+                require(filter_type == 0, "capture uses an unknown PNG filter")
+        if row_index == y:
+            start = x * 4
+            return tuple(row[start : start + 4])
+        previous = row
+    raise RuntimeError("capture omitted the requested pixel")
 
 
 def parse_args() -> argparse.Namespace:
@@ -161,6 +224,7 @@ def main() -> int:
 
         line_editor = session.window.get_by_path(LINE_EDITOR)
         control = line_editor.resolve()
+        swatch = session.window.get_by_path(COLOR_SWATCH).resolve()
         x, y = rectangle_center(control.info.get("screen_rect"))
         picked = session.window.pick(x, y)
         require(
@@ -185,6 +249,19 @@ def main() -> int:
         require(
             overlay["interactiveState"]["visible"] is True,
             "capture metadata omitted live overlay state",
+        )
+        swatch_rect = scale_rectangle(swatch.info.get("screen_rect"), effective_scale)
+        swatch_x = (swatch_rect["left"] + swatch_rect["right"]) // 2
+        swatch_y = (
+            viewport["pixelHeight"]
+            - 1
+            - (swatch_rect["bottom"] + swatch_rect["top"]) // 2
+        )
+        swatch_pixel = png_pixel(Path(capture["path"]), swatch_x, swatch_y)
+        red, green, blue, alpha = swatch_pixel
+        require(
+            red >= 40 and green - red >= 35 and blue - green >= 35 and alpha >= 250,
+            f"color swatch rendered the wrong pixel: {swatch_pixel}",
         )
         highlighted_capture = session.window.capture(
             "headed-with-capture-highlight", highlight=line_editor
@@ -239,6 +316,7 @@ def main() -> int:
                 "viewport": viewport,
                 "pick": picked.info,
                 "capture": capture,
+                "swatchPixel": swatch_pixel,
                 "highlightedCapture": highlighted_capture,
                 "reload": reload_result,
                 "replay": replay,

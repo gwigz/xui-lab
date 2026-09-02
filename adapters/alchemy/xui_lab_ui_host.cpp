@@ -5,6 +5,7 @@
 #include "xui_lab_error.h"
 #include "xui_lab_event_api.h"
 
+#include "altextureslot.h"
 #include "llaccordionctrl.h"
 #include "alfloaterinventoryexplorer.h"
 #include "llcallbacklist.h"
@@ -212,8 +213,18 @@ public:
     LLPointer<LLUIImage> getUIImageByID(const LLUUID& id, S32) override
     { throw xui_lab::Error("texture_id", "network texture UUID is unavailable in xui-lab: " + id.asString()); }
 
+    void installWhiteTexture()
+    {
+        const LLPointer<LLUIImage> white_image   = getUIImage("white.tga", LLGLTexture::BOOST_UI);
+        LLImageGL*                 white_texture = white_image->getImage()->getGLTexture();
+        if (!white_texture || !white_texture->getTexName())
+            throw xui_lab::Error("texture", "production white UI texture has no GL texture");
+        ALTextureSlot::sWhiteTexture = white_texture->getTexName();
+    }
+
     void cleanUp() override
     {
+        ALTextureSlot::sWhiteTexture = 0;
         LLUIImage::cleanupClass();
         mImages.clear();
     }
@@ -519,6 +530,7 @@ public:
 
         mImages = std::make_unique<LabImageProvider>();
         mImages->loadDeclarations();
+        mImages->installWhiteTexture();
         LLUI::settings_map_t settings;
         settings["config"]  = &gSavedSettings;
         settings["ignores"] = &gWarningSettings;
