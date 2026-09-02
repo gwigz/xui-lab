@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xui-lab.local/schemas/fixture.schema.json",
+  "title": "xui-lab deterministic viewer fixture",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "agent", "inventory", "avatarNames"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
+    "agent": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": { "id": { "type": "string", "format": "uuid" }, "name": { "type": "string" } }
+    },
+    "inventory": { "type": "array", "items": { "type": "object", "required": ["id", "parentId", "kind", "name"] } },
+    "avatarNames": { "type": "array", "items": { "type": "object", "required": ["id", "displayName", "userName"] } }
+  }
+}

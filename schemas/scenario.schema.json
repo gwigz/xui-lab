@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xui-lab.local/schemas/scenario.schema.json",
+  "title": "xui-lab scenario",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "id", "fork", "subject", "viewport", "steps"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "id": { "$ref": "#/$defs/id" },
+    "fork": { "$ref": "#/$defs/id" },
+    "subject": { "type": "string", "minLength": 1 },
+    "fixture": { "$ref": "#/$defs/path" },
+    "viewport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "uiScale": { "type": "number", "exclusiveMinimum": 0 }
+      }
+    },
+    "requires": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "object", "required": ["op"] }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
+    "path": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$" }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xui-lab.local/schemas/adapter.schema.json",
+  "title": "xui-lab fork adapter contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "fork", "productionTarget", "capabilities", "subjects"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "fork": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
+    "productionTarget": { "type": "string", "minLength": 1 },
+    "capabilities": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+    "subjects": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "uniqueItems": true,
+        "items": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

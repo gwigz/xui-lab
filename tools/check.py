@@ -12,6 +12,11 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from xui_lab.domain import Fork, parse_manifest, parse_scenario
+from xui_lab.errors import InputError
+
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REQUIRED_SPEC_HEADINGS = (
@@ -27,21 +32,9 @@ REQUIRED_AGENT_TEXT = (
     "SPEC.md",
     "forks.json",
     "python3 tools/check.py",
-    ".gwigz/remote-build",
     "CMAKE_CXX_STANDARD",
     "Do not push",
 )
-FORK_ID_PATTERN = re.compile(r"^[a-z][a-z0-9_-]*$")
-ROOT_KEYS = {"$schema", "schemaVersion", "defaultFork", "forks"}
-FORK_KEYS = {
-    "id",
-    "displayName",
-    "source",
-    "adapter",
-    "buildDriver",
-    "resourceRoot",
-}
-SOURCE_KEYS = {"type", "path"}
 
 
 class CheckError(ValueError):
@@ -49,11 +42,9 @@ class CheckError(ValueError):
 
 
 @dataclass(frozen=True)
-class Fork:
-    id: str
-    source_path: Path
-    adapter_path: Path
-    resource_root: PurePosixPath
+class Adapter:
+    capabilities: frozenset[str]
+    subjects: dict[str, frozenset[str]]
 
 
 def require_mapping(value: Any, label: str) -> dict[str, Any]:
@@ -85,62 +76,16 @@ def reject_unknown_keys(mapping: dict[str, Any], allowed: set[str], label: str) 
 def load_manifest() -> tuple[str, list[Fork]]:
     manifest_path = REPO_ROOT / "forks.json"
     try:
-        manifest = require_mapping(json.loads(manifest_path.read_text()), "manifest")
-    except (OSError, json.JSONDecodeError) as error:
+        manifest = parse_manifest(REPO_ROOT, json.loads(manifest_path.read_text()))
+    except (OSError, json.JSONDecodeError, InputError) as error:
         raise CheckError(f"cannot read {manifest_path.name}: {error}") from error
 
-    reject_unknown_keys(manifest, ROOT_KEYS, "manifest")
-    schema_path = require_string(manifest, "$schema", "manifest")
-    if schema_path != "schemas/forks.schema.json":
-        raise CheckError("manifest.$schema must name schemas/forks.schema.json")
+    schema_path = REPO_ROOT / "schemas" / "forks.schema.json"
     try:
-        json.loads((REPO_ROOT / schema_path).read_text())
+        json.loads(schema_path.read_text())
     except (OSError, json.JSONDecodeError) as error:
         raise CheckError(f"cannot read the fork schema: {error}") from error
-
-    if manifest.get("schemaVersion") != 1:
-        raise CheckError("manifest.schemaVersion must be 1")
-
-    default_fork = require_string(manifest, "defaultFork", "manifest")
-    entries = manifest.get("forks")
-    if not isinstance(entries, list) or not entries:
-        raise CheckError("manifest.forks must be a non-empty array")
-
-    forks: list[Fork] = []
-    seen: set[str] = set()
-    for index, raw_entry in enumerate(entries):
-        label = f"manifest.forks[{index}]"
-        entry = require_mapping(raw_entry, label)
-        reject_unknown_keys(entry, FORK_KEYS, label)
-        fork_id = require_string(entry, "id", label)
-        if not FORK_ID_PATTERN.fullmatch(fork_id):
-            raise CheckError(f"{label}.id has an invalid format")
-        if fork_id in seen:
-            raise CheckError(f"duplicate fork id: {fork_id}")
-        seen.add(fork_id)
-
-        require_string(entry, "displayName", label)
-        require_string(entry, "buildDriver", label)
-        source = require_mapping(entry.get("source"), f"{label}.source")
-        reject_unknown_keys(source, SOURCE_KEYS, f"{label}.source")
-        if source.get("type") != "submodule":
-            raise CheckError(f"{label}.source.type must be 'submodule'")
-        source_path = relative_path(
-            require_string(source, "path", f"{label}.source"),
-            f"{label}.source.path",
-        )
-        adapter_path = relative_path(
-            require_string(entry, "adapter", label), f"{label}.adapter"
-        )
-        resource_root = PurePosixPath(require_string(entry, "resourceRoot", label))
-        if resource_root.is_absolute() or ".." in resource_root.parts:
-            raise CheckError(f"{label}.resourceRoot must be a relative path")
-
-        forks.append(Fork(fork_id, source_path, adapter_path, resource_root))
-
-    if default_fork not in seen:
-        raise CheckError("manifest.defaultFork does not name a declared fork")
-    return default_fork, forks
+    return str(manifest.default_fork), list(manifest.forks.values())
 
 
 def parse_overrides(values: list[str], known_ids: set[str]) -> dict[str, Path]:
@@ -201,10 +146,111 @@ def check_agent_guidance() -> None:
         )
 
 
+def load_adapter(fork: Fork) -> Adapter:
+    path = fork.adapter / "adapter.json"
+    try:
+        data = require_mapping(json.loads(path.read_text()), f"adapter {fork.id}")
+    except (OSError, json.JSONDecodeError) as error:
+        raise CheckError(f"cannot read {path}: {error}") from error
+    allowed = {
+        "$schema", "schemaVersion", "fork", "productionTarget",
+        "capabilities", "subjects",
+    }
+    reject_unknown_keys(data, allowed, f"adapter {fork.id}")
+    if data.get("schemaVersion") != 1:
+        raise CheckError(f"adapter {fork.id}.schemaVersion must be 1")
+    if data.get("fork") != fork.id:
+        raise CheckError(f"adapter {fork.id}.fork must be {fork.id}")
+    require_string(data, "productionTarget", f"adapter {fork.id}")
+    capabilities_value = data.get("capabilities")
+    if not isinstance(capabilities_value, list) or any(
+        not isinstance(value, str) or not value for value in capabilities_value
+    ):
+        raise CheckError(f"adapter {fork.id}.capabilities must be an array of strings")
+    capabilities = frozenset(capabilities_value)
+    if len(capabilities) != len(capabilities_value):
+        raise CheckError(f"adapter {fork.id}.capabilities contains duplicates")
+    subjects_value = require_mapping(data.get("subjects"), f"adapter {fork.id}.subjects")
+    subjects: dict[str, frozenset[str]] = {}
+    for subject, required_value in subjects_value.items():
+        if not isinstance(subject, str) or not subject:
+            raise CheckError(f"adapter {fork.id}.subjects contains an invalid name")
+        if not isinstance(required_value, list) or any(
+            not isinstance(value, str) or not value for value in required_value
+        ):
+            raise CheckError(f"adapter {fork.id}.subjects.{subject} must be an array of strings")
+        required = frozenset(required_value)
+        unknown = sorted(required - capabilities)
+        if unknown:
+            raise CheckError(
+                f"adapter {fork.id}.subjects.{subject} uses unknown capabilities: "
+                f"{', '.join(unknown)}"
+            )
+        subjects[subject] = required
+    return Adapter(capabilities, subjects)
+
+
+def check_fixture(path: Path) -> None:
+    try:
+        data = require_mapping(json.loads(path.read_text()), str(path))
+    except (OSError, json.JSONDecodeError) as error:
+        raise CheckError(f"cannot read fixture {path}: {error}") from error
+    if data.get("schemaVersion") != 1:
+        raise CheckError(f"{path}.schemaVersion must be 1")
+    inventory = data.get("inventory")
+    if not isinstance(inventory, list):
+        raise CheckError(f"{path}.inventory must be an array")
+    identifiers: set[str] = set()
+    for index, entry_value in enumerate(inventory):
+        entry = require_mapping(entry_value, f"{path}.inventory[{index}]")
+        identifier = require_string(entry, "id", f"{path}.inventory[{index}]")
+        if identifier in identifiers:
+            raise CheckError(f"{path} contains duplicate inventory id: {identifier}")
+        identifiers.add(identifier)
+
+
+def check_scenarios(adapters: dict[str, Adapter]) -> None:
+    paths = sorted((REPO_ROOT / "scenarios").glob("*.json"))
+    if not paths:
+        raise CheckError("no scenario files are defined")
+    scenario_ids: set[str] = set()
+    for path in paths:
+        try:
+            scenario = parse_scenario(REPO_ROOT, json.loads(path.read_text()), str(path))
+        except (OSError, json.JSONDecodeError, InputError) as error:
+            raise CheckError(f"invalid scenario {path}: {error}") from error
+        if scenario.id in scenario_ids:
+            raise CheckError(f"duplicate scenario id: {scenario.id}")
+        scenario_ids.add(scenario.id)
+        adapter = adapters.get(scenario.fork)
+        if adapter is None:
+            raise CheckError(f"scenario {scenario.id} names unknown fork: {scenario.fork}")
+        if scenario.subject not in adapter.subjects:
+            raise CheckError(
+                f"scenario {scenario.id} names unregistered subject: {scenario.subject}"
+            )
+        unknown = sorted(str(value) for value in scenario.required_capabilities - adapter.capabilities)
+        if unknown:
+            raise CheckError(
+                f"scenario {scenario.id} requires undeclared capabilities: {', '.join(unknown)}"
+            )
+        subject_missing = sorted(
+            adapter.subjects[scenario.subject] - scenario.required_capabilities
+        )
+        if subject_missing:
+            raise CheckError(
+                f"scenario {scenario.id} omits subject capabilities: {', '.join(subject_missing)}"
+            )
+        if scenario.fixture:
+            if not scenario.fixture.is_file():
+                raise CheckError(f"scenario {scenario.id} fixture is missing: {scenario.fixture}")
+            check_fixture(scenario.fixture)
+
+
 def check_fork(fork: Fork, source: Path, submodule_paths: set[Path], overridden: bool) -> None:
-    if not fork.adapter_path.is_dir():
+    if not fork.adapter.is_dir():
         raise CheckError(f"adapter directory is missing for {fork.id}")
-    if not (fork.adapter_path / "README.md").is_file():
+    if not (fork.adapter / "README.md").is_file():
         raise CheckError(f"adapter contract is missing for {fork.id}")
     if not source.is_dir():
         raise CheckError(
@@ -212,7 +258,7 @@ def check_fork(fork: Fork, source: Path, submodule_paths: set[Path], overridden:
             f"--viewer-source {fork.id}=PATH"
         )
     if not overridden:
-        if fork.source_path not in submodule_paths:
+        if fork.source.path not in submodule_paths:
             raise CheckError(f"viewer source is not registered as a submodule: {fork.id}")
         if not (source / ".git").exists():
             raise CheckError(f"viewer submodule is not initialized: {fork.id}")
@@ -240,13 +286,16 @@ def main() -> int:
         submodule_paths = load_submodule_paths()
         check_spec()
         check_agent_guidance()
+        adapters: dict[str, Adapter] = {}
         for fork in forks:
             check_fork(
                 fork,
-                overrides.get(fork.id, fork.source_path),
+                overrides.get(fork.id, fork.source.path),
                 submodule_paths,
                 fork.id in overrides,
             )
+            adapters[fork.id] = load_adapter(fork)
+        check_scenarios(adapters)
     except CheckError as error:
         print(f"xui-lab check failed: {error}", file=sys.stderr)
         return 1

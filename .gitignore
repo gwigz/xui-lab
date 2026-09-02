@@ -3,6 +3,7 @@
 __pycache__/
 
 /artifacts/
+/.audit/
 /build/
 /build-*/
 /CMakeUserPresets.json

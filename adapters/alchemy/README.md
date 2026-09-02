@@ -1,11 +1,13 @@
 # Alchemy adapter
 
-This directory defines how `xui-lab` builds against Alchemy. The adapter has not
-been implemented.
+This directory defines how `xui-lab` builds against Alchemy. `adapter.json` is
+the machine-readable capability contract.
 
-The adapter must use Alchemy's `.gwigz/*` scripts to configure and build the
-viewer source. It must not maintain a second list of `indra/newview` source
-files.
+[`EVENT_APIS.md`](EVENT_APIS.md) records the event APIs retained by the reusable
+UI target and their no-login constraints.
+
+The adapter joins Alchemy's supported CMake graph. It must not maintain a
+second list of `indra/newview` source files.
 
 Alchemy must expose one reusable production UI target. That target must contain
 the newview objects required to construct registered floaters while excluding
@@ -21,5 +23,8 @@ The runtime side of the adapter must:
 - intercept unavailable external effects at their system boundaries; and
 - report a clear error when a subject needs an unavailable capability.
 
-The pinned Alchemy submodule is the default source. Development commands must
-also accept a local source override so an unpushed Alchemy branch can be tested.
+The pinned Alchemy submodule is the default source. A local source override can
+select an unpushed branch without changing the submodule pointer.
+
+Pass the built executable to scenario or interactive commands with
+`--runtime`. Build and artifact locations remain local environment choices.

@@ -1,0 +1,10 @@
+{
+  "$schema": "../../schemas/adapter.schema.json",
+  "schemaVersion": 1,
+  "fork": "alchemy",
+  "productionTarget": "alchemy_newview_ui",
+  "capabilities": ["input", "inspection"],
+  "subjects": {
+    "test_widgets": ["input", "inspection"]
+  }
+}

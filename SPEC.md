@@ -47,7 +47,7 @@ branches without changing the submodule commit.
 3. As a viewer developer, I want to select a supported viewer fork, so that I can test the same XUI concept against different viewers.
 4. As a viewer maintainer, I want each fork build to pin an exact commit, so that a failed scenario can be reproduced later.
 5. As a viewer developer, I want to select a local viewer checkout, so that I can test a branch before I push it.
-6. As an Alchemy developer, I want the adapter to use the `.gwigz/*` build scripts, so that lab builds follow the supported local build process.
+6. As an Alchemy developer, I want the adapter to use the viewer's supported build graph, so that the lab does not maintain a parallel build.
 7. As a fork maintainer, I want one documented adapter contract, so that I can add support without changing the lab core.
 8. As a fork maintainer, I want adapter capability declarations, so that unsupported scenarios fail with a specific reason.
 9. As a UI developer, I want the lab to load XUI from the source checkout, so that I can inspect an edit without packaging a viewer.
@@ -95,7 +95,7 @@ branches without changing the submodule commit.
 - Each supported fork produces its own `xui-lab` binary. The project does not
   define a stable binary interface between different viewer forks.
 - A versioned manifest assigns each fork a stable identifier, source, adapter,
-  build driver, and resource root. Commands may override the source for one
+  and resource root. Commands may override the source for one
   invocation without modifying the manifest.
 - The lab core owns scenario parsing, process control, assertions, inspection
   commands, and artifact naming. Fork adapters own viewer initialization,
@@ -108,8 +108,8 @@ branches without changing the submodule commit.
 - Each fork exposes a reusable production UI build target. The target includes
   the required viewer controller objects and excludes the normal application
   entry point. The lab does not scrape or copy the fork's source list.
-- The Alchemy adapter configures and builds through `.gwigz/*`. The adapter does
-  not introduce a second raw CMake workflow for Alchemy.
+- The Alchemy adapter adds its executable through the viewer's supported CMake
+  graph. The repository does not prescribe a machine-specific build command.
 - The runtime uses a visible SDL OpenGL window in interactive mode and a hidden
   SDL OpenGL window in scenario mode. Both modes use the same renderer.
 - The runtime loads the production UI shader set. It also loads the selected

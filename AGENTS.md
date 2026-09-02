@@ -1,5 +1,8 @@
 # Working in xui-lab
 
+Read `AGENTS.local.md` when it exists. It contains ignored instructions for the
+current machine.
+
 ## Start with the repository contract
 
 Read `SPEC.md`, `forks.json`, and the selected fork adapter before changing
@@ -104,47 +107,11 @@ needed standard feature is unavailable on one supported platform, either choose
 an equally clear supported feature or make the language-level change a separate
 viewer decision with its own build verification.
 
-## Use the selected fork's build driver
+## Use the selected fork's build graph
 
-Never assume that all forks use Alchemy's commands. Read the `buildDriver` and
-the adapter contract for the selected fork. Do not bypass a supported driver
-with raw CMake, Ninja, Xcode, or SSH commands.
-
-Alchemy uses `.gwigz/remote-build` from the selected Alchemy checkout. Inspect
-the resolved settings before a remote operation:
-
-```sh
-ALCH_REMOTE_ROOT=build/xui-lab-alchemy \
-  .gwigz/remote-build info
-```
-
-Use a task-specific `ALCH_REMOTE_ROOT`. Never use an empty value, `/`, `.`,
-`..`, `~`, or a root shared with another active checkout. The driver uses
-`rsync --delete`; two runs against one remote root can corrupt each other's
-source and build state. Do not run configure, build, or sync operations
-concurrently against the same remote root.
-
-After the Alchemy adapter adds the `xui-lab` target, use the driver for the full
-remote cycle:
-
-```sh
-ALCH_REMOTE_ROOT=build/xui-lab-alchemy \
-  .gwigz/remote-build all
-ALCH_REMOTE_ROOT=build/xui-lab-alchemy \
-  .gwigz/remote-build fetch
-ALCH_REMOTE_ROOT=build/xui-lab-alchemy \
-  .gwigz/remote-build verify
-```
-
-Use `build` instead of `all` only after the same remote root has a valid
-configuration for the current source. Read `.gwigz/remote-build` before adding
-new command-line assumptions. The driver currently synchronizes only the
-Alchemy repository, so the adapter must add an explicit way to include the
-outer `xui-lab` source. Do not copy files into the submodule as a workaround.
-
-If SSH, host verification, Touch ID, or another user-presence check blocks the
-driver, report the exact command and wait for the user. Do not replace keys,
-weaken host verification, or change the user's SSH configuration.
+Read the adapter contract before building. Do not bypass a fork's supported
+build graph with a copied source list. Keep machine-specific build, sync, and
+artifact commands in ignored local instructions.
 
 Keep fetched applications, binaries, screenshots, event traces, UI trees, and
 diagnostics out of Git. Store transient results in ignored build or artifact
@@ -179,8 +146,9 @@ python3 tools/check.py --viewer-source alchemy=/path/to/local/alchemy
 ```
 
 Replace the example path with the checkout used for the work. If source or XUI
-changed in a viewer fork, run that fork's adapter checks and supported build
-driver. Exercise the affected behavior and inspect every generated artifact.
+changed in a viewer fork, run that fork's adapter checks and supported local
+build workflow. Exercise the affected behavior and inspect every generated
+artifact.
 
 Before finishing, inspect the status of the superproject and every viewer
 checkout touched by the task. Report the selected fork and commit, commands
