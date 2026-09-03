@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import urlsplit
 
-from .api import Lab, Window
+from .api import Lab, Locator, Window
 from .domain import Capability, Viewport
 from .errors import InputError, RuntimeFailure, XUILabError
 from .inspector_assets import (
@@ -320,7 +320,7 @@ class InteractiveSession:
             raise RuntimeFailure(f"capture result is not a PNG file: {path}")
         return path
 
-    def _locator(self, request: dict[str, Any]):
+    def _locator(self, request: dict[str, Any]) -> Locator:
         control_id = request.get("controlId")
         if isinstance(control_id, str) and control_id:
             return self.window.get_by_control_id(control_id)
@@ -329,7 +329,7 @@ class InteractiveSession:
             raise InputError("action path must be a string")
         return self.window.get_by_path(path)
 
-    def _optional_locator(self, request: dict[str, Any]):
+    def _optional_locator(self, request: dict[str, Any]) -> Locator | None:
         if request.get("controlId") or request.get("path"):
             return self._locator(request)
         return None
@@ -338,12 +338,13 @@ class InteractiveSession:
     def _coordinates(
         request: dict[str, Any], names: tuple[str, ...]
     ) -> tuple[int, ...]:
-        values = tuple(request.get(name) for name in names)
-        if any(
-            not isinstance(value, int) or isinstance(value, bool) for value in values
-        ):
-            raise InputError(f"{', '.join(names)} must be integers")
-        return values
+        values: list[int] = []
+        for name in names:
+            value = request.get(name)
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise InputError(f"{', '.join(names)} must be integers")
+            values.append(value)
+        return tuple(values)
 
     def _replay(self, scenario: Scenario) -> dict[str, Any]:
         diagnostics = self.window.diagnostics()
@@ -509,7 +510,10 @@ def serve_inspector(
         raise RuntimeFailure(f"{assets_problem}; {inspector_build_instruction()}")
     server = InspectorServer((host, port), InspectorHandler)
     server.session = session
-    url = f"http://{server.server_address[0]}:{server.server_address[1]}/"
+    bound_host = server.server_address[0]
+    if isinstance(bound_host, bytes):
+        bound_host = bound_host.decode()
+    url = f"http://{bound_host}:{server.server_address[1]}/"
     print(f"xui-lab inspector: {url}", flush=True)
     if open_browser:
         threading.Timer(0.2, webbrowser.open, args=(url,)).start()

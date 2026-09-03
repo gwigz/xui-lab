@@ -134,10 +134,11 @@ class RuntimeProcess:
                 f"runtime returned an invalid response to '{operation}': expected an object with Boolean 'ok'"
             )
         if not response["ok"]:
-            error = response.get("error", {})
-            if isinstance(error, dict):
+            error_data = response.get("error", {})
+            if isinstance(error_data, dict):
                 raise RuntimeFailure(
-                    f"{error.get('code', 'runtime_error')}: {error.get('message', 'runtime command failed')}"
+                    f"{error_data.get('code', 'runtime_error')}: "
+                    f"{error_data.get('message', 'runtime command failed')}"
                 )
             raise RuntimeFailure("runtime command failed")
         return response

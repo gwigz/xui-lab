@@ -1,3 +1,21 @@
+[tool.mypy]
+files = ["xui_lab", "xui-lab"]
+python_version = "3.10"
+strict = true
+
+[tool.pytest.ini_options]
+norecursedirs = ["scenarios"]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.coverage.run]
+branch = true
+source = ["xui_lab"]
+
+[tool.coverage.report]
+fail_under = 59
+show_missing = true
+
 [tool.ruff]
 required-version = "==0.16.5"
 target-version = "py310"

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repository_root=$(git rev-parse --show-toplevel)
+cd "$repository_root"
+
+check-jsonschema --check-metaschema schemas/*.schema.json
+check-jsonschema --schemafile schemas/forks.schema.json forks.json
+check-jsonschema --schemafile schemas/adapter.schema.json adapters/*/adapter.json
+check-jsonschema --schemafile schemas/fixture.schema.json fixtures/*.json

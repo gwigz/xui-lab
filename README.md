@@ -73,6 +73,23 @@ npm run dev --prefix inspector
 The production build records a source fingerprint. `./xui-lab check` fails
 with the rebuild command when the embedded client is missing or stale.
 
+## Check Python changes
+
+Install the pinned tools from `requirements-dev.txt`. Then run the Python
+checks and schema validation:
+
+```sh
+ruff check .
+ruff format --check .
+mypy
+coverage run -m pytest
+coverage report
+./scripts/check-schemas
+```
+
+Pytest discovers tests under `tests/` but skips `tests/scenarios/`. Coverage
+measures branches in `xui_lab` and enforces the current 59% floor.
+
 > [!WARNING]
 > Only the Alchemy adapter and its `test_widgets` subject are usable today.
 > Inventory Explorer remains work in progress and is not declared as a usable

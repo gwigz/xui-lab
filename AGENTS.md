@@ -38,7 +38,10 @@ the full checks before finishing a Python change:
 ```sh
 ruff check .
 ruff format --check .
-python3 -m unittest discover -s tests
+mypy
+coverage run -m pytest
+coverage report
+./scripts/check-schemas
 ```
 
 Do not enable Ruff preview rules or unsafe fixes. Upgrade Ruff in a dedicated

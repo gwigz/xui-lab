@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .api import Lab, artifact_directory
 from .cpp_quality import format_cpp, tidy_cpp
-from .domain import Capability, ForkId, Viewport, parse_manifest
+from .domain import Capability, Fork, ForkId, Manifest, Viewport, parse_manifest
 from .errors import InputError, XUILabError
 from .interactive import (
     InteractiveConfig,
@@ -24,11 +24,11 @@ from .scenarios import discover_scenarios, load_scenario
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def load_manifest():
+def load_manifest() -> Manifest:
     return parse_manifest(ROOT, read_json(ROOT / "forks.json"))
 
 
-def select_fork(args: argparse.Namespace):
+def select_fork(args: argparse.Namespace) -> tuple[Fork, Path]:
     manifest = load_manifest()
     fork_id = ForkId(args.fork or manifest.default_fork)
     try:
@@ -39,14 +39,14 @@ def select_fork(args: argparse.Namespace):
     return fork, resolved_source(fork, overrides)
 
 
-def adapter_config(fork) -> dict:
+def adapter_config(fork: Fork) -> dict[str, object]:
     data = read_json(fork.adapter / "adapter.json")
     if not isinstance(data, dict) or data.get("schemaVersion") != 1:
         raise InputError(f"invalid adapter contract: {fork.adapter / 'adapter.json'}")
     return data
 
 
-def runtime_path(fork, source: Path, explicit: str | None) -> Path:
+def runtime_path(_fork: Fork, _source: Path, explicit: str | None) -> Path:
     if not explicit:
         raise InputError("pass --runtime with the xui-lab executable path")
     return Path(explicit).expanduser().resolve()
@@ -207,7 +207,10 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     try:
         args = parser().parse_args(argv)
-        return args.handler(args)
+        result = args.handler(args)
+        if not isinstance(result, int) or isinstance(result, bool):
+            raise InputError("command handler returned an invalid exit status")
+        return result
     except XUILabError as error:
         print(f"xui-lab: {error}", file=sys.stderr)
         return 2

@@ -1,4 +1,8 @@
+check-jsonschema==0.38.0
 clang-format==22.1.8
 clang-tidy==22.1.8
+coverage==7.16.0
+mypy==2.3.1
 pre-commit==4.6.2
+pytest==9.1.1
 ruff==0.16.5

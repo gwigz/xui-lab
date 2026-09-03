@@ -24,9 +24,15 @@ jobs:
         run: ruff check .
       - name: Check Python formatting
         run: ruff format --check .
+      - name: Check Python types
+        run: mypy
       - name: Check C++ formatting
         run: ./xui-lab cpp format --check
+      - name: Validate JSON schemas and instances
+        run: ./scripts/check-schemas
       - name: Check repository
         run: ./xui-lab check
-      - name: Run Python tests
-        run: python -m unittest discover -s tests
+      - name: Run Python tests with branch coverage
+        run: coverage run -m pytest
+      - name: Enforce the coverage floor
+        run: coverage report
