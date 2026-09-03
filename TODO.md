@@ -20,18 +20,24 @@ and the JSONL and output-schema patterns exposed by
 [`codex exec`](https://github.com/openai/codex/blob/main/codex-rs/exec/src/cli.rs).
 The browser inspector remains optional for a person to view. Agents use the CLI.
 
+- [ ] Keep `argparse` as the command parser. Convert parsed arguments into the
+  same Pydantic command models used by JSONL and persistent sessions.
 - [ ] Define a versioned CLI contract before adding commands. Specify stdout,
   stderr, exit statuses, error codes, timestamps, and compatibility rules.
 - [ ] Add `xui-lab subjects --json` to list subjects, required capabilities,
   source provenance, and whether the selected runtime can open each subject.
 - [ ] Add `xui-lab operations --json` to discover every supported query and
   input operation, its arguments, and the runtime capability that enables it.
-- [ ] Add `xui-lab schema` to emit the JSON Schemas for commands, results,
-  events, errors, tree nodes, selectors, and artifact manifests.
+- [ ] Add `xui-lab schema` to emit the JSON Schemas generated from the Pydantic
+  models for commands, results, events, errors, tree nodes, selectors, and
+  artifact manifests. Use `check-jsonschema` to validate every schema and
+  checked-in example.
 - [ ] Add a noninteractive `xui-lab session start` command that returns a stable
   session ID, viewer PID, fork commit, subject, viewport, and capabilities.
 - [ ] Back sessions with a local authenticated socket or similarly narrow IPC
-  boundary. Do not require a browser or expose a network listener by default.
+  boundary. Use `platformdirs` for per-user runtime and state locations. Do not
+  hand-roll platform paths, require a browser, or expose a network listener by
+  default.
 - [ ] Add `session status`, `session close`, and stale-session cleanup. Make
   close idempotent and report whether a process was actually terminated.
 - [ ] Add a JSONL session mode that reads one typed command per stdin line and
@@ -68,8 +74,10 @@ The browser inspector remains optional for a person to view. Agents use the CLI.
   hidden controls, model-backed rows, and controls without user-visible names.
   Verify that layout and tree refactors do not change a locator when visible
   behavior stays the same.
-- [ ] Add `--fields` and `--jq`-style projection so agents can request a small
-  tree slice or a few result fields without ingesting an entire UI tree.
+- [ ] Add `--fields` projection so agents can request a small tree slice or a
+  few result fields without ingesting an entire UI tree. Add `--jq` with the
+  `jq` package only when full jq expressions are required. Do not implement a
+  partial jq language.
 - [ ] Return concise tree excerpts by default. Put full trees, frames, traces,
   and logs in artifacts and return their absolute paths, sizes, and hashes.
 - [ ] Add an explicit `--include-tree` escape hatch with a documented size
@@ -84,9 +92,13 @@ The browser inspector remains optional for a person to view. Agents use the CLI.
   as harmless dry runs.
 - [ ] Add `xui-lab record --output FILE` and `xui-lab replay FILE` using a
   versioned, selector-stable command format suitable for review and editing.
-- [ ] Add shell-level contract tests for exit status, stdout purity, stderr
-  diagnostics, JSON Schema validation, request correlation, timeouts, signals,
-  stale sessions, and paths containing spaces or Unicode.
+- [ ] Add shell-level contract tests with `pytest` for exit status, stdout
+  purity, stderr diagnostics, JSON Schema validation, request correlation,
+  timeouts, signals, stale sessions, and paths containing spaces or Unicode.
+  Run them under the existing `mypy` and branch-coverage checks.
+- [ ] Add Hypothesis state machines for session lifecycle, cancellation,
+  retries, stale cleanup, and record/replay once those stateful commands exist.
+  Preserve every minimized failure as a deterministic regression test.
 - [ ] Publish short copy-paste examples for discovery, one-shot inspection, a
   persistent resize gesture, capture, scenario execution, and cleanup.
 
