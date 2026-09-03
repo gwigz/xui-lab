@@ -9,7 +9,7 @@ floater code, sends normal LLUI events, and uses real viewer models. A reduced
 runtime replaces login, networking, world simulation, and other external
 services at explicit boundaries.
 
-![The inspector showing the production test floater in T3 Code](docs/images/xui-lab-in-t3-code.png)
+![The inspector showing the production test floater in T3 Code](.github/assets/xui-lab-in-t3-code.png)
 
 ## What exists
 
