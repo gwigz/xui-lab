@@ -994,7 +994,7 @@ class SchemaCatalogContract(VersionedContract):
 
 
 class InteractiveActionBase(VersionedContract):
-    pass
+    request_id: NonEmptyString | None = Field(default=None, alias="requestId")
 
 
 class TargetedInteractiveAction(InteractiveActionBase):

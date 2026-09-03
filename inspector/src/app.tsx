@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useState } from "react";
 import { fetchInspectorState, performAction, subscribeInspectorEvents } from "./api";
 import { Diagnostics } from "./components/diagnostics";
 import { InspectorToolbar } from "./components/inspector-toolbar";
@@ -6,6 +7,7 @@ import { Sidebar } from "./components/sidebar";
 import type { InspectorAction, InspectorState } from "./contracts";
 import { cn } from "./lib/utils";
 import type { InspectorStatus, InspectorTab } from "./model";
+import { shouldInvalidateInspectorState } from "./query";
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -35,50 +37,38 @@ function StatusBar({ status }: Readonly<{ status: InspectorStatus }>) {
 }
 
 export function App() {
-  const [state, setState] = useState<InspectorState | null>(null);
+  const queryClient = useQueryClient();
+  const stateQuery = useQuery({
+    queryKey: ["inspector-state"],
+    queryFn: ({ signal }) => fetchInspectorState(signal),
+  });
+  const state: InspectorState | null = stateQuery.data ?? null;
+  const actionMutation = useMutation({ mutationFn: performAction });
   const [status, setStatus] = useState<InspectorStatus>({
     kind: "loading",
     message: "Connecting…",
   });
   const [selectedControlId, setSelectedControlId] = useState("");
   const [tab, setTab] = useState<InspectorTab>("snapshot");
-  const stateVersion = useRef(0);
-
-  const updateState = useCallback(async (signal?: AbortSignal, announce = false) => {
-    try {
-      const next = await fetchInspectorState(signal);
-
-      if (next.stateVersion < stateVersion.current) {
-        return;
-      }
-
-      stateVersion.current = next.stateVersion;
-      setState(next);
-
-      if (announce) {
-        const processId = next.diagnostics.processId;
-        const pid = typeof processId === "number" ? `PID ${processId} · ` : "";
-
-        setStatus({ kind: "ready", message: `${pid}${next.artifactDir}` });
-      }
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        return;
-      }
-
-      setStatus({ kind: "error", message: errorMessage(error) });
-    }
-  }, []);
 
   useEffect(() => {
-    const controller = new AbortController();
+    if (stateQuery.error !== null) {
+      setStatus({ kind: "error", message: errorMessage(stateQuery.error) });
+      return;
+    }
+    if (state !== null && status.kind === "loading") {
+      const processId = state.diagnostics.processId;
+      const pid = typeof processId === "number" ? `PID ${processId} · ` : "";
+      setStatus({ kind: "ready", message: `${pid}${state.artifactDir}` });
+    }
+  }, [state, stateQuery.error, status.kind]);
 
-    void updateState(controller.signal, true);
-
+  useEffect(() => {
     const unsubscribe = subscribeInspectorEvents(
-      (event) => {
-        if (event.stateVersion > stateVersion.current) {
-          void updateState(controller.signal);
+      (event, reset) => {
+        const cached = queryClient.getQueryData<InspectorState>(["inspector-state"]);
+        if (shouldInvalidateInspectorState(cached?.stateVersion, event.stateVersion, reset)) {
+          void queryClient.invalidateQueries({ queryKey: ["inspector-state"] });
         }
       },
       (source) => {
@@ -89,19 +79,17 @@ export function App() {
     );
 
     return () => {
-      controller.abort();
       unsubscribe();
     };
-  }, [updateState]);
+  }, [queryClient]);
 
   const runAction = useCallback(
     async (action: InspectorAction, nextTab?: InspectorTab): Promise<unknown> => {
       setStatus({ kind: "busy", message: `${action.action}…` });
 
       try {
-        const result = await performAction(action);
-
-        await updateState();
+        const result = await actionMutation.mutateAsync(action);
+        await queryClient.invalidateQueries({ queryKey: ["inspector-state"] });
 
         setStatus({ kind: "ready", message: `${action.action} completed` });
 
@@ -116,7 +104,7 @@ export function App() {
         return undefined;
       }
     },
-    [updateState],
+    [actionMutation, queryClient],
   );
 
   async function selectControl(controlId: string) {
@@ -125,7 +113,7 @@ export function App() {
     const selector = state?.locators[controlId]?.selector;
 
     if (selector !== undefined) {
-      await runAction({ action: "highlight", selector }, "selected");
+      await runAction({ schemaVersion: 1, action: "highlight", selector }, "selected");
     }
   }
 
@@ -133,7 +121,9 @@ export function App() {
     <div className="grid h-dvh grid-cols-[minmax(230px,290px)_minmax(0,1fr)] grid-rows-[minmax(0,1fr)_32px] bg-background text-foreground max-[720px]:grid-cols-1 max-[720px]:grid-rows-[minmax(180px,30%)_minmax(0,1fr)_32px]">
       <Sidebar
         onSelect={(controlId) => void selectControl(controlId)}
-        onSwitch={(subject, fixture) => void runAction({ action: "switch", subject, fixture })}
+        onSwitch={(subject, fixture) =>
+          void runAction({ schemaVersion: 1, action: "switch", subject, fixture })
+        }
         selectedControlId={selectedControlId}
         state={state}
       />

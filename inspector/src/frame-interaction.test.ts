@@ -128,6 +128,7 @@ describe("frameDragInput", () => {
         supportsDragAndDrop: true,
       }),
     ).toEqual({
+      schemaVersion: 1,
       action: "dragAndDrop",
       source: {
         schemaVersion: 1,
@@ -147,6 +148,13 @@ describe("frameDragInput", () => {
         targetControlId: "floater",
         supportsDragAndDrop: true,
       }),
-    ).toEqual({ action: "drag", startX: 10, startY: 20, endX: 30, endY: 40 });
+    ).toEqual({
+      schemaVersion: 1,
+      action: "drag",
+      startX: 10,
+      startY: 20,
+      endX: 30,
+      endY: 40,
+    });
   });
 });

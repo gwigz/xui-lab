@@ -1,3 +1,6 @@
+import Ajv, { type ValidateFunction } from "ajv";
+import createClient from "openapi-fetch";
+import openapiDocument from "../../schemas/inspector.openapi.json";
 import {
   type InspectorAction,
   type InspectorSessionEvent,
@@ -6,59 +9,97 @@ import {
   parseInspectorSessionEvent,
   parseInspectorState,
 } from "./contracts";
+import type { components, paths } from "./generated/inspector-api";
 
-async function responseValue(response: Response): Promise<unknown> {
-  const value: unknown = await response.json();
+type WireState = components["schemas"]["InspectorStateDocument"];
+type WireActionResponse = components["schemas"]["InspectorActionAccepted"];
+type ProblemDetails = components["schemas"]["InspectorProblemDetails"];
 
-  if (!response.ok) {
-    if (typeof value === "object" && value !== null && "error" in value) {
-      const error = value.error;
+const ajv = new Ajv({ allErrors: true, strict: false });
+const schemaRoot = { components: openapiDocument.components };
+const validateState = ajv.compile<WireState>({
+  ...schemaRoot,
+  $ref: "#/components/schemas/InspectorStateDocument",
+});
+const validateActionResponse = ajv.compile<WireActionResponse>({
+  ...schemaRoot,
+  $ref: "#/components/schemas/InspectorActionAccepted",
+});
+const validateProblem = ajv.compile<ProblemDetails>({
+  ...schemaRoot,
+  $ref: "#/components/schemas/InspectorProblemDetails",
+});
+const validateEvent = ajv.compile<InspectorSessionEvent>(
+  openapiDocument.paths["/api/v1/events"].get.responses["200"].content["text/event-stream"].schema,
+);
+const client = createClient<paths>({ baseUrl: "" });
+const STATE_TIMEOUT_MS = 30_000;
+const ACTION_TIMEOUT_MS = 120_000;
 
-      if (typeof error === "string") {
-        throw new Error(error);
-      }
-    }
-
-    throw new Error(`${response.status} ${response.statusText}`);
+function requireValid<T>(validator: ValidateFunction<T>, value: unknown, context: string): T {
+  if (!validator(value)) {
+    throw new Error(`${context} violates the OpenAPI schema: ${ajv.errorsText(validator.errors)}`);
   }
-
   return value;
 }
 
-export async function fetchInspectorState(signal?: AbortSignal): Promise<InspectorState> {
-  const response = await fetch("/api/v1/state", { signal });
+function problemError(value: unknown, response: Response): Error {
+  const problem = requireValid(validateProblem, value, "API error");
+  return new Error(`${problem.code}: ${problem.detail} (${response.status})`);
+}
 
-  return parseInspectorState(await responseValue(response));
+export async function fetchInspectorState(signal?: AbortSignal): Promise<InspectorState> {
+  const timeout = AbortSignal.timeout(STATE_TIMEOUT_MS);
+  const requestSignal = signal === undefined ? timeout : AbortSignal.any([signal, timeout]);
+  const { data, error, response } = await client.GET("/api/v1/state", {
+    signal: requestSignal,
+  });
+  if (error !== undefined) {
+    throw problemError(error, response);
+  }
+  return parseInspectorState(requireValid(validateState, data, "Inspector state"));
 }
 
 export async function performAction(action: InspectorAction): Promise<unknown> {
-  const response = await fetch("/api/v1/actions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(action),
+  const request = {
+    ...action,
+    requestId: crypto.randomUUID(),
+  };
+  const { data, error, response } = await client.POST("/api/v1/actions", {
+    body: request,
+    signal: AbortSignal.timeout(ACTION_TIMEOUT_MS),
   });
-
-  return parseActionResponse(await responseValue(response));
+  if (error !== undefined) {
+    throw problemError(error, response);
+  }
+  return parseActionResponse(requireValid(validateActionResponse, data, "Action response"));
 }
 
 export function subscribeInspectorEvents(
-  onEvent: (event: InspectorSessionEvent) => void,
+  onEvent: (event: InspectorSessionEvent, reset: boolean) => void,
   onError?: (source: EventSource) => void,
 ): () => void {
   const source = new EventSource("/api/v1/events");
   let closed = false;
 
-  source.addEventListener("invalidate", (message: Event) => {
+  const handleStateEvent = (message: Event, reset: boolean) => {
     if (!(message instanceof MessageEvent) || typeof message.data !== "string") {
       return;
     }
 
     try {
-      onEvent(parseInspectorSessionEvent(JSON.parse(message.data) as unknown));
+      const value: unknown = JSON.parse(message.data);
+      onEvent(
+        parseInspectorSessionEvent(requireValid(validateEvent, value, "Session event")),
+        reset,
+      );
     } catch {
       return;
     }
-  });
+  };
+
+  source.addEventListener("invalidate", (message) => handleStateEvent(message, false));
+  source.addEventListener("reset", (message) => handleStateEvent(message, true));
 
   source.onerror = () => {
     if (!closed) {

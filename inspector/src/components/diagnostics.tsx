@@ -165,8 +165,9 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
       }
       await runAction(
         input.action === "type"
-          ? { action: "type", selector, text: input.text }
+          ? { schemaVersion: 1, action: "type", selector, text: input.text }
           : {
+              schemaVersion: 1,
               action: "press",
               selector,
               key: input.key,
@@ -189,7 +190,9 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
 
   function clickAt(target: FramePoint) {
     enqueueInput(async () => {
-      const result = recordValue(await runAction({ action: "clickAt", x: target.x, y: target.y }));
+      const result = recordValue(
+        await runAction({ schemaVersion: 1, action: "clickAt", x: target.x, y: target.y }),
+      );
       selectActionTarget(result);
     });
   }
@@ -197,7 +200,7 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
   function doubleClickAt(target: FramePoint) {
     enqueueInput(async () => {
       const result = recordValue(
-        await runAction({ action: "doubleClickAt", x: target.x, y: target.y }),
+        await runAction({ schemaVersion: 1, action: "doubleClickAt", x: target.x, y: target.y }),
       );
       selectActionTarget(result);
     });
@@ -216,7 +219,7 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
 
     if (mode === "inspect") {
       const result = recordValue(
-        await runAction({ action: "pick", x: end.x, y: end.y }, "selected"),
+        await runAction({ schemaVersion: 1, action: "pick", x: end.x, y: end.y }, "selected"),
       );
       if (typeof result?.control_id === "string") {
         onSelectedControlId(result.control_id);
@@ -255,7 +258,13 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
     }
     event.preventDefault();
     enqueueInput(async () => {
-      await runAction({ action: "scrollAt", x: target.x, y: target.y, clicks });
+      await runAction({
+        schemaVersion: 1,
+        action: "scrollAt",
+        x: target.x,
+        y: target.y,
+        clicks,
+      });
     });
   }
 
@@ -297,7 +306,7 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
     }
     enqueueInput(async () => {
       const result = recordValue(
-        await runAction({ action: "rightClickAt", x: target.x, y: target.y }),
+        await runAction({ schemaVersion: 1, action: "rightClickAt", x: target.x, y: target.y }),
       );
       selectActionTarget(result);
     });

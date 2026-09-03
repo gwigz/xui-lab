@@ -25,7 +25,7 @@ function sourcePaths(directory: string): string[] {
 function sourceFingerprint(): string {
   const hash = createHash("sha256");
   for (const path of sourcePaths(sourceRoot)) {
-    const relativePath = path.slice(sourceRoot.length).replaceAll("\\", "/");
+    const relativePath = path.slice(sourceRoot.length).split("\\").join("/");
     hash.update(relativePath);
     hash.update("\0");
     hash.update(readFileSync(path));

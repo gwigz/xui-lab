@@ -1,9 +1,19 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./app";
 import "./styles.css";
 
 const root = document.getElementById("root");
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      staleTime: Number.POSITIVE_INFINITY,
+    },
+    mutations: { retry: false },
+  },
+});
 
 if (root === null) {
   throw new Error("inspector root element is missing");
@@ -11,6 +21,8 @@ if (root === null) {
 
 createRoot(root).render(
   <StrictMode>
-    <App />
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
   </StrictMode>,
 );

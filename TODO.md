@@ -17,46 +17,16 @@ The browser inspector is a human-facing adapter over the same command
 dispatcher as the CLI. Keep HTTP and React concerns out of scenario and runtime
 logic. Do not create a second operation model for the inspector.
 
-- [ ] Put the OpenAPI hash in both the server bootstrap response and the
-  embedded client. Refuse actions when the hashes differ, and show the rebuild
-  command in the inspector.
-- [ ] Pin `openapi-typescript` as a frontend development dependency. Generate
-  the route, request, response, event, and error types from the checked-in
-  OpenAPI document. Delete the handwritten wire types that the generated types
-  replace.
-- [ ] Pin `openapi-fetch` and route inspector requests through one generated,
-  typed client. Keep authentication, request IDs, timeouts, and error decoding
-  in that client instead of React components.
-- [ ] Pin `ajv` and validate every HTTP response and server event against the
-  Pydantic-generated JSON Schemas before the frontend uses it. Convert valid
-  wire values into UI models once. Do not add a parallel Zod schema.
-- [ ] Return errors as
-  [RFC 9457 Problem Details](https://www.rfc-editor.org/rfc/rfc9457.html) with
-  stable XUI Lab fields for `code`, `requestId`, `operation`, retryability, and
-  artifact paths. Do not expose FastAPI or Pydantic error formats.
 - [ ] Keep the inspector on a random loopback port. Issue a random session token
   at startup and require it on every API request. Reject unexpected `Host` and
   `Origin` headers, and keep the token out of logs and artifacts.
 - [ ] Resolve captures and artifacts through the current session manifest.
   Serve only files contained by that session's artifact directory. Never accept
   an arbitrary filesystem path from an HTTP request.
-- [ ] Give SSE events monotonic IDs, heartbeats, and a bounded replay window.
-  Resume from `Last-Event-ID`. If the requested event has expired or a client
-  falls behind, require a full state refresh. Never let a slow client block the
-  session worker or grow an unbounded buffer.
-- [ ] Add `@tanstack/react-query` when the versioned API lands. Make it own
-  server-state fetches, action invalidation, cancellation, and retry policy.
-  Feed state-version events from SSE into query invalidation.
 - [ ] Pin `httpx` as a development dependency. Test the real FastAPI ASGI app
   with `pytest` without opening a port. Cover validation, authentication,
   Problem Details, content types, security headers, SSE disconnects, and clean
   shutdown.
-- [ ] Keep CORS disabled and disable FastAPI's Swagger UI and ReDoc routes in
-  the shipped inspector. Test that logs omit session tokens and that shutdown
-  closes every active request and SSE stream.
-- [ ] Pin `@playwright/test` before the timeline and filmstrip work. Run it
-  against the deterministic preview backend. Cover initial load, actions,
-  reconnects, error display, capture changes, keyboard use, and failure traces.
 - [ ] Enable `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` for the
   inspector. Include generated types, schema validation, and Playwright tests
   in `npm run check --prefix inspector`.

@@ -108,7 +108,7 @@ export function InspectorToolbar({
     if (x === undefined || y === undefined) {
       return;
     }
-    const result = await runAction({ action: "pick", x, y }, "selected");
+    const result = await runAction({ schemaVersion: 1, action: "pick", x, y }, "selected");
     const resultControlId = recordValue(result)?.control_id;
     if (typeof resultControlId === "string") {
       onSelectedControlId(resultControlId);
@@ -145,13 +145,24 @@ export function InspectorToolbar({
         className="flex-wrap gap-1 border-0 bg-transparent p-0"
       >
         <ToolbarGroup>
-          <Button onClick={() => void runAction({ action: "reload" })} size="xs" variant="outline">
+          <Button
+            onClick={() => void runAction({ schemaVersion: 1, action: "reload" })}
+            size="xs"
+            variant="outline"
+          >
             <RefreshCw aria-hidden size={14} /> Reload XUI
           </Button>
-          <Button onClick={() => void runAction({ action: "capture" }, "snapshot")} size="xs">
+          <Button
+            onClick={() => void runAction({ schemaVersion: 1, action: "capture" }, "snapshot")}
+            size="xs"
+          >
             <Camera aria-hidden size={14} /> Screenshot
           </Button>
-          <Button onClick={() => void runAction({ action: "export" })} size="xs" variant="outline">
+          <Button
+            onClick={() => void runAction({ schemaVersion: 1, action: "export" })}
+            size="xs"
+            variant="outline"
+          >
             <FileJson aria-hidden size={14} /> Export Tree
           </Button>
           <Button
@@ -213,6 +224,7 @@ export function InspectorToolbar({
               const uiScale = finiteNumber(scale);
               if (nextWidth !== undefined && nextHeight !== undefined && uiScale !== undefined) {
                 void runAction({
+                  schemaVersion: 1,
                   action: "resizeViewport",
                   width: nextWidth,
                   height: nextHeight,
@@ -265,6 +277,7 @@ export function InspectorToolbar({
               const nextHeight = integer(subjectHeight);
               if (nextWidth !== undefined && nextHeight !== undefined) {
                 void runAction({
+                  schemaVersion: 1,
                   action: "resizeSubject",
                   width: nextWidth,
                   height: nextHeight,
@@ -319,7 +332,7 @@ export function InspectorToolbar({
             onClick={() =>
               selectedSelector === undefined
                 ? undefined
-                : void runAction({ action: "click", selector: selectedSelector })
+                : void runAction({ schemaVersion: 1, action: "click", selector: selectedSelector })
             }
             size="xs"
             variant="outline"
@@ -343,7 +356,12 @@ export function InspectorToolbar({
             disabled={selectedSelector === undefined || !supports("fill")}
             onClick={() => {
               if (selectedSelector !== undefined) {
-                void runAction({ action: "fill", selector: selectedSelector, text });
+                void runAction({
+                  schemaVersion: 1,
+                  action: "fill",
+                  selector: selectedSelector,
+                  text,
+                });
               }
             }}
             size="xs"
@@ -363,7 +381,13 @@ export function InspectorToolbar({
             disabled={selectedSelector === undefined || key.length === 0 || !supports("key")}
             onClick={() => {
               if (selectedSelector !== undefined) {
-                void runAction({ action: "press", selector: selectedSelector, key });
+                void runAction({
+                  schemaVersion: 1,
+                  action: "press",
+                  selector: selectedSelector,
+                  key,
+                  modifiers: [],
+                });
               }
             }}
             size="xs"
@@ -394,7 +418,7 @@ export function InspectorToolbar({
           </Select>
           <Button
             disabled={scenario === ""}
-            onClick={() => void runAction({ action: "replay", scenario })}
+            onClick={() => void runAction({ schemaVersion: 1, action: "replay", scenario })}
             size="xs"
             variant="outline"
           >

@@ -1,32 +1,20 @@
 import {
   controlIdSelector,
+  type InspectorAction,
   type KeyboardModifier,
   modelIdSelector,
-  type Selector,
 } from "./contracts";
 
 export type FramePoint = Readonly<{ x: number; y: number }>;
 
-export type FrameDragInput =
-  | Readonly<{
-      action: "drag";
-      startX: number;
-      startY: number;
-      endX: number;
-      endY: number;
-    }>
-  | Readonly<{
-      action: "dragAndDrop";
-      source: Selector;
-      target: Selector;
-    }>;
+export type FrameDragInput = Extract<InspectorAction, { action: "drag" | "dragAndDrop" }>;
 
 export type BrowserFrameInput =
   | Readonly<{ action: "type"; text: string }>
   | Readonly<{
       action: "press";
       key: string;
-      modifiers: readonly KeyboardModifier[];
+      modifiers: KeyboardModifier[];
     }>;
 
 export type FrameOutline = Readonly<{
@@ -137,6 +125,7 @@ export function frameDragInput(
     input.targetControlId !== undefined
   ) {
     return {
+      schemaVersion: 1,
       action: "dragAndDrop",
       source: modelIdSelector(input.sourceModelId),
       target: controlIdSelector(input.targetControlId),
@@ -144,6 +133,7 @@ export function frameDragInput(
   }
 
   return {
+    schemaVersion: 1,
     action: "drag",
     startX: input.start.x,
     startY: input.start.y,

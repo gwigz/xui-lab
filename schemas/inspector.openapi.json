@@ -40,6 +40,19 @@
             "title": "Action",
             "type": "string"
           },
+          "requestId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Requestid"
+          },
           "schemaVersion": {
             "const": 1,
             "title": "Schemaversion",
@@ -70,6 +83,19 @@
             "const": "dragAndDrop",
             "title": "Action",
             "type": "string"
+          },
+          "requestId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Requestid"
           },
           "schemaVersion": {
             "const": 1,
@@ -178,6 +204,19 @@
             "title": "Endy",
             "type": "integer"
           },
+          "requestId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Requestid"
+          },
           "schemaVersion": {
             "const": 1,
             "title": "Schemaversion",
@@ -203,49 +242,12 @@
         "title": "DragInteractiveAction",
         "type": "object"
       },
-      "ErrorRecord": {
+      "HighlightInteractiveAction": {
         "additionalProperties": false,
         "properties": {
-          "artifacts": {
-            "anyOf": [
-              {
-                "items": {
-                  "minLength": 1,
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Artifacts"
-          },
-          "capability": {
-            "anyOf": [
-              {
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Capability"
-          },
-          "code": {
-            "minLength": 1,
-            "title": "Code",
-            "type": "string"
-          },
-          "message": {
-            "minLength": 1,
-            "title": "Message",
-            "type": "string"
-          },
-          "operation": {
-            "minLength": 1,
-            "title": "Operation",
+          "action": {
+            "const": "highlight",
+            "title": "Action",
             "type": "string"
           },
           "requestId": {
@@ -258,99 +260,8 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Requestid"
-          },
-          "retryable": {
-            "title": "Retryable",
-            "type": "boolean"
-          },
-          "schemaVersion": {
-            "const": 1,
-            "title": "Schemaversion",
-            "type": "integer"
-          },
-          "selector": {
-            "anyOf": [
-              {
-                "discriminator": {
-                  "mapping": {
-                    "controlId": "#/components/schemas/ControlIdSelectorContract",
-                    "label": "#/components/schemas/LabelSelectorContract",
-                    "modelId": "#/components/schemas/ModelIdSelectorContract",
-                    "path": "#/components/schemas/PathSelectorContract",
-                    "placeholder": "#/components/schemas/PlaceholderSelectorContract",
-                    "role": "#/components/schemas/RoleSelectorContract",
-                    "text": "#/components/schemas/TextSelectorContract"
-                  },
-                  "propertyName": "kind"
-                },
-                "oneOf": [
-                  {
-                    "$ref": "#/components/schemas/PathSelectorContract"
-                  },
-                  {
-                    "$ref": "#/components/schemas/ModelIdSelectorContract"
-                  },
-                  {
-                    "$ref": "#/components/schemas/ControlIdSelectorContract"
-                  },
-                  {
-                    "$ref": "#/components/schemas/RoleSelectorContract"
-                  },
-                  {
-                    "$ref": "#/components/schemas/LabelSelectorContract"
-                  },
-                  {
-                    "$ref": "#/components/schemas/PlaceholderSelectorContract"
-                  },
-                  {
-                    "$ref": "#/components/schemas/TextSelectorContract"
-                  }
-                ]
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Selector"
-          },
-          "type": {
-            "const": "error",
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "schemaVersion",
-          "type",
-          "code",
-          "message",
-          "operation",
-          "retryable"
-        ],
-        "title": "ErrorRecord",
-        "type": "object"
-      },
-      "HTTPValidationError": {
-        "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "title": "Detail",
-            "type": "array"
-          }
-        },
-        "title": "HTTPValidationError",
-        "type": "object"
-      },
-      "HighlightInteractiveAction": {
-        "additionalProperties": false,
-        "properties": {
-          "action": {
-            "const": "highlight",
-            "title": "Action",
-            "type": "string"
           },
           "schemaVersion": {
             "const": 1,
@@ -432,25 +343,6 @@
         "title": "InspectorActionAccepted",
         "type": "object"
       },
-      "InspectorActionRejected": {
-        "additionalProperties": false,
-        "properties": {
-          "error": {
-            "$ref": "#/components/schemas/ErrorRecord"
-          },
-          "ok": {
-            "const": false,
-            "title": "Ok",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok",
-          "error"
-        ],
-        "title": "InspectorActionRejected",
-        "type": "object"
-      },
       "InspectorCaptureInfo": {
         "additionalProperties": false,
         "properties": {
@@ -471,17 +363,143 @@
         "title": "InspectorCaptureInfo",
         "type": "object"
       },
-      "InspectorErrorBody": {
+      "InspectorProblemDetails": {
         "additionalProperties": false,
         "properties": {
-          "error": {
-            "$ref": "#/components/schemas/ErrorRecord"
+          "artifacts": {
+            "anyOf": [
+              {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifacts"
+          },
+          "capability": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capability"
+          },
+          "code": {
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          },
+          "detail": {
+            "minLength": 1,
+            "title": "Detail",
+            "type": "string"
+          },
+          "operation": {
+            "minLength": 1,
+            "title": "Operation",
+            "type": "string"
+          },
+          "requestId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requestid"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          },
+          "schemaVersion": {
+            "title": "Schemaversion",
+            "type": "integer"
+          },
+          "selector": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "controlId": "#/components/schemas/ControlIdSelectorContract",
+                    "label": "#/components/schemas/LabelSelectorContract",
+                    "modelId": "#/components/schemas/ModelIdSelectorContract",
+                    "path": "#/components/schemas/PathSelectorContract",
+                    "placeholder": "#/components/schemas/PlaceholderSelectorContract",
+                    "role": "#/components/schemas/RoleSelectorContract",
+                    "text": "#/components/schemas/TextSelectorContract"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PathSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ModelIdSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ControlIdSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RoleSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LabelSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PlaceholderSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TextSelectorContract"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selector"
+          },
+          "status": {
+            "minimum": 0.0,
+            "title": "Status",
+            "type": "integer"
+          },
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          },
+          "type": {
+            "minLength": 1,
+            "title": "Type",
+            "type": "string"
           }
         },
         "required": [
-          "error"
+          "type",
+          "title",
+          "status",
+          "detail",
+          "schemaVersion",
+          "code",
+          "operation",
+          "retryable"
         ],
-        "title": "InspectorErrorBody",
+        "title": "InspectorProblemDetails",
         "type": "object"
       },
       "InspectorStateDocument": {
@@ -518,6 +536,11 @@
             "additionalProperties": true,
             "title": "Locators",
             "type": "object"
+          },
+          "openapiHash": {
+            "minLength": 1,
+            "title": "Openapihash",
+            "type": "string"
           },
           "recording": {
             "items": {
@@ -562,7 +585,8 @@
           "scenarios",
           "inputOperations",
           "capture",
-          "stateVersion"
+          "stateVersion",
+          "openapiHash"
         ],
         "title": "InspectorStateDocument",
         "type": "object"
@@ -671,6 +695,19 @@
             "const": "click",
             "title": "Action",
             "type": "string"
+          },
+          "requestId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Requestid"
           },
           "schemaVersion": {
             "const": 1,
@@ -787,6 +824,19 @@
             "title": "Action",
             "type": "string"
           },
+          "requestId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Requestid"
+          },
           "schemaVersion": {
             "const": 1,
             "title": "Schemaversion",
@@ -863,6 +913,19 @@
             "title": "Modifiers",
             "type": "array"
           },
+          "requestId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Requestid"
+          },
           "schemaVersion": {
             "const": 1,
             "title": "Schemaversion",
@@ -924,6 +987,19 @@
             "title": "Action",
             "type": "string"
           },
+          "requestId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Requestid"
+          },
           "scenario": {
             "minLength": 1,
             "pattern": "^[a-z][a-z0-9_-]*$",
@@ -957,6 +1033,19 @@
             "title": "Height",
             "type": "integer"
           },
+          "requestId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Requestid"
+          },
           "schemaVersion": {
             "const": 1,
             "title": "Schemaversion",
@@ -989,6 +1078,19 @@
             "exclusiveMinimum": 0,
             "title": "Height",
             "type": "integer"
+          },
+          "requestId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Requestid"
           },
           "schemaVersion": {
             "const": 1,
@@ -1068,6 +1170,19 @@
             "title": "Clicks",
             "type": "integer"
           },
+          "requestId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Requestid"
+          },
           "schemaVersion": {
             "const": 1,
             "title": "Schemaversion",
@@ -1104,6 +1219,19 @@
             "title": "Action",
             "type": "string"
           },
+          "requestId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Requestid"
+          },
           "schemaVersion": {
             "const": 1,
             "title": "Schemaversion",
@@ -1139,6 +1267,19 @@
             "default": null,
             "title": "Fixture"
           },
+          "requestId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Requestid"
+          },
           "schemaVersion": {
             "const": 1,
             "title": "Schemaversion",
@@ -1168,6 +1309,19 @@
             ],
             "title": "Action",
             "type": "string"
+          },
+          "requestId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Requestid"
           },
           "schemaVersion": {
             "const": 1,
@@ -1252,46 +1406,6 @@
         ],
         "title": "TextSelectorContract",
         "type": "object"
-      },
-      "ValidationError": {
-        "properties": {
-          "ctx": {
-            "title": "Context",
-            "type": "object"
-          },
-          "input": {
-            "title": "Input"
-          },
-          "loc": {
-            "items": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "integer"
-                }
-              ]
-            },
-            "title": "Location",
-            "type": "array"
-          },
-          "msg": {
-            "title": "Message",
-            "type": "string"
-          },
-          "type": {
-            "title": "Error Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
-        "title": "ValidationError",
-        "type": "object"
       }
     }
   },
@@ -1327,19 +1441,29 @@
           },
           "400": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InspectorActionRejected"
+                  "$ref": "#/components/schemas/InspectorProblemDetails"
                 }
               }
             },
             "description": "Bad Request"
           },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectorProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
           "413": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InspectorActionRejected"
+                  "$ref": "#/components/schemas/InspectorProblemDetails"
                 }
               }
             },
@@ -1347,9 +1471,9 @@
           },
           "429": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InspectorActionRejected"
+                  "$ref": "#/components/schemas/InspectorProblemDetails"
                 }
               }
             },
@@ -1383,11 +1507,31 @@
             },
             "description": "Successful Response"
           },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectorProblemDetails"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectorProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
           "404": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InspectorErrorBody"
+                  "$ref": "#/components/schemas/InspectorProblemDetails"
                 }
               }
             },
@@ -1395,23 +1539,13 @@
           },
           "413": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InspectorErrorBody"
+                  "$ref": "#/components/schemas/InspectorProblemDetails"
                 }
               }
             },
             "description": "Request Entity Too Large"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
           }
         },
         "summary": "Get Capture"
@@ -1475,6 +1609,26 @@
               }
             },
             "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectorProblemDetails"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectorProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized"
           }
         },
         "summary": "Get Events"
@@ -1494,11 +1648,21 @@
             },
             "description": "Successful Response"
           },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectorProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
           "413": {
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InspectorErrorBody"
+                  "$ref": "#/components/schemas/InspectorProblemDetails"
                 }
               }
             },

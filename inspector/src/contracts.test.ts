@@ -9,6 +9,7 @@ import {
   reviewableLocatorPython,
   treeNodeVisibleRect,
 } from "./contracts";
+import { OPENAPI_HASH } from "./generated/openapi-hash";
 
 const validState = {
   tree: {
@@ -44,6 +45,7 @@ const validState = {
   inputOperations: ["click", "drag", "fill"],
   capture: { available: true, version: 2 },
   stateVersion: 4,
+  openapiHash: OPENAPI_HASH,
 };
 
 describe("parseInspectorState", () => {
@@ -60,6 +62,12 @@ describe("parseInspectorState", () => {
   it("rejects malformed server data", () => {
     expect(() => parseInspectorState({ ...validState, recording: "not an array" })).toThrow(
       "state.recording must be an array",
+    );
+  });
+
+  it("refuses state from a server with a different OpenAPI document", () => {
+    expect(() => parseInspectorState({ ...validState, openapiHash: "stale" })).toThrow(
+      "npm run build --prefix inspector",
     );
   });
 

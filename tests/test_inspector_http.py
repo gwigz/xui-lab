@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import queue
+import re
 import tempfile
 import threading
 import time
@@ -22,7 +23,10 @@ from xui_lab.inspector_http import (
     create_inspector_app,
     format_sse_event,
     inspector_openapi_document,
+    inspector_openapi_hash,
 )
+
+SESSION_TOKEN = "test-inspector-token"
 
 
 class SessionStub:
@@ -79,7 +83,31 @@ class SessionStub:
 
 class InspectorHttpTests(unittest.TestCase):
     def client(self, session: SessionStub) -> TestClient:
-        return TestClient(create_inspector_app(InspectorWorker(session)))
+        client = TestClient(
+            create_inspector_app(InspectorWorker(session), session_token=SESSION_TOKEN)
+        )
+        client.cookies.set("xui_lab_session", SESSION_TOKEN)
+        return client
+
+    def test_index_issues_session_cookie_and_api_requires_it(self) -> None:
+        app = create_inspector_app(
+            InspectorWorker(SessionStub()), session_token=SESSION_TOKEN
+        )
+        with TestClient(app) as client:
+            rejected = client.get("/api/v1/state")
+            index = client.get("/")
+            accepted = client.get("/api/v1/state")
+        self.assertEqual(401, rejected.status_code)
+        self.assertEqual("application/problem+json", rejected.headers["content-type"])
+        self.assertEqual("invalid_session", rejected.json()["code"])
+        self.assertEqual(401, rejected.json()["status"])
+        self.assertEqual(
+            "https://xui-lab.local/problems/invalid_session",
+            rejected.json()["type"],
+        )
+        self.assertIn("HttpOnly", index.headers["set-cookie"])
+        self.assertIn("SameSite=strict", index.headers["set-cookie"])
+        self.assertEqual(200, accepted.status_code)
 
     def test_serves_the_built_react_client_with_security_headers(self) -> None:
         with self.client(SessionStub()) as client:
@@ -120,6 +148,7 @@ class InspectorHttpTests(unittest.TestCase):
         self.assertNotIn("injected", second.json()["tree"])
         self.assertTrue(second.json()["tree"]["live"])
         self.assertEqual(2, second.json()["stateVersion"])
+        self.assertEqual(inspector_openapi_hash(), second.json()["openapiHash"])
 
     def test_unchanged_state_keeps_the_same_version(self) -> None:
         session = SessionStub()
@@ -150,15 +179,39 @@ class InspectorHttpTests(unittest.TestCase):
         self.assertEqual(
             {
                 "schemaVersion": 1,
-                "type": "error",
                 "code": "invalid_interactive_action",
-                "message": "interactive action violates the XUI Lab contract",
+                "detail": "interactive action violates the XUI Lab contract",
                 "operation": "inspector.action",
                 "retryable": False,
             },
-            failure.json()["error"],
+            {
+                key: failure.json()[key]
+                for key in (
+                    "schemaVersion",
+                    "code",
+                    "detail",
+                    "operation",
+                    "retryable",
+                )
+            },
         )
+        self.assertEqual("application/problem+json", failure.headers["content-type"])
         self.assertNotIn("int_type", json.dumps(failure.json()))
+
+    def test_problem_details_preserve_the_action_request_id(self) -> None:
+        with self.client(SessionStub()) as client:
+            failure = client.post(
+                "/api/v1/actions",
+                json={
+                    "schemaVersion": 1,
+                    "requestId": "req_invalid",
+                    "action": "pick",
+                    "x": "wrong",
+                    "y": 20,
+                },
+            )
+        self.assertEqual(400, failure.status_code)
+        self.assertEqual("req_invalid", failure.json()["requestId"])
 
     def test_rejects_oversized_action_bodies_before_parsing(self) -> None:
         with self.client(SessionStub()) as client:
@@ -168,8 +221,8 @@ class InspectorHttpTests(unittest.TestCase):
                 headers={"Content-Type": "application/json"},
             )
         self.assertEqual(413, response.status_code)
-        self.assertEqual("invalid_input", response.json()["error"]["code"])
-        self.assertTrue(response.json()["error"]["message"].endswith("bytes"))
+        self.assertEqual("invalid_input", response.json()["code"])
+        self.assertTrue(response.json()["detail"].endswith("bytes"))
 
     def test_serves_versioned_captures(self) -> None:
         directory = Path(tempfile.mkdtemp())
@@ -183,7 +236,7 @@ class InspectorHttpTests(unittest.TestCase):
         self.assertEqual("image/png", found.headers["content-type"])
         self.assertEqual(b"png bytes", found.content)
         self.assertEqual(404, missing.status_code)
-        self.assertEqual("not_found", missing.json()["error"]["code"])
+        self.assertEqual("not_found", missing.json()["code"])
 
     def test_events_stream_invalidation_records(self) -> None:
         session = SessionStub()
@@ -207,6 +260,55 @@ class InspectorHttpTests(unittest.TestCase):
         body = json.loads(data_line.removeprefix("data: "))
         self.assertEqual(event.event_id, body["eventId"])
         self.assertEqual(event.state_version, body["stateVersion"])
+
+    def test_subscribe_replays_every_event_after_last_event_id(self) -> None:
+        session = SessionStub()
+        worker = InspectorWorker(session)
+        worker.start()
+        first_subscriber = worker.subscribe()
+        try:
+            first = first_subscriber.get(timeout=1)
+            assert first is not None
+            session.state_value["recording"] = ["one"]
+            worker.state()
+            session.state_value["recording"] = ["one", "two"]
+            worker.state()
+            replay = worker.subscribe(last_event_id=first.event_id)
+            try:
+                replayed = [replay.get(timeout=1), replay.get(timeout=1)]
+            finally:
+                worker.unsubscribe(replay)
+        finally:
+            worker.unsubscribe(first_subscriber)
+            worker.close()
+        self.assertEqual([2, 3], [event.event_id for event in replayed if event])
+        self.assertEqual(
+            ["invalidate", "invalidate"],
+            [event.event_name for event in replayed if event],
+        )
+
+    def test_subscribe_requires_refresh_when_last_event_has_expired(self) -> None:
+        session = SessionStub()
+        worker = InspectorWorker(session, max_replay=2)
+        worker.start()
+        subscriber = worker.subscribe()
+        try:
+            first = subscriber.get(timeout=1)
+            assert first is not None
+            for value in ("one", "two", "three"):
+                session.state_value["recording"] = [value]
+                worker.state()
+            replay = worker.subscribe(last_event_id=first.event_id)
+            try:
+                reset = replay.get(timeout=1)
+            finally:
+                worker.unsubscribe(replay)
+        finally:
+            worker.unsubscribe(subscriber)
+            worker.close()
+        assert reset is not None
+        self.assertEqual("reset", reset.event_name)
+        self.assertEqual(4, reset.event_id)
 
     def test_state_refetch_does_not_publish_an_unchanged_snapshot(self) -> None:
         session = SessionStub()
@@ -310,8 +412,9 @@ class InspectorHttpTests(unittest.TestCase):
     def test_lifespan_starts_and_stops_the_worker(self) -> None:
         session = SessionStub()
         worker = InspectorWorker(session)
-        app = create_inspector_app(worker)
+        app = create_inspector_app(worker, session_token=SESSION_TOKEN)
         with TestClient(app) as client:
+            client.get("/")
             self.assertEqual(200, client.get("/api/v1/state").status_code)
             thread = worker._thread
             self.assertIsNotNone(thread)
@@ -325,7 +428,7 @@ class InspectorHttpTests(unittest.TestCase):
             with self.client(session) as client:
                 response = client.get("/api/v1/state")
         self.assertEqual(413, response.status_code)
-        self.assertEqual("response_too_large", response.json()["error"]["code"])
+        self.assertEqual("response_too_large", response.json()["code"])
 
     def test_openapi_document_covers_the_versioned_routes(self) -> None:
         document = inspector_openapi_document()
@@ -348,6 +451,16 @@ class InspectorHttpTests(unittest.TestCase):
             document["components"]["schemas"]["InspectorStateDocument"]["required"],
         )
         self.assertNotIn("/docs", paths)
+        self.assertNotIn("HTTPValidationError", document["components"]["schemas"])
+
+    def test_embedded_client_uses_the_server_openapi_hash(self) -> None:
+        source = Path("inspector/src/generated/openapi-hash.ts").read_text(
+            encoding="utf-8"
+        )
+        match = re.fullmatch(r'export const OPENAPI_HASH = "([0-9a-f]{64})";\n', source)
+        self.assertIsNotNone(match)
+        assert match is not None
+        self.assertEqual(inspector_openapi_hash(), match.group(1))
 
 
 if __name__ == "__main__":

@@ -1,3 +1,6 @@
+import type { components, operations } from "./generated/inspector-api";
+import { OPENAPI_HASH } from "./generated/openapi-hash";
+
 export type TreeNode = Readonly<{
   children: readonly TreeNode[];
   controlId: string;
@@ -26,16 +29,10 @@ export type RankedLocator = Readonly<{
   fallbackReason: string | null;
 }>;
 
-export type KeyboardModifier = "shift" | "control" | "alt";
-
-export type Selector =
-  | Readonly<{ schemaVersion: 1; kind: "role"; role: string; name?: string }>
-  | Readonly<{ schemaVersion: 1; kind: "label"; label: string }>
-  | Readonly<{ schemaVersion: 1; kind: "placeholder"; placeholder: string }>
-  | Readonly<{ schemaVersion: 1; kind: "text"; text: string }>
-  | Readonly<{ schemaVersion: 1; kind: "modelId"; modelId: string }>
-  | Readonly<{ schemaVersion: 1; kind: "controlId"; controlId: string }>
-  | Readonly<{ schemaVersion: 1; kind: "path"; path: string }>;
+export type Selector = NonNullable<components["schemas"]["HighlightInteractiveAction"]["selector"]>;
+export type KeyboardModifier = NonNullable<
+  components["schemas"]["PressInteractiveAction"]["modifiers"]
+>[number];
 
 export function controlIdSelector(controlId: string): Selector {
   return { schemaVersion: 1, kind: "controlId", controlId };
@@ -57,50 +54,18 @@ export type InspectorState = Readonly<{
   inputOperations: readonly string[];
   capture: CaptureState;
   stateVersion: number;
+  openapiHash: string;
 }>;
 
-export type InspectorSessionEvent = Readonly<{
-  eventId: number;
-  stateVersion: number;
-  requestId?: string;
-  captureVersion?: number;
-}>;
+export type InspectorSessionEvent = Readonly<
+  operations["get_events_api_v1_events_get"]["responses"][200]["content"]["text/event-stream"]
+>;
 
-export type InspectorAction =
-  | Readonly<{ action: "reload" }>
-  | Readonly<{ action: "highlight"; selector: Selector }>
-  | Readonly<{ action: "pick"; x: number; y: number }>
-  | Readonly<{ action: "resizeViewport"; width: number; height: number; uiScale: number }>
-  | Readonly<{ action: "resizeSubject"; width: number; height: number }>
-  | Readonly<{ action: "capture" }>
-  | Readonly<{ action: "export" }>
-  | Readonly<{ action: "click"; selector: Selector }>
-  | Readonly<{ action: "clickAt"; x: number; y: number }>
-  | Readonly<{ action: "doubleClickAt"; x: number; y: number }>
-  | Readonly<{ action: "rightClickAt"; x: number; y: number }>
-  | Readonly<{
-      action: "drag";
-      startX: number;
-      startY: number;
-      endX: number;
-      endY: number;
-    }>
-  | Readonly<{ action: "scrollAt"; x: number; y: number; clicks: number }>
-  | Readonly<{
-      action: "dragAndDrop";
-      source: Selector;
-      target: Selector;
-    }>
-  | Readonly<{ action: "fill"; selector: Selector; text: string }>
-  | Readonly<{ action: "type"; selector: Selector; text: string }>
-  | Readonly<{
-      action: "press";
-      selector: Selector;
-      key: string;
-      modifiers?: readonly KeyboardModifier[];
-    }>
-  | Readonly<{ action: "replay"; scenario: string }>
-  | Readonly<{ action: "switch"; subject: string; fixture: string }>;
+type WithoutRequestId<T> = T extends unknown ? Omit<T, "requestId"> : never;
+
+export type InspectorAction = Readonly<
+  WithoutRequestId<components["schemas"]["InteractiveAction"]>
+>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -206,7 +171,7 @@ function parseSelector(value: unknown, context: string): Selector {
       schemaVersion: 1,
       kind,
       role: nonEmptyStringValue(record.role, `${context}.role`),
-      name: name === undefined ? undefined : nonEmptyStringValue(name, `${context}.name`),
+      name: name === undefined ? null : nonEmptyStringValue(name, `${context}.name`),
     };
   }
 
@@ -307,6 +272,13 @@ function parseTreeNode(value: unknown, context = "state.tree"): TreeNode {
 
 export function parseInspectorState(value: unknown): InspectorState {
   const record = objectValue(value, "state");
+  const openapiHash = stringValue(record.openapiHash, "state.openapiHash");
+
+  if (openapiHash !== OPENAPI_HASH) {
+    throw new Error(
+      "Inspector API changed. Rebuild the client with: npm run build --prefix inspector",
+    );
+  }
   const capture = objectValue(record.capture, "state.capture");
   const available = booleanValue(capture.available, "state.capture.available");
   const version = numberValue(capture.version, "state.capture.version");
@@ -323,6 +295,7 @@ export function parseInspectorState(value: unknown): InspectorState {
     inputOperations: stringArray(record.inputOperations, "state.inputOperations"),
     capture: available ? { kind: "available", version } : { kind: "empty", version },
     stateVersion: nonNegativeIntValue(record.stateVersion, "state.stateVersion"),
+    openapiHash,
   };
 }
 

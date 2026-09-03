@@ -3,16 +3,21 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import queue
+import secrets
 import socket
 import threading
 import webbrowser
+from collections import deque
 from collections.abc import AsyncIterator
 from concurrent.futures import Future
 from concurrent.futures import TimeoutError as FutureTimeout
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from functools import lru_cache
+from http import HTTPStatus
 from pathlib import Path
 from typing import Any, Literal, Protocol
 
@@ -49,12 +54,14 @@ MAX_STATE_BYTES = 8 * 1024 * 1024
 MAX_CAPTURE_BYTES = 16 * 1024 * 1024
 ACTION_QUEUE_SIZE = 32
 EVENT_QUEUE_SIZE = 16
+EVENT_REPLAY_SIZE = 16
 STATE_TIMEOUT_SECONDS = 30.0
 ACTION_TIMEOUT_SECONDS = 120.0
 EVENT_HEARTBEAT_SECONDS = 15.0
 EVENT_POLL_SECONDS = 0.25
 WATCH_INTERVAL_SECONDS = 0.7
 QUEUE_FULL_MESSAGE = "inspector session is busy"
+SESSION_COOKIE = "xui_lab_session"
 SECURITY_HEADERS = {
     "Cache-Control": "no-store",
     "Content-Security-Policy": (
@@ -101,6 +108,7 @@ class InspectorStateDocument(ContractModel):
     input_operations: list[str] = Field(alias="inputOperations")
     capture: InspectorCaptureInfo
     state_version: NonNegativeInt = Field(alias="stateVersion")
+    openapi_hash: NonEmptyString = Field(alias="openapiHash")
 
 
 class InspectorActionAccepted(ContractModel):
@@ -108,13 +116,19 @@ class InspectorActionAccepted(ContractModel):
     result: dict[str, Any]
 
 
-class InspectorActionRejected(ContractModel):
-    ok: Literal[False]
-    error: ErrorRecord
-
-
-class InspectorErrorBody(ContractModel):
-    error: ErrorRecord
+class InspectorProblemDetails(ContractModel):
+    type: NonEmptyString
+    title: NonEmptyString
+    status: NonNegativeInt
+    detail: NonEmptyString
+    schema_version: int = Field(alias="schemaVersion")
+    code: NonEmptyString
+    operation: NonEmptyString
+    retryable: bool
+    request_id: NonEmptyString | None = Field(default=None, alias="requestId")
+    selector: contracts.Selector | None = None
+    capability: NonEmptyString | None = None
+    artifacts: tuple[NonEmptyString, ...] | None = None
 
 
 class InspectorSessionEvent(ContractModel):
@@ -130,6 +144,7 @@ class _SessionEvent:
     state_version: int
     request_id: str | None
     capture_version: int | None
+    event_name: Literal["invalidate", "reset"] = "invalidate"
 
     def payload(self) -> dict[str, Any]:
         return InspectorSessionEvent(
@@ -194,18 +209,31 @@ def error_json(
     record: ErrorRecord,
     *,
     status: int,
-    action: bool = False,
 ) -> JSONResponse:
-    payload = record.model_dump(mode="json", by_alias=True, exclude_none=True)
-    body: dict[str, Any] = {"error": payload}
-    if action:
-        body = {"ok": False, "error": payload}
-    return JSONResponse(body, status_code=status)
+    body = InspectorProblemDetails(
+        type=f"https://xui-lab.local/problems/{record.code}",
+        title=HTTPStatus(status).phrase,
+        status=status,
+        detail=record.message,
+        schemaVersion=record.schema_version,
+        code=record.code,
+        operation=record.operation,
+        retryable=record.retryable,
+        requestId=record.request_id,
+        selector=record.selector,
+        capability=record.capability,
+        artifacts=record.artifacts,
+    ).model_dump(mode="json", by_alias=True, exclude_none=True)
+    return JSONResponse(body, status_code=status, media_type="application/problem+json")
 
 
 class InspectorWorker:
     def __init__(
-        self, session: InspectorSession, *, max_queue: int = ACTION_QUEUE_SIZE
+        self,
+        session: InspectorSession,
+        *,
+        max_queue: int = ACTION_QUEUE_SIZE,
+        max_replay: int = EVENT_REPLAY_SIZE,
     ):
         self._session = session
         self._jobs: queue.Queue[_Job | None] = queue.Queue(maxsize=max_queue)
@@ -217,6 +245,7 @@ class InspectorWorker:
         self._state_version = 0
         self._event_id = 0
         self._latest_event: _SessionEvent | None = None
+        self._events: deque[_SessionEvent] = deque(maxlen=max_replay)
 
     def start(self) -> None:
         if self._thread is not None:
@@ -270,14 +299,35 @@ class InspectorWorker:
     def capture_path(self, version: int) -> Path | None:
         return self._session.capture_path(version)
 
-    def subscribe(self) -> queue.Queue[_SessionEvent | None]:
+    def subscribe(
+        self, *, last_event_id: int | None = None
+    ) -> queue.Queue[_SessionEvent | None]:
         subscriber: queue.Queue[_SessionEvent | None] = queue.Queue(
             maxsize=EVENT_QUEUE_SIZE
         )
-        latest = self._latest_event
-        if latest is not None:
-            subscriber.put_nowait(latest)
         with self._subscriber_lock:
+            events = list(self._events)
+            if last_event_id is None:
+                if events:
+                    subscriber.put_nowait(events[-1])
+            elif events and (
+                last_event_id < events[0].event_id - 1
+                or last_event_id > events[-1].event_id
+            ):
+                latest = events[-1]
+                subscriber.put_nowait(
+                    _SessionEvent(
+                        event_id=latest.event_id,
+                        state_version=latest.state_version,
+                        request_id=latest.request_id,
+                        capture_version=latest.capture_version,
+                        event_name="reset",
+                    )
+                )
+            else:
+                for event in events:
+                    if event.event_id > last_event_id:
+                        subscriber.put_nowait(event)
             self._subscribers.append(subscriber)
         return subscriber
 
@@ -342,7 +392,11 @@ class InspectorWorker:
             pass
 
     def _state_document(self, snapshot: dict[str, Any]) -> dict[str, Any]:
-        return {**snapshot, "stateVersion": self._state_version}
+        return {
+            **snapshot,
+            "stateVersion": self._state_version,
+            "openapiHash": inspector_openapi_hash(),
+        }
 
     def _publish_state(self, *, request_id: str | None) -> dict[str, Any]:
         snapshot = require_object(
@@ -367,6 +421,7 @@ class InspectorWorker:
         )
         self._latest_event = event
         with self._subscriber_lock:
+            self._events.append(event)
             subscribers = list(self._subscribers)
         for subscriber in subscribers:
             try:
@@ -394,7 +449,9 @@ class InspectorWorker:
 
 def format_sse_event(event: _SessionEvent) -> bytes:
     payload = json.dumps(event.payload(), separators=(",", ":"))
-    return (f"id: {event.event_id}\nevent: invalidate\ndata: {payload}\n\n").encode()
+    return (
+        f"id: {event.event_id}\nevent: {event.event_name}\ndata: {payload}\n\n"
+    ).encode()
 
 
 def _request_id(payload: dict[str, Any]) -> str | None:
@@ -403,8 +460,9 @@ def _request_id(payload: dict[str, Any]) -> str | None:
 
 
 class _SecurityHeadersMiddleware:
-    def __init__(self, app: ASGIApp):
+    def __init__(self, app: ASGIApp, *, session_token: str):
         self.app = app
+        self._session_token = session_token
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -421,10 +479,24 @@ class _SecurityHeadersMiddleware:
                 message = {**message, "headers": headers}
             await send(message)
 
+        request = Request(scope)
+        if request.url.path.startswith("/api/v1/") and not secrets.compare_digest(
+            request.cookies.get(SESSION_COOKIE, ""), self._session_token
+        ):
+            record = http_error_record(
+                "inspector session is invalid",
+                code="invalid_session",
+                operation=operation_for(request.url.path),
+            )
+            await error_json(record, status=401)(scope, receive, send_with_headers)
+            return
+
         await self.app(scope, receive, send_with_headers)
 
 
-def create_inspector_app(worker: InspectorWorker | None = None) -> FastAPI:
+def create_inspector_app(
+    worker: InspectorWorker | None = None, *, session_token: str
+) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         configured = getattr(app.state, "worker", None)
@@ -446,7 +518,7 @@ def create_inspector_app(worker: InspectorWorker | None = None) -> FastAPI:
     )
     if worker is not None:
         app.state.worker = worker
-    app.add_middleware(_SecurityHeadersMiddleware)
+    app.add_middleware(_SecurityHeadersMiddleware, session_token=session_token)
 
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(
@@ -461,7 +533,6 @@ def create_inspector_app(worker: InspectorWorker | None = None) -> FastAPI:
         return error_json(
             record,
             status=exc.status_code,
-            action=operation == "inspector.action",
         )
 
     @app.exception_handler(RequestValidationError)
@@ -473,19 +544,27 @@ def create_inspector_app(worker: InspectorWorker | None = None) -> FastAPI:
             "interactive action" if operation == "inspector.action" else operation,
             operation=operation,
         )
-        return error_json(record, status=400, action=operation == "inspector.action")
+        return error_json(record, status=400)
 
     @app.get("/", include_in_schema=False)
     @app.get("/index.html", include_in_schema=False)
     def index() -> FileResponse:
-        return FileResponse(
+        response = FileResponse(
             INSPECTOR_ASSETS / "index.html", media_type="text/html; charset=utf-8"
         )
+        response.set_cookie(
+            SESSION_COOKIE,
+            session_token,
+            httponly=True,
+            samesite="strict",
+            path="/api/v1",
+        )
+        return response
 
     @app.get(
         "/api/v1/state",
         response_model=InspectorStateDocument,
-        responses={413: {"model": InspectorErrorBody}},
+        responses={413: {"model": InspectorProblemDetails}},
     )
     def get_state(request: Request) -> Response:
         current = _worker(request)
@@ -529,9 +608,9 @@ def create_inspector_app(worker: InspectorWorker | None = None) -> FastAPI:
         "/api/v1/actions",
         response_model=InspectorActionAccepted,
         responses={
-            400: {"model": InspectorActionRejected},
-            413: {"model": InspectorActionRejected},
-            429: {"model": InspectorActionRejected},
+            400: {"model": InspectorProblemDetails},
+            413: {"model": InspectorProblemDetails},
+            429: {"model": InspectorProblemDetails},
         },
     )
     async def post_actions(request: Request) -> Response:
@@ -549,7 +628,6 @@ def create_inspector_app(worker: InspectorWorker | None = None) -> FastAPI:
                     operation="inspector.action",
                 ),
                 status=400,
-                action=True,
             )
         if not isinstance(value, dict):
             return error_json(
@@ -559,7 +637,6 @@ def create_inspector_app(worker: InspectorWorker | None = None) -> FastAPI:
                     operation="inspector.action",
                 ),
                 status=400,
-                action=True,
             )
         if "schemaVersion" not in value:
             value = {"schemaVersion": 1, **value}
@@ -575,7 +652,6 @@ def create_inspector_app(worker: InspectorWorker | None = None) -> FastAPI:
                     retryable=True,
                 ),
                 status=429,
-                action=True,
             )
         except InspectorLimitError as error:
             return error_json(
@@ -585,31 +661,37 @@ def create_inspector_app(worker: InspectorWorker | None = None) -> FastAPI:
                     operation="inspector.action",
                 ),
                 status=413,
-                action=True,
             )
         except XUILabError as error:
             return error_json(
-                contracts.error_record(error, operation="inspector.action"),
+                contracts.error_record(
+                    error,
+                    operation="inspector.action",
+                    request_id=_request_id(value),
+                ),
                 status=400,
-                action=True,
             )
         return JSONResponse({"ok": True, "result": result})
 
     @app.get(
         "/api/v1/events",
         responses={
+            400: {"model": InspectorProblemDetails},
             200: {
                 "content": {
                     "text/event-stream": {
                         "schema": TypeAdapter(InspectorSessionEvent).json_schema()
                     }
                 }
-            }
+            },
         },
     )
-    async def get_events(request: Request) -> StreamingResponse:
+    async def get_events(request: Request) -> Response:
         current = _worker(request)
-        subscriber = current.subscribe()
+        last_event_id, error = _last_event_id(request)
+        if error is not None:
+            return error
+        subscriber = current.subscribe(last_event_id=last_event_id)
 
         async def publish() -> AsyncIterator[bytes]:
             last_heartbeat = asyncio.get_running_loop().time()
@@ -651,8 +733,9 @@ def create_inspector_app(worker: InspectorWorker | None = None) -> FastAPI:
         "/api/v1/captures/{version}",
         responses={
             200: {"content": {"image/png": {}}},
-            404: {"model": InspectorErrorBody},
-            413: {"model": InspectorErrorBody},
+            400: {"model": InspectorProblemDetails},
+            404: {"model": InspectorProblemDetails},
+            413: {"model": InspectorProblemDetails},
         },
     )
     def get_capture(version: int, request: Request) -> Response:
@@ -711,6 +794,26 @@ def _worker(request: Request) -> InspectorWorker:
     return worker
 
 
+def _last_event_id(request: Request) -> tuple[int | None, JSONResponse | None]:
+    raw = request.headers.get("last-event-id")
+    if raw is None:
+        return None, None
+    try:
+        value = int(raw)
+    except ValueError:
+        value = -1
+    if value < 0:
+        return None, error_json(
+            http_error_record(
+                "Last-Event-ID must be a non-negative integer",
+                code="invalid_input",
+                operation="inspector.events",
+            ),
+            status=400,
+        )
+    return value, None
+
+
 async def _read_action_body(request: Request) -> tuple[bytes, JSONResponse | None]:
     length_header = request.headers.get("content-length")
     if length_header is not None:
@@ -724,7 +827,6 @@ async def _read_action_body(request: Request) -> tuple[bytes, JSONResponse | Non
                     operation="inspector.action",
                 ),
                 status=400,
-                action=True,
             )
         if length < 1 or length > MAX_ACTION_BYTES:
             return b"", error_json(
@@ -734,7 +836,6 @@ async def _read_action_body(request: Request) -> tuple[bytes, JSONResponse | Non
                     operation="inspector.action",
                 ),
                 status=413 if length > MAX_ACTION_BYTES else 400,
-                action=True,
             )
     chunks: list[bytes] = []
     size = 0
@@ -748,7 +849,6 @@ async def _read_action_body(request: Request) -> tuple[bytes, JSONResponse | Non
                     operation="inspector.action",
                 ),
                 status=413,
-                action=True,
             )
         chunks.append(chunk)
     body = b"".join(chunks)
@@ -760,13 +860,12 @@ async def _read_action_body(request: Request) -> tuple[bytes, JSONResponse | Non
                 operation="inspector.action",
             ),
             status=400,
-            action=True,
         )
     return body, None
 
 
 def inspector_openapi_document() -> dict[str, Any]:
-    app = create_inspector_app()
+    app = create_inspector_app(session_token="openapi-generation-token")
     document = get_openapi(
         title=app.title,
         version=app.version,
@@ -788,7 +887,47 @@ def inspector_openapi_document() -> dict[str, Any]:
             }
         },
     }
+    for path in document["paths"].values():
+        for operation in path.values():
+            if not isinstance(operation, dict):
+                continue
+            responses = operation.get("responses")
+            if not isinstance(responses, dict):
+                continue
+            responses.pop("422", None)
+            responses.setdefault(
+                "401",
+                {
+                    "description": "Unauthorized",
+                    "content": {
+                        "application/problem+json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/InspectorProblemDetails"
+                            }
+                        }
+                    },
+                },
+            )
+            for status, response in responses.items():
+                if str(status).startswith("2") or not isinstance(response, dict):
+                    continue
+                content = response.get("content")
+                if not isinstance(content, dict):
+                    continue
+                schema = content.pop("application/json", None)
+                if schema is not None:
+                    content["application/problem+json"] = schema
+    components.pop("HTTPValidationError", None)
+    components.pop("ValidationError", None)
     return document
+
+
+@lru_cache(maxsize=1)
+def inspector_openapi_hash() -> str:
+    encoded = (
+        json.dumps(inspector_openapi_document(), indent=2, sort_keys=True) + "\n"
+    ).encode()
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def serve_inspector(
@@ -802,7 +941,7 @@ def serve_inspector(
     if assets_problem is not None:
         raise RuntimeFailure(f"{assets_problem}; {inspector_build_instruction()}")
     worker = InspectorWorker(session)
-    app = create_inspector_app(worker)
+    app = create_inspector_app(worker, session_token=secrets.token_urlsafe(32))
     sock = socket.create_server((host, port))
     bound_host, bound_port = sock.getsockname()[:2]
     url = f"http://{bound_host}:{bound_port}/"
