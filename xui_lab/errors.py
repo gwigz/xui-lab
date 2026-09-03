@@ -20,6 +20,10 @@ class ContractViolation(InputError):
 class CapabilityError(XUILabError):
     """The selected runtime does not provide a required capability."""
 
+    def __init__(self, message: str, *, capability: str | None = None) -> None:
+        super().__init__(message)
+        self.capability = capability
+
 
 class RuntimeFailure(XUILabError):
     """The fork runtime failed or violated the JSON-lines protocol."""

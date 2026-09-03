@@ -1,0 +1,218 @@
+{
+  "$defs": {
+    "PreflightCapabilityReport": {
+      "additionalProperties": false,
+      "properties": {
+        "available": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Available",
+          "type": "array"
+        },
+        "declared": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Declared",
+          "type": "array"
+        },
+        "missing": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Missing",
+          "type": "array"
+        },
+        "required": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Required",
+          "type": "array"
+        }
+      },
+      "required": [
+        "declared",
+        "required",
+        "available",
+        "missing"
+      ],
+      "title": "PreflightCapabilityReport",
+      "type": "object"
+    },
+    "PreflightOperationReport": {
+      "additionalProperties": false,
+      "properties": {
+        "available": {
+          "title": "Available",
+          "type": "boolean"
+        },
+        "kind": {
+          "enum": [
+            "query",
+            "input"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "missingCapabilities": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Missingcapabilities",
+          "type": "array"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "requiredCapabilities": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Requiredcapabilities",
+          "type": "array"
+        },
+        "suggestedOperations": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Suggestedoperations",
+          "type": "array"
+        },
+        "unavailableReason": {
+          "anyOf": [
+            {
+              "enum": [
+                "source_mismatch",
+                "missing_capability"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unavailablereason"
+        }
+      },
+      "required": [
+        "name",
+        "kind",
+        "available",
+        "requiredCapabilities",
+        "missingCapabilities",
+        "suggestedOperations"
+      ],
+      "title": "PreflightOperationReport",
+      "type": "object"
+    },
+    "SelectedRuntimeContract": {
+      "additionalProperties": false,
+      "properties": {
+        "commit": {
+          "minLength": 1,
+          "title": "Commit",
+          "type": "string"
+        },
+        "fork": {
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Fork",
+          "type": "string"
+        },
+        "matched": {
+          "title": "Matched",
+          "type": "boolean"
+        },
+        "path": {
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "fork",
+        "commit",
+        "matched"
+      ],
+      "title": "SelectedRuntimeContract",
+      "type": "object"
+    }
+  },
+  "$id": "https://xui-lab.local/schemas/preflight.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "capabilities": {
+      "$ref": "#/$defs/PreflightCapabilityReport"
+    },
+    "fork": {
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9_-]*$",
+      "title": "Fork",
+      "type": "string"
+    },
+    "operations": {
+      "items": {
+        "$ref": "#/$defs/PreflightOperationReport"
+      },
+      "title": "Operations",
+      "type": "array"
+    },
+    "requestId": {
+      "minLength": 1,
+      "title": "Requestid",
+      "type": "string"
+    },
+    "runtime": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SelectedRuntimeContract"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "schemaVersion": {
+      "const": 1,
+      "title": "Schemaversion",
+      "type": "integer"
+    },
+    "subject": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Subject"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "requestId",
+    "fork",
+    "subject",
+    "runtime",
+    "capabilities",
+    "operations"
+  ],
+  "title": "xui-lab capability preflight report",
+  "type": "object"
+}

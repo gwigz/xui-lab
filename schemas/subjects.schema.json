@@ -1,0 +1,184 @@
+{
+  "$defs": {
+    "SelectedRuntimeContract": {
+      "additionalProperties": false,
+      "properties": {
+        "commit": {
+          "minLength": 1,
+          "title": "Commit",
+          "type": "string"
+        },
+        "fork": {
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Fork",
+          "type": "string"
+        },
+        "matched": {
+          "title": "Matched",
+          "type": "boolean"
+        },
+        "path": {
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "fork",
+        "commit",
+        "matched"
+      ],
+      "title": "SelectedRuntimeContract",
+      "type": "object"
+    },
+    "SubjectContract": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "openable": {
+          "title": "Openable",
+          "type": "boolean"
+        },
+        "requiredCapabilities": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Requiredcapabilities",
+          "type": "array"
+        },
+        "unavailableReason": {
+          "anyOf": [
+            {
+              "enum": [
+                "runtime_not_selected",
+                "source_mismatch"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unavailablereason"
+        }
+      },
+      "required": [
+        "name",
+        "requiredCapabilities",
+        "openable"
+      ],
+      "title": "SubjectContract",
+      "type": "object"
+    },
+    "SubjectSourceContract": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter": {
+          "minLength": 1,
+          "title": "Adapter",
+          "type": "string"
+        },
+        "commit": {
+          "minLength": 1,
+          "title": "Commit",
+          "type": "string"
+        },
+        "displayName": {
+          "minLength": 1,
+          "title": "Displayname",
+          "type": "string"
+        },
+        "overridden": {
+          "title": "Overridden",
+          "type": "boolean"
+        },
+        "path": {
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "resourceRoot": {
+          "minLength": 1,
+          "title": "Resourceroot",
+          "type": "string"
+        }
+      },
+      "required": [
+        "displayName",
+        "path",
+        "commit",
+        "overridden",
+        "adapter",
+        "resourceRoot"
+      ],
+      "title": "SubjectSourceContract",
+      "type": "object"
+    }
+  },
+  "$id": "https://xui-lab.local/schemas/subjects.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "fork": {
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9_-]*$",
+      "title": "Fork",
+      "type": "string"
+    },
+    "requestId": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Requestid"
+    },
+    "runtime": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SelectedRuntimeContract"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "schemaVersion": {
+      "const": 1,
+      "title": "Schemaversion",
+      "type": "integer"
+    },
+    "source": {
+      "$ref": "#/$defs/SubjectSourceContract"
+    },
+    "subjects": {
+      "items": {
+        "$ref": "#/$defs/SubjectContract"
+      },
+      "title": "Subjects",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "fork",
+    "source",
+    "runtime",
+    "subjects"
+  ],
+  "title": "xui-lab subject catalog",
+  "type": "object"
+}

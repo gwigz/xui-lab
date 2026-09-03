@@ -11,7 +11,12 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from xui_lab.api import Lab
-from xui_lab.contracts import ArtifactManifest
+from xui_lab.contracts import (
+    ArtifactManifest,
+    ClickCliCommand,
+    GetCliCommand,
+    TreeCliCommand,
+)
 from xui_lab.domain import Capability, Viewport
 from xui_lab.errors import AssertionFailure, InputError, RuntimeFailure
 from xui_lab.interactive import (
@@ -22,6 +27,7 @@ from xui_lab.interactive import (
     recorded_python,
 )
 from xui_lab.io import parse_manifest, read_json
+from xui_lab.oneshot import apply_window_command
 from xui_lab.scenarios import load_scenario
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -170,7 +176,7 @@ class PlaywrightApiTests(unittest.TestCase):
             self.directory / "artifacts",
         )
 
-    def open(self, subject: str = "test_widgets"):
+    def open(self, subject: str = "test_widgets", request_id: str | None = None):
         return self.lab.open(
             artifact_id=f"python_api_{subject}",
             subject=subject,
@@ -183,6 +189,7 @@ class PlaywrightApiTests(unittest.TestCase):
                     Capability("external_effects"),
                 }
             ),
+            request_id=request_id,
         )
 
     def commands(self) -> list[dict[str, object]]:
@@ -235,7 +242,7 @@ class PlaywrightApiTests(unittest.TestCase):
         )
 
     def test_completed_run_writes_a_valid_artifact_manifest(self) -> None:
-        with self.open():
+        with self.open(request_id="req_manifest"):
             pass
 
         manifest_path = (
@@ -247,7 +254,72 @@ class PlaywrightApiTests(unittest.TestCase):
         manifest = ArtifactManifest.model_validate(read_json(manifest_path))
         self.assertEqual("python_api_test_widgets", manifest.artifact_id)
         self.assertEqual("alchemy", manifest.fork)
+        self.assertEqual("req_manifest", manifest.request_id)
         self.assertIn("eventTrace", {entry.kind for entry in manifest.artifacts})
+
+    def test_oneshot_tree_returns_an_excerpt_and_artifact(self) -> None:
+        with self.open() as window:
+            result = apply_window_command(
+                window,
+                TreeCliCommand.model_validate(
+                    {
+                        "schemaVersion": 1,
+                        "command": "tree",
+                        "fork": None,
+                        "viewerSource": [],
+                        "requestId": "req_tree",
+                        "timeout": None,
+                        "session": "sess_test",
+                        "includeTree": False,
+                        "fields": None,
+                    }
+                ),
+            )
+        data = result["data"]
+        self.assertIn("treeArtifact", data)
+        self.assertIn("path", data["tree"])
+        self.assertTrue(Path(data["treeArtifact"]["path"]).is_file())
+
+    def test_oneshot_get_and_click_use_a_path_selector(self) -> None:
+        with self.open() as window:
+            got = apply_window_command(
+                window,
+                GetCliCommand.model_validate(
+                    {
+                        "schemaVersion": 1,
+                        "command": "get",
+                        "fork": None,
+                        "viewerSource": [],
+                        "requestId": "req_get",
+                        "timeout": None,
+                        "session": "sess_test",
+                        "includeTree": False,
+                        "fields": None,
+                        "path": CHECKBOX_PATH,
+                    }
+                ),
+            )
+            clicked = apply_window_command(
+                window,
+                ClickCliCommand.model_validate(
+                    {
+                        "schemaVersion": 1,
+                        "command": "click",
+                        "fork": None,
+                        "viewerSource": [],
+                        "requestId": "req_click",
+                        "timeout": None,
+                        "session": "sess_test",
+                        "includeTree": False,
+                        "fields": None,
+                        "path": CHECKBOX_PATH,
+                    }
+                ),
+            )
+        self.assertEqual(CHECKBOX_PATH, got["data"]["control"]["path"])
+        self.assertIn("python", got["data"]["locator"])
+        self.assertEqual("click", clicked["operation"])
+        self.assertEqual("result", clicked["type"])
 
     def test_supported_pointer_actions_use_the_same_input_operation(self) -> None:
         with self.open() as window:

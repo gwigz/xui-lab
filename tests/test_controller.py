@@ -6,6 +6,7 @@ import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from xui_lab.api import Lab, artifact_directory
 from xui_lab.domain import Capability, Viewport
@@ -57,6 +58,31 @@ class DomainTests(unittest.TestCase):
 
 
 class LabIsolationTests(unittest.TestCase):
+    def test_invalid_fixture_is_rejected_before_runtime_starts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_text:
+            directory = Path(directory_text)
+            fixture_data = read_json(ROOT / "fixtures/inventory-explorer.json")
+            fixture_data["inventory"][0]["surprise"] = True
+            fixture = directory / "invalid-fixture.json"
+            fixture.write_text(json.dumps(fixture_data), encoding="utf-8")
+            manifest = parse_manifest(ROOT, read_json(ROOT / "forks.json"))
+            fork = manifest.forks[manifest.default_fork]
+            lab = Lab(ROOT, fork, fork.source.path, directory / "runtime", directory)
+
+            with (
+                patch("xui_lab.api.RuntimeProcess") as runtime,
+                self.assertRaisesRegex(InputError, "fixture violates"),
+            ):
+                lab.open(
+                    artifact_id="invalid-fixture",
+                    subject="test_widgets",
+                    viewport=Viewport(100, 100, 1.0),
+                    capabilities=frozenset(),
+                    fixture=fixture,
+                )
+
+            runtime.assert_not_called()
+
     def test_each_scenario_uses_a_fresh_child_runtime(self) -> None:
         with tempfile.TemporaryDirectory() as directory_text:
             directory = Path(directory_text)
@@ -153,6 +179,37 @@ class RuntimeProcessTests(unittest.TestCase):
             )
             with self.assertRaisesRegex(RuntimeFailure, "stalled.*query"):
                 runtime.request({"op": "query", "kind": "tree"})
+
+    def test_invalid_command_is_rejected_before_transport(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_text:
+            directory = Path(directory_text)
+            request_log = directory / "requests.jsonl"
+            runtime = self.start(
+                directory,
+                f"""
+                import json
+                import sys
+                from pathlib import Path
+
+                for line in sys.stdin:
+                    command = json.loads(line)
+                    with Path({str(request_log)!r}).open("a", encoding="utf-8") as stream:
+                        print(json.dumps(command), file=stream)
+                    print(json.dumps({{"ok": True, "result": {{}}}}), flush=True)
+                    if command["op"] == "shutdown":
+                        break
+            """,
+            )
+
+            with self.assertRaisesRegex(InputError, "runtime command violates"):
+                runtime.request({"op": "notAnOperation"})
+            self.assertEqual(0, runtime.close())
+
+            requests = [
+                json.loads(line)
+                for line in request_log.read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertEqual(["shutdown"], [request["op"] for request in requests])
 
     def test_request_reports_runtime_exit(self) -> None:
         with tempfile.TemporaryDirectory() as directory_text:

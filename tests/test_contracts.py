@@ -19,14 +19,17 @@ from xui_lab.contracts import (
     ProgressEvent,
     ResultRecord,
     SelectorContract,
+    SubjectContract,
     contract_error,
+    error_record,
     parse_cli_command,
     parse_interactive_action,
     parse_runtime_command,
+    parse_runtime_metadata,
     parse_runtime_response,
     schema_documents,
 )
-from xui_lab.errors import InputError
+from xui_lab.errors import CapabilityError, InputError
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -79,6 +82,74 @@ class StrictContractTests(unittest.TestCase):
             "runtime command violates the XUI Lab contract", str(raised.exception)
         )
         self.assertNotIn("extra_forbidden", str(raised.exception))
+
+    def test_every_runtime_operation_has_a_typed_variant(self) -> None:
+        selector = {"path": "/root/button"}
+        commands = (
+            {
+                "op": "initialize",
+                "fork": "alchemy",
+                "forkCommit": "a" * 40,
+                "resourceRoot": "/viewer/indra/newview",
+                "subject": "test_widgets",
+                "viewport": {"width": 800, "height": 600, "uiScale": 1.0},
+                "fixture": None,
+                "artifactDir": "/artifacts/run",
+            },
+            {"op": "installCapabilities", "capabilities": ["inspection"]},
+            {"op": "frames", "count": 1},
+            {"op": "stable", "consecutiveFrames": 2, "maximumFrames": 60},
+            {"op": "resizeViewport", "width": 800, "height": 600},
+            {"op": "resizeSubject", "width": 400, "height": 300},
+            {"op": "reload"},
+            {"op": "query", "kind": "tree"},
+            {"op": "query", "kind": "menus"},
+            {"op": "query", "kind": "inventory"},
+            {"op": "query", "kind": "value", "path": "/root/button"},
+            {"op": "input", "event": "click", "button": "left", **selector},
+            {
+                "op": "input",
+                "event": "doubleClick",
+                "button": "left",
+                **selector,
+            },
+            {"op": "input", "event": "scroll", "clicks": -1, **selector},
+            {
+                "op": "input",
+                "event": "drag",
+                "startX": 1,
+                "startY": 2,
+                "endX": 3,
+                "endY": 4,
+            },
+            {
+                "op": "input",
+                "event": "dragAndDrop",
+                "source": selector,
+                "target": {"controlId": "target"},
+            },
+            {
+                "op": "input",
+                "event": "key",
+                "key": "Enter",
+                "modifiers": [],
+                **selector,
+            },
+            {"op": "input", "event": "fill", "text": "value", **selector},
+            {"op": "input", "event": "text", "text": "value", **selector},
+            {"op": "pick", "x": 10, "y": 20},
+            {"op": "highlight", "target": selector},
+            {"op": "diagnostics"},
+            {"op": "capture", "includeOverlay": False},
+            {"op": "shutdown"},
+        )
+
+        for candidate in commands:
+            with self.subTest(operation=candidate):
+                command = parse_runtime_command({"schemaVersion": 1, **candidate})
+                self.assertEqual(candidate["op"], command.op)
+                with self.assertRaises(ValidationError):
+                    command.op = "changed"  # type: ignore[misc]
 
     def test_fixture_rejects_unknown_nested_fields_and_duplicate_ids(self) -> None:
         fixture = json.loads((ROOT / "fixtures/inventory-explorer.json").read_text())
@@ -143,6 +214,27 @@ class StrictContractTests(unittest.TestCase):
             error.model_dump(mode="json", by_alias=True, exclude_none=True),
         )
 
+    def test_error_record_copies_request_id_and_capability(self) -> None:
+        error = error_record(
+            CapabilityError("runtime is missing menus", capability="menus"),
+            operation="preflight",
+            request_id="req_test",
+        )
+
+        self.assertEqual(
+            {
+                "schemaVersion": 1,
+                "type": "error",
+                "code": "missing_capability",
+                "message": "runtime is missing menus",
+                "operation": "preflight",
+                "retryable": False,
+                "requestId": "req_test",
+                "capability": "menus",
+            },
+            error.model_dump(mode="json", by_alias=True, exclude_none=True),
+        )
+
     def test_repository_contracts_reject_unknown_top_level_fields(self) -> None:
         manifest = json.loads((ROOT / "forks.json").read_text())
         manifest["surprise"] = True
@@ -175,6 +267,38 @@ class StrictContractTests(unittest.TestCase):
             parse_runtime_response({"ok": True, "result": {}, "surprise": True}, "tree")
         self.assertNotIn("extra_forbidden", str(raised.exception))
 
+    def test_runtime_metadata_ignores_unknown_fields(self) -> None:
+        metadata = parse_runtime_metadata(
+            {
+                "fork": "alchemy",
+                "forkCommit": "a" * 40,
+                "protocolVersion": 1,
+                "surprise": True,
+            }
+        )
+
+        self.assertEqual("alchemy", metadata.fork)
+        self.assertEqual("a" * 40, metadata.fork_commit)
+
+    def test_subject_openable_reason_is_closed(self) -> None:
+        with self.assertRaises(ValidationError):
+            SubjectContract.model_validate(
+                {
+                    "name": "test_widgets",
+                    "requiredCapabilities": ["inspection"],
+                    "openable": True,
+                    "unavailableReason": "runtime_not_selected",
+                }
+            )
+        with self.assertRaises(ValidationError):
+            SubjectContract.model_validate(
+                {
+                    "name": "test_widgets",
+                    "requiredCapabilities": ["inspection"],
+                    "openable": False,
+                }
+            )
+
     def test_cli_and_socket_models_use_strict_scalar_types(self) -> None:
         with self.assertRaises(InputError):
             parse_cli_command(
@@ -194,6 +318,8 @@ class StrictContractTests(unittest.TestCase):
                     "host": "127.0.0.1",
                     "port": 0,
                     "noBrowser": True,
+                    "requestId": "request-1",
+                    "timeout": None,
                 }
             )
         with self.assertRaises(InputError):

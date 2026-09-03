@@ -1,0 +1,220 @@
+{
+  "$defs": {
+    "RectangleContract": {
+      "additionalProperties": false,
+      "properties": {
+        "bottom": {
+          "title": "Bottom",
+          "type": "integer"
+        },
+        "left": {
+          "title": "Left",
+          "type": "integer"
+        },
+        "right": {
+          "title": "Right",
+          "type": "integer"
+        },
+        "top": {
+          "title": "Top",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "left",
+        "right",
+        "top",
+        "bottom"
+      ],
+      "title": "RectangleContract",
+      "type": "object"
+    },
+    "TreeNodeContract": {
+      "additionalProperties": false,
+      "properties": {
+        "available": {
+          "title": "Available",
+          "type": "boolean"
+        },
+        "children": {
+          "items": {
+            "$ref": "#/$defs/TreeNodeContract"
+          },
+          "title": "Children",
+          "type": "array"
+        },
+        "class": {
+          "minLength": 1,
+          "title": "Class",
+          "type": "string"
+        },
+        "clipping_rect": {
+          "$ref": "#/$defs/RectangleContract"
+        },
+        "control_id": {
+          "minLength": 1,
+          "title": "Control Id",
+          "type": "string"
+        },
+        "current_selection": {
+          "default": null,
+          "title": "Current Selection"
+        },
+        "enabled": {
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "enabled_chain": {
+          "title": "Enabled Chain",
+          "type": "boolean"
+        },
+        "error": {
+          "default": null,
+          "title": "Error",
+          "type": "null"
+        },
+        "hit_test_order": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hit Test Order"
+        },
+        "item_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Item Count"
+        },
+        "items": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Items"
+        },
+        "keyboard_focus": {
+          "title": "Keyboard Focus",
+          "type": "boolean"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "layout": {
+          "title": "Layout",
+          "type": "string"
+        },
+        "local_rect": {
+          "$ref": "#/$defs/RectangleContract"
+        },
+        "model_id": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model Id"
+        },
+        "mouse_capture": {
+          "title": "Mouse Capture",
+          "type": "boolean"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "rect": {
+          "$ref": "#/$defs/RectangleContract"
+        },
+        "reqid": {
+          "default": null,
+          "title": "Reqid",
+          "type": "null"
+        },
+        "screen_rect": {
+          "$ref": "#/$defs/RectangleContract"
+        },
+        "source_file": {
+          "title": "Source File",
+          "type": "string"
+        },
+        "source_line": {
+          "minimum": 0,
+          "title": "Source Line",
+          "type": "integer"
+        },
+        "value": {
+          "default": null,
+          "title": "Value"
+        },
+        "visible": {
+          "title": "Visible",
+          "type": "boolean"
+        },
+        "visible_chain": {
+          "title": "Visible Chain",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "available",
+        "children",
+        "class",
+        "clipping_rect",
+        "control_id",
+        "enabled",
+        "enabled_chain",
+        "keyboard_focus",
+        "layout",
+        "local_rect",
+        "mouse_capture",
+        "path",
+        "rect",
+        "screen_rect",
+        "source_file",
+        "source_line",
+        "visible",
+        "visible_chain"
+      ],
+      "title": "TreeNodeContract",
+      "type": "object"
+    }
+  },
+  "$id": "https://xui-lab.local/schemas/tree-node.schema.json",
+  "$ref": "#/$defs/TreeNodeContract",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "xui-lab production UI tree node"
+}

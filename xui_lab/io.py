@@ -4,12 +4,17 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from .contracts import parse_fork_manifest
+from .contracts import (
+    RuntimeMetadataContract,
+    parse_fork_manifest,
+    parse_runtime_metadata,
+)
 from .domain import Fork, ForkId, ForkSource, Manifest
-from .errors import InputError
+from .errors import InputError, RuntimeFailure
 
 
 def read_json(path: Path) -> Any:
@@ -43,7 +48,9 @@ def parse_manifest(root: Path, raw: Any) -> Manifest:
     return Manifest(ForkId(contract.default_fork), forks)
 
 
-def parse_source_overrides(values: list[str], manifest: Manifest) -> dict[ForkId, Path]:
+def parse_source_overrides(
+    values: Sequence[str], manifest: Manifest
+) -> dict[ForkId, Path]:
     overrides: dict[ForkId, Path] = {}
     for value in values:
         fork_text, separator, path_text = value.partition("=")
@@ -81,3 +88,34 @@ def git_commit(source: Path) -> str:
             f"cannot resolve viewer commit for {source}: {error}"
         ) from error
     return result.stdout.strip()
+
+
+def read_runtime_metadata(
+    executable: Path, *, timeout: float = 10.0
+) -> RuntimeMetadataContract:
+    """Read fork identity from a lab runtime without starting a viewer session."""
+    try:
+        completed = subprocess.run(
+            [str(executable), "--metadata"],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except OSError as error:
+        raise RuntimeFailure(f"cannot start runtime {executable}: {error}") from error
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeFailure(
+            f"runtime metadata stalled for {timeout:g}s from {executable}"
+        ) from error
+    if completed.returncode != 0:
+        raise RuntimeFailure(
+            f"runtime metadata command failed with status {completed.returncode}: "
+            f"{executable}"
+        )
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError as error:
+        raise RuntimeFailure(
+            f"invalid JSON in runtime metadata from {executable}: {error}"
+        ) from error
+    return parse_runtime_metadata(payload)

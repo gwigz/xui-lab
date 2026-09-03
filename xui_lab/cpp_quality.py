@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
-import argparse
 import json
 import re
 import shutil
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from .contracts import CppFormatCliCommand, CppTidyCliCommand
 from .errors import XUILabError
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -24,7 +25,7 @@ class QualityError(XUILabError):
     """Report invalid tool or compile-database input at the command boundary."""
 
 
-def adapter_files(values: list[str], suffixes: frozenset[str]) -> list[Path]:
+def adapter_files(values: Sequence[str], suffixes: frozenset[str]) -> list[Path]:
     candidates = (
         [Path(value).expanduser() for value in values]
         if values
@@ -113,7 +114,7 @@ def compile_database(value: str) -> tuple[Path, set[Path]]:
     return database.parent, files
 
 
-def format_cpp(args: argparse.Namespace) -> int:
+def format_cpp(args: CppFormatCliCommand) -> int:
     files = adapter_files(args.files, CPP_SUFFIXES)
     if not files:
         raise QualityError("no adapter-owned C++ files were found")
@@ -122,7 +123,7 @@ def format_cpp(args: argparse.Namespace) -> int:
     return subprocess.run([*command, *(str(path) for path in files)]).returncode
 
 
-def tidy_cpp(args: argparse.Namespace) -> int:
+def tidy_cpp(args: CppTidyCliCommand) -> int:
     files = adapter_files(args.files, TRANSLATION_UNIT_SUFFIXES)
     if not files:
         raise QualityError("no adapter-owned C++ translation units were found")

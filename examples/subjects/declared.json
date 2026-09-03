@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "fork": "alchemy",
+  "source": {
+    "displayName": "Alchemy",
+    "path": "/viewer/alchemy",
+    "commit": "0123456789abcdef0123456789abcdef01234567",
+    "overridden": false,
+    "adapter": "adapters/alchemy",
+    "resourceRoot": "indra/newview"
+  },
+  "runtime": null,
+  "subjects": [
+    {
+      "name": "test_widgets",
+      "requiredCapabilities": ["input", "inspection"],
+      "openable": false,
+      "unavailableReason": "runtime_not_selected"
+    }
+  ]
+}

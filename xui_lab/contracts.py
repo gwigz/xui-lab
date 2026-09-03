@@ -176,8 +176,35 @@ class ControlIdSelectorContract(VersionedContract):
     control_id: NonEmptyString = Field(alias="controlId")
 
 
+class RoleSelectorContract(VersionedContract):
+    kind: Literal["role"]
+    role: NonEmptyString
+    name: NonEmptyString | None = None
+
+
+class LabelSelectorContract(VersionedContract):
+    kind: Literal["label"]
+    label: NonEmptyString
+
+
+class PlaceholderSelectorContract(VersionedContract):
+    kind: Literal["placeholder"]
+    placeholder: NonEmptyString
+
+
+class TextSelectorContract(VersionedContract):
+    kind: Literal["text"]
+    text: NonEmptyString
+
+
 Selector: TypeAlias = Annotated[
-    PathSelectorContract | ModelIdSelectorContract | ControlIdSelectorContract,
+    PathSelectorContract
+    | ModelIdSelectorContract
+    | ControlIdSelectorContract
+    | RoleSelectorContract
+    | LabelSelectorContract
+    | PlaceholderSelectorContract
+    | TextSelectorContract,
     Field(discriminator="kind"),
 ]
 SelectorContract: TypeAdapter[Selector] = TypeAdapter(Selector)
@@ -451,10 +478,35 @@ RuntimeCommandAdapter: TypeAdapter[RuntimeCommand] = TypeAdapter(RuntimeCommand)
 class CliCommandBase(VersionedContract):
     fork: Identifier | None
     viewer_source: FrozenTuple[NonEmptyString] = Field(alias="viewerSource")
+    request_id: NonEmptyString = Field(alias="requestId")
+    timeout: PositiveFloat | None = None
 
 
 class CheckCliCommand(CliCommandBase):
     command: Literal["check"]
+
+
+class OperationsCliCommand(CliCommandBase):
+    command: Literal["operations"]
+    json_output: Literal[True] = Field(alias="json")
+
+
+class SubjectsCliCommand(CliCommandBase):
+    command: Literal["subjects"]
+    json_output: Literal[True] = Field(alias="json")
+    runtime: NonEmptyString | None = None
+
+
+class SchemaCliCommand(CliCommandBase):
+    command: Literal["schema"]
+
+
+class PreflightCliCommand(CliCommandBase):
+    command: Literal["preflight"]
+    json_output: Literal[True] = Field(alias="json")
+    subject: NonEmptyString | None = None
+    operation: NonEmptyString | None = None
+    runtime: NonEmptyString | None = None
 
 
 class RunCliCommand(CliCommandBase):
@@ -479,6 +531,167 @@ class InteractiveCliCommand(CliCommandBase):
     no_browser: bool = Field(alias="noBrowser")
 
 
+class SessionStartCliCommand(CliCommandBase):
+    command: Literal["session"]
+    session_command: Literal["start"] = Field(alias="sessionCommand")
+    subject: NonEmptyString
+    runtime: str | None
+    fixture: str | None
+    width: PositiveInt
+    height: PositiveInt
+    ui_scale: PositiveFloat = Field(alias="uiScale")
+    artifacts: NonEmptyString
+
+
+class SessionStatusCliCommand(CliCommandBase):
+    command: Literal["session"]
+    session_command: Literal["status"] = Field(alias="sessionCommand")
+    session_id: NonEmptyString | None = Field(default=None, alias="sessionId")
+
+
+class SessionCloseCliCommand(CliCommandBase):
+    command: Literal["session"]
+    session_command: Literal["close"] = Field(alias="sessionCommand")
+    session_id: NonEmptyString = Field(alias="sessionId")
+
+
+class SessionJsonlCliCommand(CliCommandBase):
+    command: Literal["session"]
+    session_command: Literal["jsonl"] = Field(alias="sessionCommand")
+    session_id: NonEmptyString = Field(alias="sessionId")
+
+
+class SessionServeCliCommand(CliCommandBase):
+    command: Literal["session"]
+    session_command: Literal["serve"] = Field(alias="sessionCommand")
+    session_id: NonEmptyString = Field(alias="sessionId")
+
+
+SessionCliCommand: TypeAlias = Annotated[
+    SessionStartCliCommand
+    | SessionStatusCliCommand
+    | SessionCloseCliCommand
+    | SessionJsonlCliCommand
+    | SessionServeCliCommand,
+    Field(discriminator="session_command"),
+]
+
+
+class SessionBoundCliCommand(CliCommandBase):
+    session: NonEmptyString
+    include_tree: bool = Field(default=False, alias="includeTree")
+    fields: str | None = None
+
+
+class SelectorCliCommand(SessionBoundCliCommand):
+    control_id: NonEmptyString | None = Field(default=None, alias="controlId")
+    model_id: UuidString | None = Field(default=None, alias="modelId")
+    path: Annotated[str, StringConstraints(min_length=1, pattern=r"^/")] | None = None
+    role: NonEmptyString | None = None
+    name: NonEmptyString | None = None
+    label: NonEmptyString | None = None
+    placeholder: NonEmptyString | None = None
+    text: NonEmptyString | None = None
+
+    @model_validator(mode="after")
+    def validate_selector_flags(self) -> SelectorCliCommand:
+        count = sum(
+            value is not None
+            for value in (
+                self.control_id,
+                self.model_id,
+                self.path,
+                self.role,
+                self.label,
+                self.placeholder,
+                self.text,
+            )
+        )
+        if count != 1:
+            raise ValueError("exactly one selector flag is required")
+        if self.name is not None and self.role is None:
+            raise ValueError("name requires role")
+        return self
+
+
+class TreeCliCommand(SessionBoundCliCommand):
+    command: Literal["tree"]
+    path: Annotated[str, StringConstraints(min_length=1, pattern=r"^/")] | None = None
+
+
+class PickCliCommand(SessionBoundCliCommand):
+    command: Literal["pick"]
+    x: int = Field(strict=True)
+    y: int = Field(strict=True)
+
+
+class GetCliCommand(SelectorCliCommand):
+    command: Literal["get"]
+
+
+class ClickCliCommand(SelectorCliCommand):
+    command: Literal["click"]
+
+
+class FillCliCommand(SelectorCliCommand):
+    command: Literal["fill"]
+    text_value: str = Field(alias="value")
+
+
+class PressCliCommand(SelectorCliCommand):
+    command: Literal["press"]
+    key: NonEmptyString
+    modifiers: FrozenTuple[Literal["shift", "control", "alt"]] = ()
+
+
+class ScrollCliCommand(SelectorCliCommand):
+    command: Literal["scroll"]
+    clicks: int = Field(strict=True)
+
+    @model_validator(mode="after")
+    def validate_clicks(self) -> ScrollCliCommand:
+        if self.clicks == 0:
+            raise ValueError("scroll clicks must be non-zero")
+        return self
+
+
+class DragByCliCommand(SelectorCliCommand):
+    command: Literal["drag-by"]
+    dx: int = Field(strict=True)
+    dy: int = Field(strict=True)
+
+
+class DragToCliCommand(SelectorCliCommand):
+    command: Literal["drag-to"]
+    target_control_id: NonEmptyString = Field(alias="targetControlId")
+
+
+class ResizeViewportCliCommand(SessionBoundCliCommand):
+    command: Literal["resize-viewport"]
+    width: PositiveInt
+    height: PositiveInt
+    ui_scale: PositiveFloat | None = Field(default=None, alias="uiScale")
+
+
+class ResizeSubjectCliCommand(SessionBoundCliCommand):
+    command: Literal["resize-subject"]
+    width: PositiveInt
+    height: PositiveInt
+
+
+class CaptureCliCommand(SessionBoundCliCommand):
+    command: Literal["capture"]
+    name: NonEmptyString | None = None
+
+
+class ReloadCliCommand(SessionBoundCliCommand):
+    command: Literal["reload"]
+
+
+class DiagnosticsCliCommand(SessionBoundCliCommand):
+    command: Literal["diagnostics"]
+
+
 class CppFormatCliCommand(CliCommandBase):
     command: Literal["cpp"]
     cpp_command: Literal["format"] = Field(alias="cppCommand")
@@ -497,9 +710,194 @@ CppCliCommand: TypeAlias = Annotated[
     CppFormatCliCommand | CppTidyCliCommand, Field(discriminator="cpp_command")
 ]
 CliCommand: TypeAlias = (
-    CheckCliCommand | RunCliCommand | InteractiveCliCommand | CppCliCommand
+    CheckCliCommand
+    | OperationsCliCommand
+    | SubjectsCliCommand
+    | SchemaCliCommand
+    | PreflightCliCommand
+    | SessionCliCommand
+    | TreeCliCommand
+    | PickCliCommand
+    | GetCliCommand
+    | ClickCliCommand
+    | FillCliCommand
+    | PressCliCommand
+    | ScrollCliCommand
+    | DragByCliCommand
+    | DragToCliCommand
+    | ResizeViewportCliCommand
+    | ResizeSubjectCliCommand
+    | CaptureCliCommand
+    | ReloadCliCommand
+    | DiagnosticsCliCommand
+    | RunCliCommand
+    | InteractiveCliCommand
+    | CppCliCommand
 )
 CliCommandAdapter: TypeAdapter[CliCommand] = TypeAdapter(CliCommand)
+
+
+class OperationArgumentContract(ContractModel):
+    name: NonEmptyString
+    type: Literal["integer", "string", "string[]", "selector"]
+    required: bool = True
+
+
+class OperationContract(ContractModel):
+    name: NonEmptyString
+    kind: Literal["query", "input"]
+    required_capabilities: FrozenTuple[NonEmptyString] = Field(
+        alias="requiredCapabilities"
+    )
+    argument_sets: FrozenTuple[FrozenTuple[OperationArgumentContract]] = Field(
+        alias="argumentSets", min_length=1
+    )
+
+
+class OperationsContract(VersionedContract):
+    request_id: NonEmptyString | None = Field(default=None, alias="requestId")
+    operations: FrozenTuple[OperationContract]
+
+
+class RuntimeMetadataContract(ContractModel):
+    """Identity reported by a fork runtime's `--metadata` command."""
+
+    model_config = ConfigDict(
+        extra="ignore", frozen=True, populate_by_name=True, strict=True
+    )
+    fork: Identifier
+    fork_commit: NonEmptyString = Field(alias="forkCommit")
+    protocol_version: Literal[1] = Field(alias="protocolVersion")
+
+
+class SubjectSourceContract(ContractModel):
+    display_name: NonEmptyString = Field(alias="displayName")
+    path: NonEmptyString
+    commit: NonEmptyString
+    overridden: bool
+    adapter: NonEmptyString
+    resource_root: NonEmptyString = Field(alias="resourceRoot")
+
+
+class SelectedRuntimeContract(ContractModel):
+    path: NonEmptyString
+    fork: Identifier
+    commit: NonEmptyString
+    matched: bool
+
+
+UnavailableReason: TypeAlias = Literal["runtime_not_selected", "source_mismatch"]
+
+
+class SubjectContract(ContractModel):
+    name: NonEmptyString
+    required_capabilities: FrozenTuple[NonEmptyString] = Field(
+        alias="requiredCapabilities"
+    )
+    openable: bool
+    unavailable_reason: UnavailableReason | None = Field(
+        default=None, alias="unavailableReason"
+    )
+
+    @model_validator(mode="after")
+    def validate_openable_reason(self) -> SubjectContract:
+        if self.openable == (self.unavailable_reason is None):
+            return self
+        raise ValueError(
+            "unavailable reason must be null only when the subject is openable"
+        )
+
+
+class SubjectsContract(VersionedContract):
+    request_id: NonEmptyString | None = Field(default=None, alias="requestId")
+    fork: Identifier
+    source: SubjectSourceContract
+    runtime: SelectedRuntimeContract | None
+    subjects: FrozenTuple[SubjectContract]
+
+
+class PreflightCapabilityReport(ContractModel):
+    declared: FrozenTuple[NonEmptyString]
+    required: FrozenTuple[NonEmptyString]
+    available: FrozenTuple[NonEmptyString]
+    missing: FrozenTuple[NonEmptyString]
+
+
+class PreflightOperationReport(ContractModel):
+    name: NonEmptyString
+    kind: Literal["query", "input"]
+    available: bool
+    required_capabilities: FrozenTuple[NonEmptyString] = Field(
+        alias="requiredCapabilities"
+    )
+    missing_capabilities: FrozenTuple[NonEmptyString] = Field(
+        alias="missingCapabilities"
+    )
+    suggested_operations: FrozenTuple[NonEmptyString] = Field(
+        alias="suggestedOperations"
+    )
+    unavailable_reason: Literal["source_mismatch", "missing_capability"] | None = Field(
+        default=None, alias="unavailableReason"
+    )
+
+    @model_validator(mode="after")
+    def validate_availability(self) -> PreflightOperationReport:
+        if self.available == (self.unavailable_reason is None):
+            return self
+        raise ValueError(
+            "unavailable reason must be null only when the operation is available"
+        )
+
+
+class PreflightContract(VersionedContract):
+    request_id: NonEmptyString = Field(alias="requestId")
+    fork: Identifier
+    subject: NonEmptyString | None
+    runtime: SelectedRuntimeContract | None
+    capabilities: PreflightCapabilityReport
+    operations: FrozenTuple[PreflightOperationReport]
+
+
+class RectangleContract(ContractModel):
+    left: int = Field(strict=True)
+    right: int = Field(strict=True)
+    top: int = Field(strict=True)
+    bottom: int = Field(strict=True)
+
+
+class TreeNodeContract(ContractModel):
+    available: bool
+    children: FrozenTuple[TreeNodeContract]
+    runtime_class: NonEmptyString = Field(alias="class")
+    clipping_rect: RectangleContract
+    control_id: NonEmptyString
+    enabled: bool
+    enabled_chain: bool
+    keyboard_focus: bool
+    layout: str
+    local_rect: RectangleContract
+    mouse_capture: bool
+    path: str
+    rect: RectangleContract
+    screen_rect: RectangleContract
+    source_file: str
+    source_line: NonNegativeInt
+    visible: bool
+    visible_chain: bool
+    hit_test_order: NonNegativeInt | None = None
+    label: str | None = None
+    model_id: UuidString | None = None
+    value: Any = None
+    current_selection: Any = None
+    item_count: NonNegativeInt | None = None
+    items: tuple[Any, ...] | None = None
+    error: None = None
+    reqid: None = None
+
+
+class SchemaCatalogContract(VersionedContract):
+    request_id: NonEmptyString | None = Field(default=None, alias="requestId")
+    schemas: dict[NonEmptyString, dict[str, Any]]
 
 
 class InteractiveActionBase(VersionedContract):
@@ -811,6 +1209,14 @@ def parse_adapter(value: Any) -> AdapterContract:
         raise ContractViolation("adapter contract") from error
 
 
+def parse_runtime_metadata(value: Any) -> RuntimeMetadataContract:
+    """Validate a runtime `--metadata` document at its process boundary."""
+    try:
+        return RuntimeMetadataContract.model_validate(value)
+    except ValidationError as error:
+        raise ContractViolation("runtime metadata") from error
+
+
 def parse_fixture(value: Any) -> FixtureContract:
     """Validate a deterministic fixture at its file boundary."""
     try:
@@ -847,7 +1253,9 @@ def parse_runtime_result(value: Any, operation: str) -> dict[str, Any]:
     return result.model_dump(mode="json", by_alias=True, exclude_none=True)
 
 
-def contract_error(boundary: str, *, operation: str) -> ErrorRecord:
+def contract_error(
+    boundary: str, *, operation: str, request_id: str | None = None
+) -> ErrorRecord:
     """Map private validation details to one stable public error record."""
     normalized = boundary.replace(" ", "_")
     return ErrorRecord(
@@ -857,15 +1265,28 @@ def contract_error(boundary: str, *, operation: str) -> ErrorRecord:
         message=f"{boundary} violates the XUI Lab contract",
         operation=operation,
         retryable=False,
+        requestId=request_id,
     )
 
 
-def error_record(error: BaseException, *, operation: str) -> ErrorRecord:
+def error_record(
+    error: BaseException,
+    *,
+    operation: str,
+    request_id: str | None = None,
+    selector: Selector | None = None,
+    capability: str | None = None,
+    artifacts: tuple[str, ...] | None = None,
+) -> ErrorRecord:
     """Convert a public exception to a stable machine-readable record."""
     if isinstance(error, ContractViolation):
-        return contract_error(error.boundary, operation=operation)
+        return contract_error(
+            error.boundary, operation=operation, request_id=request_id
+        )
     if isinstance(error, CapabilityError):
         code = "missing_capability"
+        if capability is None:
+            capability = error.capability
     elif isinstance(error, AssertionFailure):
         code = "assertion_failed"
     elif isinstance(error, RuntimeFailure):
@@ -881,6 +1302,10 @@ def error_record(error: BaseException, *, operation: str) -> ErrorRecord:
         message=str(error) or error.__class__.__name__,
         operation=operation,
         retryable=False,
+        requestId=request_id,
+        selector=selector,
+        capability=capability,
+        artifacts=artifacts,
     )
 
 
@@ -929,7 +1354,27 @@ def schema_documents() -> dict[str, dict[str, Any]]:
         "result.schema.json": _schema(
             TypeAdapter(ResultRecord), "result.schema.json", "xui-lab result record"
         ),
+        "operations.schema.json": _schema(
+            TypeAdapter(OperationsContract),
+            "operations.schema.json",
+            "xui-lab operation catalog",
+        ),
+        "preflight.schema.json": _schema(
+            TypeAdapter(PreflightContract),
+            "preflight.schema.json",
+            "xui-lab capability preflight report",
+        ),
         "selector.schema.json": _schema(
             SelectorContract, "selector.schema.json", "xui-lab selector"
+        ),
+        "subjects.schema.json": _schema(
+            TypeAdapter(SubjectsContract),
+            "subjects.schema.json",
+            "xui-lab subject catalog",
+        ),
+        "tree-node.schema.json": _schema(
+            TypeAdapter(TreeNodeContract),
+            "tree-node.schema.json",
+            "xui-lab production UI tree node",
         ),
     }

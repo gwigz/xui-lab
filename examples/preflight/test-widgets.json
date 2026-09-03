@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "requestId": "req_preflight",
+  "fork": "alchemy",
+  "subject": "test_widgets",
+  "runtime": null,
+  "capabilities": {
+    "declared": ["input", "inspection"],
+    "required": ["input", "inspection"],
+    "available": ["input", "inspection"],
+    "missing": []
+  },
+  "operations": [
+    {
+      "name": "tree",
+      "kind": "query",
+      "available": true,
+      "requiredCapabilities": ["inspection"],
+      "missingCapabilities": [],
+      "suggestedOperations": [],
+      "unavailableReason": null
+    },
+    {
+      "name": "dragAndDrop",
+      "kind": "input",
+      "available": false,
+      "requiredCapabilities": ["input", "inventory_model"],
+      "missingCapabilities": ["inventory_model"],
+      "suggestedOperations": ["click", "tree"],
+      "unavailableReason": "missing_capability"
+    }
+  ]
+}

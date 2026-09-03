@@ -1,0 +1,116 @@
+{
+  "$defs": {
+    "OperationArgumentContract": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "type": {
+          "enum": [
+            "integer",
+            "string",
+            "string[]",
+            "selector"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "title": "OperationArgumentContract",
+      "type": "object"
+    },
+    "OperationContract": {
+      "additionalProperties": false,
+      "properties": {
+        "argumentSets": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/OperationArgumentContract"
+            },
+            "type": "array"
+          },
+          "minItems": 1,
+          "title": "Argumentsets",
+          "type": "array"
+        },
+        "kind": {
+          "enum": [
+            "query",
+            "input"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "requiredCapabilities": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Requiredcapabilities",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "kind",
+        "requiredCapabilities",
+        "argumentSets"
+      ],
+      "title": "OperationContract",
+      "type": "object"
+    }
+  },
+  "$id": "https://xui-lab.local/schemas/operations.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "operations": {
+      "items": {
+        "$ref": "#/$defs/OperationContract"
+      },
+      "title": "Operations",
+      "type": "array"
+    },
+    "requestId": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Requestid"
+    },
+    "schemaVersion": {
+      "const": 1,
+      "title": "Schemaversion",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "operations"
+  ],
+  "title": "xui-lab operation catalog",
+  "type": "object"
+}

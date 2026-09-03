@@ -3,34 +3,97 @@
 > [!CAUTION]
 > This project is unfinished and changes often.
 
-The lab runs production Alchemy `LLFloater` subclasses and their C++
-controllers without a full viewer session. It loads XUI through production
-floater code, sends normal LLUI events, and uses real viewer models. A reduced
-runtime replaces login, networking, world simulation, and other external
-services at explicit boundaries.
+The lab opens a real Alchemy floater, with its production C++ controller, XUI,
+and models, without logging in or loading a world. You look at it. You click
+it. The clicks go through normal LLUI.
 
 ![The inspector showing the production test floater in T3 Code](.github/assets/xui-lab-in-t3-code.png)
 
-## What exists
+Only `test_widgets` is declared usable today. Inventory Explorer is still
+unfinished.
 
-- A Python API for exact control targeting, wheel scrolling, raw pointer drag,
-  semantic drag-and-drop, structural assertions, UI inspection, and failure
-  artifacts.
-- A headed inspector that captures the initial frame and refreshes it after UI
-  actions. Interact mode routes clicks, wheel input, pointer drag, model-backed
-  drag-and-drop, and key presses through LLUI. Inspect mode outlines hovered
-  controls from the current production UI tree.
-- Hidden scenario runs through the same production UI path.
+Agents should follow
+[`.agents/skills/xui-lab-ui/SKILL.md`](.agents/skills/xui-lab-ui/SKILL.md).
+That skill starts a session and drives it with JSON CLI commands. This page is
+for a person looking at the floater.
 
-## Run an input scenario
+## Get a floater on screen
 
-[`readme_example.py`](tests/scenarios/readme_example.py) uses `fill()` on the
-line editor and multiline editor. It clicks the checkbox and sends two upward
-wheel steps to the spinner, changing its value from `0.000` to `0.200`. After
-each input, the scenario reads the control's value from the production view
-tree. It writes the capture only after every check passes.
+You need an Alchemy checkout and a matching `xui-lab` binary. The binary embeds
+the viewer commit. `session start` and `interactive` reject a mismatch.
 
-Run the example against an Alchemy checkout and its matching lab binary:
+Build through the checkout's supported CMake graph. The
+[`Alchemy adapter`](adapters/alchemy/README.md) injects the lab target. Keep
+host-specific build commands in `AGENTS.local.md`. Then pass that binary as
+`--runtime` and the checkout as `--viewer-source`.
+
+To look at the test floater:
+
+```sh
+./xui-lab \
+  --viewer-source alchemy=/path/to/alchemy \
+  interactive test_widgets \
+  --runtime /path/to/xui-lab \
+  --width 1024 \
+  --height 700 \
+  --ui-scale 1.0 \
+  --artifacts artifacts \
+  --artifact-id floater-review
+```
+
+That opens a headed window and a local inspector. Interact mode sends clicks,
+wheel, pointer drag, and keys through LLUI. Inspect mode outlines the control
+under the pointer from the live production tree. **Reload** destroys and
+recreates the subject after an XUI edit. A C++ edit needs a rebuild and a new
+process.
+
+Replace `test_widgets` with a subject from
+[`adapters/alchemy/adapter.json`](adapters/alchemy/adapter.json).
+
+## Drive it from the CLI
+
+`interactive` is for looking. A persistent session is for commands. It starts a
+hidden viewer, binds a user-local socket, and prints JSON. Pull the session id
+out, then send one-shot commands at that process.
+
+```sh
+./xui-lab \
+  --viewer-source alchemy=/path/to/alchemy \
+  session start test_widgets \
+  --runtime /path/to/xui-lab
+```
+
+```sh
+SESSION=$(./xui-lab --viewer-source alchemy=/path/to/alchemy \
+  session start test_widgets --runtime /path/to/xui-lab | jq -r .sessionId)
+
+./xui-lab tree --session "$SESSION"
+./xui-lab get --session "$SESSION" --label OK
+./xui-lab click --session "$SESSION" --control-id CONTROL
+./xui-lab fill --session "$SESSION" --control-id EDITOR --value "hello"
+./xui-lab session close "$SESSION"
+```
+
+`tree` and `get` return a short excerpt by default. The full tree lands in an
+artifact with path, size, and hash. `--include-tree` inlines the whole tree.
+`--fields` keeps a few keys. Captures return PNG paths, never image bytes.
+
+Selectors are `--control-id`, `--model-id`, `--path`, `--role`, `--label`,
+`--placeholder`, and `--text`. Pick one. Conflicting flags fail at parse time.
+`--path` is provenance. Prefer a visible name or a model id when you can.
+
+JSON goes to stdout. Diagnostics go to stderr. After the CLI accepts a JSON
+command, a failure also writes an `ErrorRecord`. Read `code`, not the stderr
+line. Field lists and exit statuses live in
+[`docs/CLI_CONTRACT.md`](docs/CLI_CONTRACT.md).
+
+## Replay a scenario
+
+[`readme_example.py`](tests/scenarios/readme_example.py) fills the line editor
+and the multiline editor, clicks the checkbox, and sends two upward wheel
+steps to the spinner. The value goes from `0.000` to `0.200`. It reads each
+control from the production tree and writes the capture only after the checks
+pass.
 
 ```sh
 ./xui-lab \
@@ -40,30 +103,29 @@ Run the example against an Alchemy checkout and its matching lab binary:
   --artifacts artifacts/readme-example
 ```
 
-The runner reports the scenario and the proof directory:
-
 ```text
 readme_example: passed [artifacts/readme-example/readme_example]
 ```
 
+`Locator.scroll()` routes wheel input through `LLWindowCallbacks`.
+`Locator.drag_to()` offers cargo through `LLView::handleDragAndDrop` and drops
+only if the production handler accepts it. Use `Locator.drag_by()` or
+`Window.drag()` for raw pointer drags such as floater resizing.
+
 ## Inspector frontend
 
-The browser inspector is a React and TypeScript application in `inspector/`.
-Vite builds it into the embedded `xui_lab/_inspector/` assets served by the
-Python controller. Its Button, Input, Select, Tabs, and Toolbar components come
-from the Coss UI registry. They use Base UI behavior and Coss neutral tokens.
-Tailwind CSS supplies the generated utility styles.
-
-Install the pinned frontend dependencies and run its complete check with:
+The browser inspector is a React and TypeScript app in `inspector/`. Vite
+builds it into `xui_lab/_inspector/`. Button, Input, Select, Tabs, and Toolbar
+come from the Coss UI registry. They use Base UI behavior and Coss neutral
+tokens. Tailwind CSS supplies the generated utilities.
 
 ```sh
 npm ci --prefix inspector
 npm run check --prefix inspector
 ```
 
-For frontend work with hot reload, start an inspector backend on port 8765 and
-then run `npm run dev --prefix inspector`. A viewer-free backend is available
-for layout work:
+For hot reload, start an inspector backend on port 8765, then
+`npm run dev --prefix inspector`. Layout work can skip the viewer:
 
 ```sh
 python3 tests/integration/preview_inspector.py --capture /path/to/capture.png
@@ -75,8 +137,7 @@ with the rebuild command when the embedded client is missing or stale.
 
 ## Check Python changes
 
-Install the pinned tools from `requirements-dev.txt`. Then run the Python
-checks and schema validation:
+Install the pinned tools from `requirements-dev.txt`. Then:
 
 ```sh
 ruff check .
@@ -89,17 +150,6 @@ coverage report
 
 Pytest discovers tests under `tests/` but skips `tests/scenarios/`. Coverage
 measures branches in `xui_lab` and enforces the current 59% floor.
-
-> [!WARNING]
-> Only the Alchemy adapter and its `test_widgets` subject are usable today.
-> Inventory Explorer remains work in progress and is not declared as a usable
-> subject.
-
-`Locator.scroll()` and `Window.scroll_at()` route wheel input through the
-production `LLWindowCallbacks` path. `Locator.drag_to()` offers cargo through
-`LLView::handleDragAndDrop` and drops it only when the production handler
-accepts it. Use `Locator.drag_by()` or `Window.drag()` for raw pointer gestures
-such as floater resizing.
 
 ## Build performance
 

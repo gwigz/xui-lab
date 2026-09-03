@@ -1,0 +1,41 @@
+{
+  "available": true,
+  "children": [],
+  "class": "LLCheckBoxCtrl",
+  "clipping_rect": {
+    "bottom": 12,
+    "left": 8,
+    "right": 128,
+    "top": 36
+  },
+  "control_id": "control:0.1",
+  "enabled": true,
+  "enabled_chain": true,
+  "keyboard_focus": false,
+  "layout": "topleft",
+  "local_rect": {
+    "bottom": 0,
+    "left": 0,
+    "right": 120,
+    "top": 24
+  },
+  "mouse_capture": false,
+  "path": "/Test Floater/Enabled checkbox",
+  "rect": {
+    "bottom": 12,
+    "left": 8,
+    "right": 128,
+    "top": 36
+  },
+  "screen_rect": {
+    "bottom": 12,
+    "left": 8,
+    "right": 128,
+    "top": 36
+  },
+  "source_file": "skins/default/xui/en/floater_test_widgets.xml",
+  "source_line": 24,
+  "value": true,
+  "visible": true,
+  "visible_chain": true
+}

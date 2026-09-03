@@ -20,42 +20,6 @@ and the JSONL and output-schema patterns exposed by
 [`codex exec`](https://github.com/openai/codex/blob/main/codex-rs/exec/src/cli.rs).
 The browser inspector remains optional for a person to view. Agents use the CLI.
 
-- [ ] Keep `argparse` as the command parser. Convert parsed arguments into the
-  same Pydantic command models used by JSONL and persistent sessions.
-- [ ] Define a versioned CLI contract before adding commands. Specify stdout,
-  stderr, exit statuses, error codes, timestamps, and compatibility rules.
-- [ ] Add `xui-lab subjects --json` to list subjects, required capabilities,
-  source provenance, and whether the selected runtime can open each subject.
-- [ ] Add `xui-lab operations --json` to discover every supported query and
-  input operation, its arguments, and the runtime capability that enables it.
-- [ ] Add `xui-lab schema` to emit the JSON Schemas generated from the Pydantic
-  models for commands, results, events, errors, tree nodes, selectors, and
-  artifact manifests. Use `check-jsonschema` to validate every schema and
-  checked-in example.
-- [ ] Add a noninteractive `xui-lab session start` command that returns a stable
-  session ID, viewer PID, fork commit, subject, viewport, and capabilities.
-- [ ] Back sessions with a local authenticated socket or similarly narrow IPC
-  boundary. Use `platformdirs` for per-user runtime and state locations. Do not
-  hand-roll platform paths, require a browser, or expose a network listener by
-  default.
-- [ ] Add `session status`, `session close`, and stale-session cleanup. Make
-  close idempotent and report whether a process was actually terminated.
-- [ ] Add a JSONL session mode that reads one typed command per stdin line and
-  writes one correlated result or event per stdout line without restarting the
-  viewer.
-- [ ] Give every request a caller-supplied or generated request ID. Echo it in
-  results, progress events, errors, and artifact manifests.
-- [ ] Keep structured results on stdout and diagnostics on stderr. Disable
-  prompts, progress animation, color, and terminal-dependent wording in JSON
-  and JSONL modes.
-- [ ] Add `--timeout` and deterministic cancellation semantics to every command
-  that waits for startup, stability, rendering, input, or shutdown.
-- [ ] Add one-shot `tree`, `pick`, `get`, `click`, `fill`, `press`, `scroll`,
-  `drag-by`, `drag-to`, `resize-viewport`, `resize-subject`, `capture`,
-  `reload`, and `diagnostics` commands. Reuse the typed operations from Python
-  scenarios.
-- [ ] Accept selectors through unambiguous flags such as `--control-id`,
-  `--model-id`, and `--path`. Reject conflicting selector flags at parsing.
 - [ ] Define one selector contract for the Python API, CLI, inspector, recorder,
   and replay. Follow Playwright's guidance to
   [prioritize user-visible behavior](https://playwright.dev/docs/best-practices#test-user-visible-behavior):
@@ -63,30 +27,15 @@ The browser inspector remains optional for a person to view. Agents use the CLI.
   label, placeholder, visible text, or visible model identity. Use a control ID
   only when no unique user-visible selector exists. Keep XUI paths as
   provenance, not as the default selector.
-- [ ] Add typed `get_by_role`, `get_by_label`, `get_by_placeholder`, and
-  `get_by_text` locators with explicit uniqueness and actionability rules.
-  Derive their signals from the production tree instead of a browser-only
-  accessibility model.
-- [ ] Make Copy Locator and Recorded Python use the same selector-ranking
-  implementation. Record the chosen signals, match count, and fallback reason
+- [ ] Make Copy Locator use the same selector-ranking implementation as
+  Recorded Python. Record the chosen signals, match count, and fallback reason
   so generated code is reviewable and selector changes are explainable.
-- [ ] Add selector contract tests for duplicate labels, generated siblings,
-  hidden controls, model-backed rows, and controls without user-visible names.
-  Verify that layout and tree refactors do not change a locator when visible
-  behavior stays the same.
-- [ ] Add `--fields` projection so agents can request a small tree slice or a
-  few result fields without ingesting an entire UI tree. Add `--jq` with the
-  `jq` package only when full jq expressions are required. Do not implement a
-  partial jq language.
-- [ ] Return concise tree excerpts by default. Put full trees, frames, traces,
-  and logs in artifacts and return their absolute paths, sizes, and hashes.
-- [ ] Add an explicit `--include-tree` escape hatch with a documented size
-  warning. Never inline image bytes in ordinary JSON results.
-- [ ] Emit stable machine errors with `code`, `message`, `operation`, selector,
-  capability, retryability, and relevant artifact paths. Do not require parsing
-  prose to choose the next action.
-- [ ] Make capability and input-operation preflight a first-class CLI command
-  and include suggested valid operations when one is unavailable.
+- [ ] Add `--jq` with the `jq` package only when full jq expressions are
+  required. Do not implement a partial jq language. Update
+  [`README.md`](README.md) and
+  [`.agents/skills/xui-lab-ui/SKILL.md`](.agents/skills/xui-lab-ui/SKILL.md)
+  so the session examples use `--jq` instead of piping stdout to a `jq`
+  binary.
 - [ ] Add `--dry-run` to commands that can reload state, prune artifacts, or
   terminate a session. Keep input gestures explicit rather than labeling them
   as harmless dry runs.
@@ -208,9 +157,6 @@ logic. Do not create a second operation model for the inspector.
   capability.
 - [ ] Prove that scenario mode does not contact the network. Fail with the
   missing capability name when a subject requests an undeclared service.
-- [x] Route drag-and-drop through the production handler. The
-  `input_gestures` scenario proves handled rejection without copying acceptance
-  rules.
 
 ## Complete inspection and failure diagnostics
 
@@ -240,7 +186,6 @@ logic. Do not create a second operation model for the inspector.
   list, and grid views.
 - [ ] Add tests for folder navigation, search, inspector details, and the
   holding tray.
-- [x] Add a drag-and-drop test through the production handler.
 - [ ] Add an accepted Inventory Explorer drag-and-drop case after the subject
   is declared.
 - [ ] Keep structural assertions as the pass condition. Add platform-specific
@@ -248,10 +193,6 @@ logic. Do not create a second operation model for the inspector.
 
 ## Harden contracts and isolation
 
-- [ ] Define and validate every runtime operation at the Python input boundary.
-  Keep commands typed after validation.
-- [ ] Validate all fixture fields and reject unknown keys before starting the
-  C++ process.
 - [ ] Add runtime contract tests for metadata, source mismatch, API metadata,
   capability reporting, missing fixtures, unavailable capabilities, clean
   shutdown, visible and hidden rendering, input, menu routing, and capture.

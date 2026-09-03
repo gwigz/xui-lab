@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "type": "error",
+  "code": "invalid_input",
+  "message": "runtime executable not found: /no/such/xui-lab-runtime",
+  "operation": "subjects",
+  "retryable": false,
+  "requestId": "req_missing"
+}

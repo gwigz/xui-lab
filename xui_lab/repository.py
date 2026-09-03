@@ -6,6 +6,7 @@ import configparser
 import json
 import re
 import subprocess
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -68,7 +69,7 @@ def load_manifest() -> tuple[str, list[Fork]]:
     return str(manifest.default_fork), list(manifest.forks.values())
 
 
-def parse_overrides(values: list[str], known_ids: set[str]) -> dict[str, Path]:
+def parse_overrides(values: Sequence[str], known_ids: set[str]) -> dict[str, Path]:
     overrides: dict[str, Path] = {}
     for value in values:
         fork_id, separator, raw_path = value.partition("=")
@@ -231,7 +232,7 @@ def check_fork(
         )
 
 
-def check_repository(viewer_sources: list[str]) -> str:
+def check_repository(viewer_sources: Sequence[str]) -> str:
     default_fork, forks = load_manifest()
     overrides = parse_overrides(viewer_sources, {fork.id for fork in forks})
     submodule_paths = load_submodule_paths()

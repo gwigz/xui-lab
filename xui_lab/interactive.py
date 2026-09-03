@@ -28,8 +28,18 @@ _ACTIONS_WITHOUT_AUTOMATIC_CAPTURE = frozenset(
 )
 
 
-def recorded_python(actions: list[dict[str, Any]]) -> list[str]:
+def recorded_python(
+    actions: list[dict[str, Any]], tree: dict[str, Any] | None = None
+) -> list[str]:
     """Render runtime actions as editable public API calls."""
+    from .selectors import rank_locator, tree_nodes
+
+    nodes_by_id: dict[str, dict[str, Any]] = {}
+    if tree is not None:
+        for node in tree_nodes(tree):
+            control_id = node.get("control_id")
+            if isinstance(control_id, str) and control_id:
+                nodes_by_id[control_id] = node
     lines: list[str] = []
     for action in actions:
         path = action.get("path")
@@ -37,7 +47,13 @@ def recorded_python(actions: list[dict[str, Any]]) -> list[str]:
         kind = action.get("action")
         if not isinstance(kind, str):
             continue
-        if isinstance(control_id, str) and control_id:
+        if (
+            tree is not None
+            and isinstance(control_id, str)
+            and control_id in nodes_by_id
+        ):
+            locator = rank_locator(nodes_by_id[control_id], tree).python
+        elif isinstance(control_id, str) and control_id:
             locator = f"window.get_by_control_id({control_id!r})"
         elif isinstance(path, str):
             locator = f"window.get_by_path({path!r})"
@@ -90,6 +106,7 @@ class InteractiveConfig:
     viewport: Viewport
     fixture: Path | None
     artifact_id: str
+    request_id: str | None = None
 
 
 class InteractiveSession:
@@ -131,6 +148,7 @@ class InteractiveSession:
             capabilities=capabilities,
             fixture=fixture,
             interactive=True,
+            request_id=self.config.request_id,
         )
 
     def close(self) -> None:
@@ -145,7 +163,9 @@ class InteractiveSession:
         return {
             "tree": tree,
             "diagnostics": diagnostics,
-            "recording": recorded_python(actions if isinstance(actions, list) else []),
+            "recording": recorded_python(
+                actions if isinstance(actions, list) else [], tree
+            ),
             "artifactDir": str(self.window.artifact_dir),
             "subjects": sorted(self.subjects),
             "fixtures": sorted(self.fixtures),

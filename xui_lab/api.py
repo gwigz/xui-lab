@@ -37,6 +37,7 @@ from .operations import (
     Frames,
     Highlight,
     KeyInput,
+    ModelIdSelector,
     MouseButton,
     PathSelector,
     Pick,
@@ -52,10 +53,15 @@ from .operations import (
     TextInput,
     WaitForStable,
     control_id_selector,
+    label_selector,
     model_id_selector,
     path_selector,
+    placeholder_selector,
+    role_selector,
+    text_selector,
 )
 from .protocol import RuntimeProcess
+from .selectors import require_unique, wire_selector
 
 
 def artifact_directory(root: Path, artifact_id: str) -> Path:
@@ -162,6 +168,9 @@ class Lab:
         fixture: Path | None = None,
         stability: WaitForStable = WaitForStable(),
         interactive: bool = False,
+        request_id: str | None = None,
+        request_timeout: float = 10.0,
+        shutdown_timeout: float = 10.0,
     ) -> Window:
         fixture_data = None
         if fixture is not None:
@@ -178,6 +187,8 @@ class Lab:
             self.executable,
             artifact_dir / "runtime.log",
             mode="interactive" if interactive else "scenario",
+            request_timeout=request_timeout,
+            shutdown_timeout=shutdown_timeout,
         )
         window = Window(
             runtime,
@@ -188,6 +199,7 @@ class Lab:
             fork_commit=fork_commit,
             subject=subject,
             fixture=fixture_contract.id if fixture is not None else None,
+            request_id=request_id,
         )
         try:
             initialize = {
@@ -250,6 +262,7 @@ class Window:
         fork_commit: str,
         subject: str,
         fixture: str | None,
+        request_id: str | None = None,
     ):
         self.runtime = runtime
         self.artifact_dir = artifact_dir
@@ -263,6 +276,7 @@ class Window:
         self._fork_commit = fork_commit
         self._subject = subject
         self._fixture = fixture
+        self._request_id = request_id
         self._finished = False
 
     def _install(
@@ -304,6 +318,18 @@ class Window:
 
     def get_by_control_id(self, control_id: str) -> Locator:
         return Locator(self, control_id_selector(control_id))
+
+    def get_by_role(self, role: str, *, name: str | None = None) -> Locator:
+        return Locator(self, role_selector(role, name))
+
+    def get_by_label(self, label: str) -> Locator:
+        return Locator(self, label_selector(label))
+
+    def get_by_placeholder(self, placeholder: str) -> Locator:
+        return Locator(self, placeholder_selector(placeholder))
+
+    def get_by_text(self, text: str) -> Locator:
+        return Locator(self, text_selector(text))
 
     def locator(self, selector: Selector) -> Locator:
         return Locator(self, selector)
@@ -615,6 +641,7 @@ class Window:
             forkCommit=self._fork_commit,
             subject=self._subject,
             fixture=self._fixture,
+            requestId=self._request_id,
             artifacts=tuple(entries),
         )
         write_json(
@@ -638,47 +665,23 @@ class Locator:
 
     def resolve(self) -> Control:
         tree = self.window._request(QueryTree().to_command())
-        if isinstance(self.selector, PathSelector):
-            matches = [
-                node
-                for node in _tree_nodes(tree)
-                if node.get("path") == self.selector.path
-            ]
-        elif isinstance(self.selector, ControlIdSelector):
-            matches = [
-                node
-                for node in _tree_nodes(tree)
-                if node.get("control_id") == self.selector.control_id
-            ]
-        else:
-            matches = [
-                node
-                for node in _tree_nodes(tree)
-                if node.get("model_id") == self.selector.model_id
-            ]
-        if len(matches) != 1:
-            descriptions = []
-            for match in matches:
-                path = match.get("path", "<unknown path>")
-                runtime_class = match.get("class", "<unknown class>")
-                source_file = match.get("source_file", "<unknown source>")
-                source_line = match.get("source_line", 0)
-                descriptions.append(
-                    f"{path} ({runtime_class}, {source_file}:{source_line})"
-                )
-            detail = "; ".join(descriptions) if descriptions else "none"
-            raise AssertionFailure(
-                f"locator for {self.selector.describe()} resolved to {len(matches)} controls; matches: {detail}"
-            )
-        return Control(self.selector, matches[0])
+        node = require_unique(tree, self.selector)
+        return Control(self.selector, node)
+
+    def _input_selector(self) -> Selector:
+        if isinstance(
+            self.selector, (PathSelector, ControlIdSelector, ModelIdSelector)
+        ):
+            self.resolve()
+            return self.selector
+        return wire_selector(self.resolve().info)
 
     def _perform(self, event: PointerEvent, button: MouseButton) -> ActionResult:
         self.window._require_capability("input")
         self.window._require_operation("XUILab", "input")
         self.window._require_input_operation(event.value)
         self.window.wait_for_stable()
-        self.resolve()
-        operation = PointerAction(event, button, self.selector)
+        operation = PointerAction(event, button, self._input_selector())
         result = self.window._request(operation.to_command())
         self.window.wait_for_stable()
         return ActionResult(event.value, result)
@@ -700,8 +703,7 @@ class Locator:
         self.window._require_operation("XUILab", "input")
         self.window._require_input_operation("key")
         self.window.wait_for_stable()
-        self.resolve()
-        operation = KeyInput(key, self.selector, modifiers)
+        operation = KeyInput(key, self._input_selector(), modifiers)
         result = self.window._request(operation.to_command())
         self.window.wait_for_stable()
         return ActionResult("key", result)
@@ -714,8 +716,8 @@ class Locator:
         self.window._require_operation("XUILab", "input")
         self.window._require_input_operation("fill" if operation.replace else "text")
         self.window.wait_for_stable()
-        self.resolve()
-        result = self.window._request(operation.to_command())
+        wired = TextInput(operation.text, self._input_selector(), operation.replace)
+        result = self.window._request(wired.to_command())
         self.window.wait_for_stable()
         return ActionResult("fill" if operation.replace else "text", result)
 
@@ -725,8 +727,9 @@ class Locator:
         self.window._require_operation("XUILab", "input")
         self.window._require_input_operation("scroll")
         self.window.wait_for_stable()
-        self.resolve()
-        result = self.window._request(ScrollAction(clicks, self.selector).to_command())
+        result = self.window._request(
+            ScrollAction(clicks, self._input_selector()).to_command()
+        )
         self.window.wait_for_stable()
         return ActionResult("scroll", result)
 
@@ -739,9 +742,10 @@ class Locator:
         self.window._require_operation("XUILab", "input")
         self.window._require_input_operation("drag")
         self.window.wait_for_stable()
-        self.resolve()
         result = self.window._request(
-            DragAction(selector=self.selector, delta_x=dx, delta_y=dy).to_command()
+            DragAction(
+                selector=self._input_selector(), delta_x=dx, delta_y=dy
+            ).to_command()
         )
         self.window.wait_for_stable()
         return ActionResult("drag", result)
@@ -753,10 +757,10 @@ class Locator:
         self.window._require_operation("XUILab", "input")
         self.window._require_input_operation("dragAndDrop")
         self.window.wait_for_stable()
-        self.resolve()
-        target.resolve()
         result = self.window._request(
-            DragAndDropAction(self.selector, target.selector).to_command()
+            DragAndDropAction(
+                self._input_selector(), target._input_selector()
+            ).to_command()
         )
         self.window.wait_for_stable()
         return ActionResult("dragAndDrop", result)
