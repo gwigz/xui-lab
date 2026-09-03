@@ -44,7 +44,7 @@ function schemaErrorsText(errors: OpenApiValidator["errors"]): string {
 function requireValid<T>(validator: OpenApiValidator, value: unknown, context: string): T {
   if (!validator(value)) {
     throw new Error(
-      `${context} violates the OpenAPI schema: ${schemaErrorsText(validator.errors)}`,
+      `${context} does not match the inspector API schema: ${schemaErrorsText(validator.errors)}`,
     );
   }
   return value as T;
@@ -52,7 +52,9 @@ function requireValid<T>(validator: OpenApiValidator, value: unknown, context: s
 
 function problemError(value: unknown, response: Response): Error {
   const problem = requireValid<ProblemDetails>(validateProblem, value, "API error");
-  return new Error(`${problem.code}: ${problem.detail} (${response.status})`);
+  const problems = problem.details ?? [];
+  const reason = problems.length > 0 ? problems.join("; ") : problem.detail;
+  return new Error(response.status >= 500 ? `${reason} (HTTP ${response.status})` : reason);
 }
 
 export async function fetchInspectorState(signal?: AbortSignal): Promise<InspectorState> {

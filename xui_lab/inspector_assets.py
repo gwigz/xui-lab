@@ -14,21 +14,46 @@ REQUIRED_ASSETS = (
     INSPECTOR_ASSETS / "assets" / "app.js",
     INSPECTOR_ASSETS / "assets" / "index.css",
 )
+# The inputs the production bundle is built from. Keep in sync with
+# buildInputs in inspector/vite.config.ts. Lint configuration, end-to-end
+# tests, and unit tests never reach the bundle, so editing them must not
+# report the embedded build as stale.
+BUILD_INPUTS = (
+    "index.html",
+    "package-lock.json",
+    "package.json",
+    "src",
+    "tsconfig.app.json",
+    "tsconfig.json",
+    "tsconfig.node.json",
+    "vite.config.ts",
+)
+TEST_SUFFIXES = (".test.ts", ".test.tsx")
+
+
+def _build_input_paths() -> list[str]:
+    """Return the sorted relative paths the Vite build reads."""
+    found: list[str] = []
+    for entry in BUILD_INPUTS:
+        path = INSPECTOR_SOURCE / entry
+        if path.is_dir():
+            found.extend(
+                child.relative_to(INSPECTOR_SOURCE).as_posix()
+                for child in path.rglob("*")
+                if child.is_file()
+            )
+        else:
+            found.append(entry)
+    return sorted(path for path in found if not path.endswith(TEST_SUFFIXES))
 
 
 def inspector_source_fingerprint() -> str:
     """Return the deterministic fingerprint written by the Vite build."""
     digest = hashlib.sha256()
-    ignored = {"node_modules", "test-results", "playwright-report", "blob-report"}
-    paths = sorted(
-        path
-        for path in INSPECTOR_SOURCE.rglob("*")
-        if path.is_file() and ignored.isdisjoint(path.parts)
-    )
-    for path in paths:
-        digest.update(path.relative_to(INSPECTOR_SOURCE).as_posix().encode())
+    for relative in _build_input_paths():
+        digest.update(relative.encode())
         digest.update(b"\0")
-        digest.update(path.read_bytes())
+        digest.update((INSPECTOR_SOURCE / relative).read_bytes())
         digest.update(b"\0")
     return digest.hexdigest()
 

@@ -217,7 +217,8 @@ class InspectorHttpTests(unittest.TestCase):
             {
                 "schemaVersion": 1,
                 "code": "invalid_interactive_action",
-                "detail": "interactive action violates the XUI Lab contract",
+                "detail": "invalid interactive action: x must be a whole number",
+                "details": ["x must be a whole number"],
                 "operation": "inspector.action",
                 "retryable": False,
             },
@@ -227,6 +228,7 @@ class InspectorHttpTests(unittest.TestCase):
                     "schemaVersion",
                     "code",
                     "detail",
+                    "details",
                     "operation",
                     "retryable",
                 )

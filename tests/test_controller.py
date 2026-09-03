@@ -81,7 +81,7 @@ class LabIsolationTests(unittest.TestCase):
 
             with (
                 patch("xui_lab.api.RuntimeProcess") as runtime,
-                self.assertRaisesRegex(InputError, "fixture violates"),
+                self.assertRaisesRegex(InputError, "invalid fixture"),
             ):
                 lab.open(
                     artifact_id="invalid-fixture",
@@ -211,7 +211,7 @@ class RuntimeProcessTests(unittest.TestCase):
             """,
             )
 
-            with self.assertRaisesRegex(InputError, "runtime command violates"):
+            with self.assertRaisesRegex(InputError, "invalid runtime command"):
                 runtime.request({"op": "notAnOperation"})
             self.assertEqual(0, runtime.close())
 
@@ -276,7 +276,7 @@ class RuntimeProcessTests(unittest.TestCase):
             """,
             )
             with self.assertRaisesRegex(
-                RuntimeFailure, "invalid response.*XUI Lab contract"
+                RuntimeFailure, "invalid response.*must be an object"
             ):
                 runtime.request({"op": "query", "kind": "tree"})
 

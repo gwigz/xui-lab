@@ -140,7 +140,7 @@ export function App() {
     >
       <ResizablePanel
         className="min-h-0"
-        defaultSize={290}
+        defaultSize={230}
         id="inspector-sidebar"
         maxSize="50%"
         minSize={230}
@@ -154,7 +154,7 @@ export function App() {
           state={displayedState}
         />
       </ResizablePanel>
-      <ResizableHandle withHandle />
+      <ResizableHandle />
       <ResizablePanel className="min-h-0 min-w-0" id="inspector-main" minSize={360}>
         <main className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden p-3">
           <InspectorToolbar runAction={runAction} state={displayedState} />

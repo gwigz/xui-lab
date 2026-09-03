@@ -16,7 +16,7 @@ from .contracts import (
     parse_runtime_response,
     parse_runtime_result,
 )
-from .errors import InputError, RuntimeFailure
+from .errors import InputError, RuntimeFailure, problem_summary
 
 
 class RuntimeProcess:
@@ -147,7 +147,8 @@ class RuntimeProcess:
         except InputError as error:
             self._failed = True
             raise RuntimeFailure(
-                f"runtime returned an invalid response to '{operation}': {error}"
+                f"runtime returned an invalid response to '{operation}': "
+                f"{problem_summary(error)}"
             ) from error
         if isinstance(response, RuntimeError):
             raise RuntimeFailure(f"{response.error.code}: {response.error.message}")
@@ -157,7 +158,8 @@ class RuntimeProcess:
         except InputError as error:
             self._failed = True
             raise RuntimeFailure(
-                f"runtime returned an invalid result for '{operation}': {error}"
+                f"runtime returned an invalid result for '{operation}': "
+                f"{problem_summary(error)}"
             ) from error
         return {"ok": True, "result": result}
 

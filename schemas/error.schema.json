@@ -242,6 +242,22 @@
       "title": "Code",
       "type": "string"
     },
+    "details": {
+      "anyOf": [
+        {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Details"
+    },
     "message": {
       "minLength": 1,
       "title": "Message",

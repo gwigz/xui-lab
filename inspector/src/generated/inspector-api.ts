@@ -314,6 +314,8 @@ export interface components {
       code: string;
       /** Detail */
       detail: string;
+      /** Details */
+      details?: string[] | null;
       /** Operation */
       operation: string;
       /** Requestid */

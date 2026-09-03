@@ -184,7 +184,32 @@ test("shows an error toast when an inspector action fails", async ({ page }) => 
   await page.goto("/");
   await page.getByRole("button", { name: "Reload XUI" }).click();
   await expect(page.getByText("reload failed")).toBeVisible();
-  await expect(page.getByText("crash: viewer died (500)")).toBeVisible();
+  await expect(page.getByText("viewer died (HTTP 500)")).toBeVisible();
+});
+
+test("names the rejected field when an action fails validation", async ({ page }) => {
+  await mockInspectorApi(page, []);
+  await page.route("**/api/v1/actions", async (route) => {
+    await route.fulfill({
+      status: 400,
+      contentType: "application/problem+json",
+      body: JSON.stringify({
+        type: "https://xui-lab.local/problems/invalid_interactive_action",
+        title: "Bad Request",
+        status: 400,
+        detail: "invalid interactive action: selector.path must match '^/'",
+        details: ["selector.path must match '^/'"],
+        schemaVersion: 1,
+        code: "invalid_interactive_action",
+        operation: "inspector.action",
+        retryable: false,
+      }),
+    });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Reload XUI" }).click();
+  await expect(page.getByText("reload failed")).toBeVisible();
+  await expect(page.getByText("selector.path must match '^/'")).toBeVisible();
 });
 
 test("scrubs a historical capture without sending a highlight action", async ({ page }) => {

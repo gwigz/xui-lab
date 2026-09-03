@@ -2,10 +2,11 @@
   "schemaVersion": 1,
   "type": "error",
   "code": "invalid_selector",
-  "message": "selector violates the XUI Lab contract",
+  "message": "invalid selector: path must match '^/'",
   "operation": "click",
   "retryable": false,
   "requestId": "request-1",
+  "details": ["path must match '^/'"],
   "selector": {
     "schemaVersion": 1,
     "kind": "path",

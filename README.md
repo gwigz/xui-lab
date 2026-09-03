@@ -160,7 +160,9 @@ npm run dev --prefix inspector
 ```
 
 The production build records a source fingerprint. `./xui-lab check` fails
-with the rebuild command when the embedded client is missing or stale.
+with the rebuild command when the embedded client is missing or stale. The
+fingerprint covers the files the bundle is built from. Lint configuration,
+unit tests, and Playwright tests do not make the embedded build stale.
 
 ## Check Python changes
 

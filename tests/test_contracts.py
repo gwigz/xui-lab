@@ -5,12 +5,14 @@ from __future__ import annotations
 import json
 import unittest
 from pathlib import Path
+from typing import Literal
 
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 from xui_lab.contracts import (
     AdapterContract,
     ArtifactManifest,
+    ContractModel,
     ControlIdSelectorContract,
     ErrorRecord,
     FixtureContract,
@@ -23,13 +25,15 @@ from xui_lab.contracts import (
     contract_error,
     error_record,
     parse_cli_command,
+    parse_fixture,
     parse_interactive_action,
     parse_runtime_command,
     parse_runtime_metadata,
     parse_runtime_response,
     schema_documents,
+    validation_details,
 )
-from xui_lab.errors import CapabilityError, InputError
+from xui_lab.errors import CapabilityError, ContractViolation, InputError
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -102,7 +106,8 @@ class StrictContractTests(unittest.TestCase):
                 }
             )
         self.assertEqual(
-            "runtime command violates the XUI Lab contract", str(raised.exception)
+            "invalid runtime command: surprise is not a field of this request",
+            str(raised.exception),
         )
         self.assertNotIn("extra_forbidden", str(raised.exception))
 
@@ -230,12 +235,73 @@ class StrictContractTests(unittest.TestCase):
                 "schemaVersion": 1,
                 "type": "error",
                 "code": "invalid_fixture",
-                "message": "fixture violates the XUI Lab contract",
+                "message": "invalid fixture",
                 "operation": "initialize",
                 "retryable": False,
             },
             error.model_dump(mode="json", by_alias=True, exclude_none=True),
         )
+
+    def test_validation_details_name_the_field_and_the_problem(self) -> None:
+        with self.assertRaises(ContractViolation) as raised:
+            parse_interactive_action(
+                {
+                    "schemaVersion": 1,
+                    "action": "click",
+                    "selector": {"kind": "path", "path": "no-leading-slash"},
+                }
+            )
+
+        self.assertEqual(
+            ("selector.schemaVersion is required", "selector.path must match '^/'"),
+            raised.exception.details,
+        )
+
+        with self.assertRaises(ContractViolation) as unsupported:
+            parse_interactive_action({"schemaVersion": 1, "action": "wiggle"})
+
+        detail = unsupported.exception.details[0]
+        self.assertTrue(detail.startswith("action 'wiggle' is not supported"))
+        self.assertIn("click", detail)
+
+    def test_details_merge_when_no_union_member_accepts_the_tag(self) -> None:
+        class Start(ContractModel):
+            op: Literal["start"]
+
+        class Stop(ContractModel):
+            op: Literal["stop"]
+
+        adapter: TypeAdapter[Start | Stop] = TypeAdapter(Start | Stop)
+        document = {"op": "halt"}
+        with self.assertRaises(ValidationError) as raised:
+            adapter.validate_python(document)
+
+        self.assertEqual(
+            ("op 'halt' is not supported; expected start, stop",),
+            validation_details(raised.exception, document, union=True),
+        )
+
+    def test_a_long_list_of_problems_is_summarized(self) -> None:
+        with self.assertRaises(ContractViolation) as raised:
+            parse_fixture({"schemaVersion": 1})
+
+        self.assertEqual(
+            "invalid fixture: id is required; agent is required; and 2 more problems",
+            str(raised.exception),
+        )
+        self.assertEqual(4, len(raised.exception.details))
+
+    def test_contract_error_carries_the_details_it_reports(self) -> None:
+        error = contract_error(
+            "interactive action",
+            operation="inspector.action",
+            details=("selector is required",),
+        )
+
+        self.assertEqual(
+            "invalid interactive action: selector is required", error.message
+        )
+        self.assertEqual(("selector is required",), error.details)
 
     def test_error_record_copies_request_id_and_capability(self) -> None:
         error = error_record(

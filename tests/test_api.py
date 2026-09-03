@@ -831,7 +831,7 @@ class PlaywrightApiTests(unittest.TestCase):
                 "text": "Known text",
             }
         )
-        with self.assertRaisesRegex(InputError, "XUI Lab contract"):
+        with self.assertRaisesRegex(InputError, "modifiers\\[0\\] must be"):
             session.action(
                 {
                     "action": "press",

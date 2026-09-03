@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Annotated, Any, Final, Literal, TypeAlias, TypeVar
 
 from pydantic import (
@@ -22,6 +23,7 @@ from .errors import (
     ContractViolation,
     InputError,
     RuntimeFailure,
+    contract_message,
 )
 
 SCHEMA_VERSION: Final[Literal[1]] = 1
@@ -1217,6 +1219,7 @@ class ErrorRecord(VersionedContract):
     operation: NonEmptyString
     retryable: bool
     request_id: NonEmptyString | None = Field(default=None, alias="requestId")
+    details: FrozenTuple[NonEmptyString] | None = None
     selector: Selector | None = None
     capability: NonEmptyString | None = None
     artifacts: FrozenTuple[NonEmptyString] | None = None
@@ -1255,12 +1258,216 @@ class ArtifactManifest(VersionedContract):
     artifacts: FrozenTuple[ArtifactEntry]
 
 
+MAX_DETAILS = 6
+MAX_LISTED = 8
+BRANCH_FIELD_DEPTH = 2
+NESTED_TAG_ERRORS: Final = frozenset({"union_tag_not_found", "union_tag_invalid"})
+
+PlainError: TypeAlias = Mapping[str, Any]
+
+TYPE_REASONS: Final[dict[str, str]] = {
+    "int_type": "must be a whole number",
+    "int_parsing": "must be a whole number",
+    "float_type": "must be a number",
+    "float_parsing": "must be a number",
+    "bool_type": "must be true or false",
+    "bool_parsing": "must be true or false",
+    "string_type": "must be text",
+    "list_type": "must be a list",
+    "dict_type": "must be an object",
+    "model_type": "must be an object",
+    "model_attributes_type": "must be an object",
+}
+
+REASON_PREFIXES: Final[tuple[tuple[str, str], ...]] = (
+    ("Input should be", "must be"),
+    ("Input should match", "must match"),
+    ("String should match pattern", "must match"),
+    ("String should have at least", "must have at least"),
+    ("String should have at most", "must have at most"),
+    ("Value should have at least", "must have at least"),
+    ("Value should have at most", "must have at most"),
+    ("List should have at least", "must have at least"),
+    ("List should have at most", "must have at most"),
+    ("Value error, ", ""),
+    ("Assertion failed, ", ""),
+)
+
+
+def _listed(values: Sequence[str]) -> str:
+    """Join a set of accepted values, cutting long lists short."""
+    if len(values) <= MAX_LISTED:
+        return ", ".join(values)
+    hidden = len(values) - MAX_LISTED
+    return f"{', '.join(values[:MAX_LISTED])}, and {hidden} more"
+
+
+def _quoted_values(value: str) -> list[str]:
+    """Split a Pydantic `'a', 'b' or 'c'` context string into bare values."""
+    parts = value.replace(" or ", ", ").split(",")
+    return [part.strip().strip("'") for part in parts if part.strip()]
+
+
+def _named_parts(loc: Sequence[Any], value: Any) -> list[Any]:
+    """Walk the rejected document, dropping union tags Pydantic added."""
+    parts: list[Any] = []
+    current = value
+    for index, part in enumerate(loc):
+        last = index == len(loc) - 1
+        if isinstance(current, Mapping) and not last:
+            nested = current.get(part)
+            if part in current and isinstance(nested, (Mapping, list, tuple)):
+                parts.append(part)
+                current = nested
+                continue
+            if not isinstance(part, int):
+                continue
+        if isinstance(current, (list, tuple)) and isinstance(part, int):
+            current = current[part] if part < len(current) else None
+        elif isinstance(current, Mapping):
+            current = current.get(part)
+        else:
+            current = None
+        parts.append(part)
+    return parts
+
+
+def _field_path(loc: Sequence[Any], value: Any = None) -> str:
+    parts: list[str] = []
+    for part in _named_parts(loc, value):
+        if isinstance(part, int):
+            parts.append(f"[{part}]")
+        else:
+            parts.append(f".{part}" if parts else str(part))
+    return "".join(parts)
+
+
+def _reason(entry: PlainError) -> str:
+    """Say what one Pydantic error means without Pydantic vocabulary."""
+    kind = str(entry["type"])
+    context: Mapping[str, Any] = entry.get("ctx") or {}
+    discriminator = str(context.get("discriminator", "value")).strip("'")
+    # Pydantic renders alias choices as "snake_case' | 'wireName"; keep the wire name.
+    discriminator = discriminator.split("' | '")[-1]
+    if kind == "missing":
+        return "is required"
+    if kind == "extra_forbidden":
+        return "is not a field of this request"
+    if kind == "union_tag_not_found":
+        return f"{discriminator} is required"
+    if kind == "union_tag_invalid":
+        tag = str(context.get("tag", ""))
+        expected = _listed(_quoted_values(str(context.get("expected_tags", ""))))
+        return f"{discriminator} '{tag}' is not supported; expected {expected}"
+    if kind == "string_too_short" and context.get("min_length") == 1:
+        return "must not be empty"
+    if kind in TYPE_REASONS:
+        return TYPE_REASONS[kind]
+    message = str(entry["msg"])
+    for prefix, replacement in REASON_PREFIXES:
+        if message.startswith(prefix):
+            return (replacement + message[len(prefix) :]).strip()
+    return message
+
+
+def _detail(entry: PlainError, value: Any) -> str:
+    path = _field_path(entry["loc"], value)
+    reason = _reason(entry)
+    return f"{path} {reason}" if path else reason
+
+
+def _branches(entries: Sequence[PlainError]) -> dict[str, list[PlainError]]:
+    """Group union errors by the member that produced them."""
+    grouped: dict[str, list[PlainError]] = {}
+    for entry in entries:
+        loc = entry["loc"]
+        if not loc or not isinstance(loc[0], str):
+            return {}
+        grouped.setdefault(loc[0], []).append(entry)
+    return grouped
+
+
+def _is_branch_field(entry: PlainError) -> bool:
+    """Report whether a union member rejected the request on its own tag."""
+    return entry["type"] == "literal_error" and len(entry["loc"]) == BRANCH_FIELD_DEPTH
+
+
+def _rejected_field(groups: Iterable[Sequence[PlainError]]) -> str | None:
+    """Describe a union where every member rejected the same tag field."""
+    field = ""
+    rejected = ""
+    accepted: list[str] = []
+    for entries in groups:
+        tags = [entry for entry in entries if _is_branch_field(entry)]
+        if len(tags) != 1:
+            return None
+        name = str(tags[0]["loc"][1])
+        if field and name != field:
+            return None
+        field = name
+        rejected = str(tags[0].get("input", ""))
+        context: Mapping[str, Any] = tags[0].get("ctx") or {}
+        for value in _quoted_values(str(context.get("expected", ""))):
+            if value not in accepted:
+                accepted.append(value)
+    if not field:
+        return None
+    return f"{field} '{rejected}' is not supported; expected {_listed(accepted)}"
+
+
+def _closest_branch(entries: Sequence[PlainError]) -> list[PlainError]:
+    """Keep the union member the input came closest to matching."""
+    groups = _branches(entries)
+    if not groups:
+        return list(entries)
+    matched = [
+        group
+        for group in groups.values()
+        if not any(_is_branch_field(entry) for entry in group)
+        and not all(entry["type"] in NESTED_TAG_ERRORS for entry in group)
+    ]
+    nested = [
+        group
+        for group in groups.values()
+        if all(entry["type"] in NESTED_TAG_ERRORS for entry in group)
+    ]
+    closest = min(matched or nested or list(groups.values()), key=len)
+    return [{**entry, "loc": tuple(entry["loc"])[1:]} for entry in closest]
+
+
+def request_details(
+    entries: Sequence[PlainError], value: Any = None
+) -> tuple[str, ...]:
+    """Turn raw validation errors into short lines a person can act on."""
+    details: list[str] = []
+    for entry in entries:
+        detail = _detail(entry, value)
+        if detail and detail not in details:
+            details.append(detail)
+    return tuple(details[:MAX_DETAILS])
+
+
+def validation_details(
+    error: ValidationError, value: Any = None, *, union: bool = False
+) -> tuple[str, ...]:
+    """Describe why one boundary document failed its contract."""
+    entries: list[PlainError] = list(error.errors(include_url=False))
+    if union:
+        rejected = _rejected_field(_branches(entries).values())
+        if rejected is not None:
+            return (rejected,)
+        entries = _closest_branch(entries)
+    return request_details(entries, value)
+
+
 def parse_runtime_command(value: Any) -> RuntimeCommand:
     """Validate one JSONL command without leaking Pydantic diagnostics."""
     try:
         return RuntimeCommandAdapter.validate_python(value)
     except ValidationError as error:
-        raise ContractViolation("runtime command") from error
+        raise ContractViolation(
+            "runtime command", validation_details(error, value, union=True)
+        ) from error
 
 
 def parse_cli_command(value: Any) -> CliCommand:
@@ -1268,7 +1475,9 @@ def parse_cli_command(value: Any) -> CliCommand:
     try:
         return CliCommandAdapter.validate_python(value)
     except ValidationError as error:
-        raise ContractViolation("CLI command") from error
+        raise ContractViolation(
+            "CLI command", validation_details(error, value, union=True)
+        ) from error
 
 
 def parse_interactive_action(value: Any) -> InteractiveAction:
@@ -1276,7 +1485,9 @@ def parse_interactive_action(value: Any) -> InteractiveAction:
     try:
         return InteractiveActionAdapter.validate_python(value)
     except ValidationError as error:
-        raise ContractViolation("interactive action") from error
+        raise ContractViolation(
+            "interactive action", validation_details(error, value, union=True)
+        ) from error
 
 
 def parse_fork_manifest(value: Any) -> ForkManifestContract:
@@ -1284,7 +1495,9 @@ def parse_fork_manifest(value: Any) -> ForkManifestContract:
     try:
         return ForkManifestContract.model_validate(value)
     except ValidationError as error:
-        raise ContractViolation("fork manifest") from error
+        raise ContractViolation(
+            "fork manifest", validation_details(error, value)
+        ) from error
 
 
 def parse_adapter(value: Any) -> AdapterContract:
@@ -1292,7 +1505,9 @@ def parse_adapter(value: Any) -> AdapterContract:
     try:
         return AdapterContract.model_validate(value)
     except ValidationError as error:
-        raise ContractViolation("adapter contract") from error
+        raise ContractViolation(
+            "adapter contract", validation_details(error, value)
+        ) from error
 
 
 def parse_runtime_metadata(value: Any) -> RuntimeMetadataContract:
@@ -1300,7 +1515,9 @@ def parse_runtime_metadata(value: Any) -> RuntimeMetadataContract:
     try:
         return RuntimeMetadataContract.model_validate(value)
     except ValidationError as error:
-        raise ContractViolation("runtime metadata") from error
+        raise ContractViolation(
+            "runtime metadata", validation_details(error, value)
+        ) from error
 
 
 def parse_fixture(value: Any) -> FixtureContract:
@@ -1308,7 +1525,7 @@ def parse_fixture(value: Any) -> FixtureContract:
     try:
         return FixtureContract.model_validate(value)
     except ValidationError as error:
-        raise ContractViolation("fixture") from error
+        raise ContractViolation("fixture", validation_details(error, value)) from error
 
 
 def parse_runtime_response(value: Any, operation: str) -> RuntimeResponse:
@@ -1316,7 +1533,9 @@ def parse_runtime_response(value: Any, operation: str) -> RuntimeResponse:
     try:
         return RuntimeResponseAdapter.validate_python(value)
     except ValidationError as error:
-        raise ContractViolation("runtime response") from error
+        raise ContractViolation(
+            "runtime response", validation_details(error, value, union=True)
+        ) from error
 
 
 def parse_runtime_result(value: Any, operation: str) -> dict[str, Any]:
@@ -1333,25 +1552,32 @@ def parse_runtime_result(value: Any, operation: str) -> dict[str, Any]:
     try:
         result = adapter.validate_python(value)
     except ValidationError as error:
-        raise ContractViolation("runtime result") from error
+        raise ContractViolation(
+            "runtime result", validation_details(error, value)
+        ) from error
     if not isinstance(result, ContractModel):
         raise AssertionError("runtime result adapter returned a non-model")
     return result.model_dump(mode="json", by_alias=True, exclude_none=True)
 
 
 def contract_error(
-    boundary: str, *, operation: str, request_id: str | None = None
+    boundary: str,
+    *,
+    operation: str,
+    request_id: str | None = None,
+    details: Sequence[str] = (),
 ) -> ErrorRecord:
-    """Map private validation details to one stable public error record."""
+    """Map a rejected boundary document to one stable public error record."""
     normalized = boundary.replace(" ", "_")
     return ErrorRecord(
         schemaVersion=SCHEMA_VERSION,
         type="error",
         code=f"invalid_{normalized}",
-        message=f"{boundary} violates the XUI Lab contract",
+        message=contract_message(boundary, details),
         operation=operation,
         retryable=False,
         requestId=request_id,
+        details=tuple(details) or None,
     )
 
 
@@ -1368,7 +1594,10 @@ def error_record(
     """Convert a public exception to a stable machine-readable record."""
     if isinstance(error, ContractViolation):
         return contract_error(
-            error.boundary, operation=operation, request_id=request_id
+            error.boundary,
+            operation=operation,
+            request_id=request_id,
+            details=error.details,
         )
     if isinstance(error, CapabilityError):
         code = "missing_capability"

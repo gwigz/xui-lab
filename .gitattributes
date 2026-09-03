@@ -1,0 +1,4 @@
+# The embedded inspector client is Vite output. Review inspector/src instead,
+# and resolve conflicts by rebuilding rather than by merging minified bundles.
+xui_lab/_inspector/** linguist-generated=true merge=ours
+xui_lab/_inspector/assets/** -diff

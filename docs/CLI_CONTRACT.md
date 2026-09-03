@@ -137,6 +137,11 @@ Every error record includes `operation` and `retryable`. It includes
 `requestId`, `selector`, `capability`, and artifact paths when those values are
 known.
 
+A record that failed a Pydantic boundary contract also carries `details`: one
+line per rejected field, naming the field and what it needs, such as
+`selector.path must match '^/'`. The `message` field repeats the first two of
+those lines. Both are for people. Code branches on `code`.
+
 ## Request IDs and timestamps
 
 Commands accept or generate a non-empty request ID. Results, progress events,

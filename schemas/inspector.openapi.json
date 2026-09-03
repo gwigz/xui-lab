@@ -597,6 +597,21 @@
             "title": "Detail",
             "type": "string"
           },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
           "operation": {
             "minLength": 1,
             "title": "Operation",

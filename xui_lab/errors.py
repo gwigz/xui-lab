@@ -1,6 +1,9 @@
 """Errors that may safely cross the command-line boundary."""
 
+from collections.abc import Sequence
 from typing import Any
+
+SUMMARY_DETAILS = 2
 
 
 class XUILabError(Exception):
@@ -11,12 +14,35 @@ class InputError(XUILabError):
     """A manifest, fixture, Python scenario, or command is invalid."""
 
 
+def detail_summary(details: Sequence[str]) -> str:
+    """Join the first problems found in a rejected document."""
+    if not details:
+        return ""
+    summary = "; ".join(details[:SUMMARY_DETAILS])
+    hidden = len(details) - SUMMARY_DETAILS
+    if hidden > 0:
+        summary += f"; and {hidden} more problem{'s' if hidden > 1 else ''}"
+    return summary
+
+
+def contract_message(boundary: str, details: Sequence[str] = ()) -> str:
+    """Name the rejected boundary and the first problems found in it."""
+    summary = detail_summary(details)
+    return f"invalid {boundary}: {summary}" if summary else f"invalid {boundary}"
+
+
+def problem_summary(error: BaseException) -> str:
+    """Describe a failure for a message that already names where it came from."""
+    return detail_summary(getattr(error, "details", ())) or str(error)
+
+
 class ContractViolation(InputError):
     """Validated external data does not match a named XUI Lab contract."""
 
-    def __init__(self, boundary: str):
+    def __init__(self, boundary: str, details: Sequence[str] = ()):
         self.boundary = boundary
-        super().__init__(f"{boundary} violates the XUI Lab contract")
+        self.details = tuple(details)
+        super().__init__(contract_message(boundary, self.details))
 
 
 class CapabilityError(XUILabError):

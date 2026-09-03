@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
@@ -8,32 +8,36 @@ import { defineConfig, type Plugin } from "vitest/config";
 
 const sourceRoot = fileURLToPath(new URL(".", import.meta.url));
 const outputRoot = resolve(sourceRoot, "../xui_lab/_inspector");
-const ignoredDirectories = new Set([
-  "node_modules",
-  "test-results",
-  "playwright-report",
-  "blob-report",
-]);
+// The inputs the production bundle is built from. Keep in sync with
+// xui_lab.inspector_assets.BUILD_INPUTS. Lint configuration, end-to-end
+// tests, and unit tests never reach the bundle, so editing them must not
+// report the embedded build as stale.
+const buildInputs = [
+  "index.html",
+  "package-lock.json",
+  "package.json",
+  "src",
+  "tsconfig.app.json",
+  "tsconfig.json",
+  "tsconfig.node.json",
+  "vite.config.ts",
+];
+const testSuffixes = [".test.ts", ".test.tsx"];
 
-function sourcePaths(directory: string): string[] {
-  return readdirSync(directory, { withFileTypes: true })
-    .flatMap((entry) => {
-      const path = resolve(directory, entry.name);
-      if (entry.isDirectory()) {
-        return ignoredDirectories.has(entry.name) ? [] : sourcePaths(path);
-      }
-      return [path];
-    })
-    .sort();
+function buildInputPaths(relativePath: string): string[] {
+  const path = resolve(sourceRoot, relativePath);
+  if (statSync(path).isDirectory()) {
+    return readdirSync(path).flatMap((name) => buildInputPaths(`${relativePath}/${name}`));
+  }
+  return testSuffixes.some((suffix) => relativePath.endsWith(suffix)) ? [] : [relativePath];
 }
 
 function sourceFingerprint(): string {
   const hash = createHash("sha256");
-  for (const path of sourcePaths(sourceRoot)) {
-    const relativePath = path.slice(sourceRoot.length).split("\\").join("/");
+  for (const relativePath of buildInputs.flatMap(buildInputPaths).sort()) {
     hash.update(relativePath);
     hash.update("\0");
-    hash.update(readFileSync(path));
+    hash.update(readFileSync(resolve(sourceRoot, relativePath)));
     hash.update("\0");
   }
   return hash.digest("hex");

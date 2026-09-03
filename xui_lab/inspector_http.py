@@ -264,6 +264,7 @@ class InspectorProblemDetails(ContractModel):
     code: NonEmptyString
     operation: NonEmptyString
     retryable: bool
+    details: tuple[NonEmptyString, ...] | None = None
     request_id: NonEmptyString | None = Field(default=None, alias="requestId")
     selector: contracts.Selector | None = None
     capability: NonEmptyString | None = None
@@ -359,6 +360,7 @@ def error_json(
         code=record.code,
         operation=record.operation,
         retryable=record.retryable,
+        details=record.details,
         requestId=record.request_id,
         selector=record.selector,
         capability=record.capability,
@@ -712,12 +714,13 @@ def create_inspector_app(
 
     @app.exception_handler(RequestValidationError)
     async def validation_handler(
-        request: Request, _exc: RequestValidationError
+        request: Request, exc: RequestValidationError
     ) -> JSONResponse:
         operation = operation_for(request.url.path)
         record = contracts.contract_error(
             "interactive action" if operation == "inspector.action" else operation,
             operation=operation,
+            details=contracts.request_details(exc.errors()),
         )
         return error_json(record, status=400)
 

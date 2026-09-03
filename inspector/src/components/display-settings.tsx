@@ -1,6 +1,8 @@
 import { Settings2 } from "lucide-react";
+import type React from "react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Fieldset, FieldsetLegend } from "@/components/ui/fieldset";
 import { Label } from "@/components/ui/label";
 import {
   NumberField,
@@ -10,6 +12,7 @@ import {
   NumberFieldInput,
 } from "@/components/ui/number-field";
 import { Popover, PopoverPopup, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
+import { Separator } from "@/components/ui/separator";
 import { type InspectorState, recordValue } from "../contracts";
 import type { RunInspectorAction } from "../model";
 
@@ -19,6 +22,26 @@ function integer(value: number | null): number | undefined {
 
 function finiteNumber(value: number | null): number | undefined {
   return value !== null && Number.isFinite(value) ? value : undefined;
+}
+
+// Bleed past the popover viewport padding so sections read as separate blocks.
+const separatorClassName = "-mx-(--viewport-inline-padding) data-[orientation=horizontal]:w-auto";
+
+type SettingProps = Readonly<{
+  children: React.ReactNode;
+  id: string;
+  label: string;
+}>;
+
+function Setting({ children, id, label }: SettingProps) {
+  return (
+    <div className="grid grid-cols-[3.25rem_minmax(0,1fr)] items-center gap-3">
+      <Label className="text-muted-foreground" htmlFor={id}>
+        {label}
+      </Label>
+      {children}
+    </div>
+  );
 }
 
 type DisplaySettingsProps = Readonly<{
@@ -84,182 +107,166 @@ export function DisplaySettings({ state, runAction }: DisplaySettingsProps) {
       </PopoverTrigger>
       <PopoverPopup align="end" className="w-76" side="bottom">
         <PopoverTitle className="text-sm">Display</PopoverTitle>
-        <div className="mt-4 grid gap-4">
-          <fieldset className="grid gap-2">
-            <legend className="font-medium text-[11px] text-muted-foreground uppercase tracking-[0.08em]">
-              Viewport
-            </legend>
-            <div className="grid gap-1.5">
-              <NumberField
-                className="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1"
-                format={{ useGrouping: false }}
-                id="viewportWidth"
-                largeStep={100}
-                min={1}
-                onValueChange={(value) => {
-                  setViewportDirty(true);
-                  setViewportWidth(value);
-                }}
-                size="sm"
-                value={viewportWidth}
-              >
-                <Label className="text-[11px] text-muted-foreground" htmlFor="viewportWidth">
-                  Width
-                </Label>
-                <NumberFieldGroup>
-                  <NumberFieldDecrement />
-                  <NumberFieldInput aria-label="Viewport width" />
-                  <NumberFieldIncrement />
-                </NumberFieldGroup>
-              </NumberField>
-              <NumberField
-                className="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1"
-                format={{ useGrouping: false }}
-                id="viewportHeight"
-                largeStep={100}
-                min={1}
-                onValueChange={(value) => {
-                  setViewportDirty(true);
-                  setViewportHeight(value);
-                }}
-                size="sm"
-                value={viewportHeight}
-              >
-                <Label className="text-[11px] text-muted-foreground" htmlFor="viewportHeight">
-                  Height
-                </Label>
-                <NumberFieldGroup>
-                  <NumberFieldDecrement />
-                  <NumberFieldInput aria-label="Viewport height" />
-                  <NumberFieldIncrement />
-                </NumberFieldGroup>
-              </NumberField>
-              <NumberField
-                className="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1"
-                format={{ maximumFractionDigits: 2 }}
-                id="uiScale"
-                largeStep={0.5}
-                min={0.1}
-                onValueChange={(value) => {
-                  setViewportDirty(true);
-                  setScale(value);
-                }}
-                size="sm"
-                smallStep={0.05}
-                step={0.1}
-                value={scale}
-              >
-                <Label className="text-[11px] text-muted-foreground" htmlFor="uiScale">
-                  Scale
-                </Label>
-                <NumberFieldGroup>
-                  <NumberFieldDecrement />
-                  <NumberFieldInput aria-label="UI scale" />
-                  <NumberFieldIncrement />
-                </NumberFieldGroup>
-              </NumberField>
-            </div>
-            <Button
-              disabled={!canResize}
-              onClick={() => {
-                const nextWidth = integer(viewportWidth);
-                const nextHeight = integer(viewportHeight);
-                const uiScale = finiteNumber(scale);
-                if (nextWidth !== undefined && nextHeight !== undefined && uiScale !== undefined) {
-                  void runAction({
-                    schemaVersion: 1,
-                    action: "resizeViewport",
-                    width: nextWidth,
-                    height: nextHeight,
-                    uiScale,
-                  }).then((result) => {
-                    if (result !== undefined) {
-                      setViewportDirty(false);
-                    }
-                  });
-                }
+        <Separator className={`${separatorClassName} mt-4`} />
+        <Fieldset className="mt-4 grid gap-2">
+          <FieldsetLegend className="text-xs">Viewport</FieldsetLegend>
+          <Setting id="viewportWidth" label="Width">
+            <NumberField
+              format={{ useGrouping: false }}
+              id="viewportWidth"
+              largeStep={100}
+              min={1}
+              onValueChange={(value) => {
+                setViewportDirty(true);
+                setViewportWidth(value);
               }}
-              size="xs"
-              variant="outline"
+              size="sm"
+              value={viewportWidth}
             >
-              Apply viewport
-            </Button>
-          </fieldset>
-          <fieldset className="grid gap-2">
-            <legend className="font-medium text-[11px] text-muted-foreground uppercase tracking-[0.08em]">
-              Subject
-            </legend>
-            <div className="grid gap-1.5">
-              <NumberField
-                className="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1"
-                format={{ useGrouping: false }}
-                id="subjectWidth"
-                largeStep={100}
-                min={1}
-                onValueChange={(value) => {
-                  setSubjectDirty(true);
-                  setSubjectWidth(value);
-                }}
-                size="sm"
-                value={subjectWidth}
-              >
-                <Label className="text-[11px] text-muted-foreground" htmlFor="subjectWidth">
-                  Width
-                </Label>
-                <NumberFieldGroup>
-                  <NumberFieldDecrement />
-                  <NumberFieldInput aria-label="Subject width" />
-                  <NumberFieldIncrement />
-                </NumberFieldGroup>
-              </NumberField>
-              <NumberField
-                className="grid grid-cols-[3rem_minmax(0,1fr)] items-center gap-x-2 gap-y-1"
-                format={{ useGrouping: false }}
-                id="subjectHeight"
-                largeStep={100}
-                min={1}
-                onValueChange={(value) => {
-                  setSubjectDirty(true);
-                  setSubjectHeight(value);
-                }}
-                size="sm"
-                value={subjectHeight}
-              >
-                <Label className="text-[11px] text-muted-foreground" htmlFor="subjectHeight">
-                  Height
-                </Label>
-                <NumberFieldGroup>
-                  <NumberFieldDecrement />
-                  <NumberFieldInput aria-label="Subject height" />
-                  <NumberFieldIncrement />
-                </NumberFieldGroup>
-              </NumberField>
-            </div>
-            <Button
-              disabled={!canResizeSubject}
-              onClick={() => {
-                const nextWidth = integer(subjectWidth);
-                const nextHeight = integer(subjectHeight);
-                if (nextWidth !== undefined && nextHeight !== undefined) {
-                  void runAction({
-                    schemaVersion: 1,
-                    action: "resizeSubject",
-                    width: nextWidth,
-                    height: nextHeight,
-                  }).then((result) => {
-                    if (result !== undefined) {
-                      setSubjectDirty(false);
-                    }
-                  });
-                }
+              <NumberFieldGroup>
+                <NumberFieldDecrement />
+                <NumberFieldInput aria-label="Viewport width" />
+                <NumberFieldIncrement />
+              </NumberFieldGroup>
+            </NumberField>
+          </Setting>
+          <Setting id="viewportHeight" label="Height">
+            <NumberField
+              format={{ useGrouping: false }}
+              id="viewportHeight"
+              largeStep={100}
+              min={1}
+              onValueChange={(value) => {
+                setViewportDirty(true);
+                setViewportHeight(value);
               }}
-              size="xs"
-              variant="outline"
+              size="sm"
+              value={viewportHeight}
             >
-              Apply subject size
-            </Button>
-          </fieldset>
-        </div>
+              <NumberFieldGroup>
+                <NumberFieldDecrement />
+                <NumberFieldInput aria-label="Viewport height" />
+                <NumberFieldIncrement />
+              </NumberFieldGroup>
+            </NumberField>
+          </Setting>
+          <Setting id="uiScale" label="Scale">
+            <NumberField
+              format={{ maximumFractionDigits: 2 }}
+              id="uiScale"
+              largeStep={0.5}
+              min={0.1}
+              onValueChange={(value) => {
+                setViewportDirty(true);
+                setScale(value);
+              }}
+              size="sm"
+              smallStep={0.05}
+              step={0.1}
+              value={scale}
+            >
+              <NumberFieldGroup>
+                <NumberFieldDecrement />
+                <NumberFieldInput aria-label="UI scale" />
+                <NumberFieldIncrement />
+              </NumberFieldGroup>
+            </NumberField>
+          </Setting>
+          <Button
+            className="mt-1 justify-self-end"
+            disabled={!canResize}
+            onClick={() => {
+              const nextWidth = integer(viewportWidth);
+              const nextHeight = integer(viewportHeight);
+              const uiScale = finiteNumber(scale);
+              if (nextWidth !== undefined && nextHeight !== undefined && uiScale !== undefined) {
+                void runAction({
+                  schemaVersion: 1,
+                  action: "resizeViewport",
+                  width: nextWidth,
+                  height: nextHeight,
+                  uiScale,
+                }).then((result) => {
+                  if (result !== undefined) {
+                    setViewportDirty(false);
+                  }
+                });
+              }
+            }}
+            size="xs"
+            variant="outline"
+          >
+            Apply viewport
+          </Button>
+        </Fieldset>
+        <Separator className={`${separatorClassName} my-4`} />
+        <Fieldset className="grid gap-2">
+          <FieldsetLegend className="text-xs">Subject</FieldsetLegend>
+          <Setting id="subjectWidth" label="Width">
+            <NumberField
+              format={{ useGrouping: false }}
+              id="subjectWidth"
+              largeStep={100}
+              min={1}
+              onValueChange={(value) => {
+                setSubjectDirty(true);
+                setSubjectWidth(value);
+              }}
+              size="sm"
+              value={subjectWidth}
+            >
+              <NumberFieldGroup>
+                <NumberFieldDecrement />
+                <NumberFieldInput aria-label="Subject width" />
+                <NumberFieldIncrement />
+              </NumberFieldGroup>
+            </NumberField>
+          </Setting>
+          <Setting id="subjectHeight" label="Height">
+            <NumberField
+              format={{ useGrouping: false }}
+              id="subjectHeight"
+              largeStep={100}
+              min={1}
+              onValueChange={(value) => {
+                setSubjectDirty(true);
+                setSubjectHeight(value);
+              }}
+              size="sm"
+              value={subjectHeight}
+            >
+              <NumberFieldGroup>
+                <NumberFieldDecrement />
+                <NumberFieldInput aria-label="Subject height" />
+                <NumberFieldIncrement />
+              </NumberFieldGroup>
+            </NumberField>
+          </Setting>
+          <Button
+            className="mt-1 justify-self-end"
+            disabled={!canResizeSubject}
+            onClick={() => {
+              const nextWidth = integer(subjectWidth);
+              const nextHeight = integer(subjectHeight);
+              if (nextWidth !== undefined && nextHeight !== undefined) {
+                void runAction({
+                  schemaVersion: 1,
+                  action: "resizeSubject",
+                  width: nextWidth,
+                  height: nextHeight,
+                }).then((result) => {
+                  if (result !== undefined) {
+                    setSubjectDirty(false);
+                  }
+                });
+              }
+            }}
+            size="xs"
+            variant="outline"
+          >
+            Apply subject size
+          </Button>
+        </Fieldset>
       </PopoverPopup>
     </Popover>
   );
