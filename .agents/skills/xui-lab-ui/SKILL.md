@@ -61,8 +61,9 @@ SESSION=$(./xui-lab --viewer-source alchemy="$SOURCE" \
 ```
 
 `session status` and `session close` take that id. Close is idempotent. Dead
-PIDs are removed on status and close. Use `interactive` only when a person
-asked to look at the window.
+PIDs are removed on status and close. `session close`, `reload`, and `run`
+accept `--dry-run`. Do not pass `--dry-run` on click, fill, press, scroll, or
+drag. Use `interactive` only when a person asked to look at the window.
 
 ## Drive it over JSON
 

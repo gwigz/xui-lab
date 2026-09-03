@@ -511,6 +511,50 @@ class CommandLineTests(unittest.TestCase):
         with self.assertRaises(SystemExit):
             parse_command(["check", "--jq", "."])
 
+    def test_click_rejects_dry_run(self) -> None:
+        with self.assertRaises(SystemExit):
+            parse_command(
+                [
+                    "click",
+                    "--session",
+                    "sess_1",
+                    "--control-id",
+                    "ok",
+                    "--dry-run",
+                ]
+            )
+
+    def test_run_dry_run_lists_scenarios_without_pruning(self) -> None:
+        with tempfile.TemporaryDirectory() as directory_text:
+            directory = Path(directory_text)
+            runtime = directory / "fake-runtime"
+            runtime.write_text("#!/bin/sh\n", encoding="utf-8")
+            os.chmod(runtime, 0o755)
+            artifacts = directory / "artifacts"
+            existing = artifacts / "readme_example"
+            existing.mkdir(parents=True)
+            marker = existing / "keep.txt"
+            marker.write_text("stay", encoding="utf-8")
+            stdout = StringIO()
+
+            with redirect_stdout(stdout):
+                status = main(
+                    [
+                        "run",
+                        "tests/scenarios/readme_example.py",
+                        "--runtime",
+                        str(runtime),
+                        "--artifacts",
+                        str(artifacts),
+                        "--dry-run",
+                    ]
+                )
+
+            self.assertEqual(0, status)
+            self.assertTrue(marker.is_file())
+            self.assertIn("readme_example: would run", stdout.getvalue())
+            self.assertIn("would prune", stdout.getvalue())
+
 
 if __name__ == "__main__":
     unittest.main()

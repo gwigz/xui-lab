@@ -159,12 +159,16 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
       if (controlId.length === 0) {
         return;
       }
+      const selector = state.locators[controlId]?.selector;
+      if (selector === undefined) {
+        return;
+      }
       await runAction(
         input.action === "type"
-          ? { action: "type", controlId, text: input.text }
+          ? { action: "type", selector, text: input.text }
           : {
               action: "press",
-              controlId,
+              selector,
               key: input.key,
               modifiers: input.modifiers,
             },

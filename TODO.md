@@ -11,34 +11,8 @@ failure, it keeps the frame, UI tree, event trace, diagnostics, and runtime log.
 The API must preserve LLUI semantics. It must not introduce a parallel widget
 model.
 
-## Make the CLI the agent control plane
+## CLI control plane
 
-The design should follow the stream separation and exit-status guidance in the
-[Command Line Interface Guidelines](https://clig.dev/), the discoverable field
-selection in [GitHub CLI JSON output](https://cli.github.com/manual/gh_help_formatting),
-and the JSONL and output-schema patterns exposed by
-[`codex exec`](https://github.com/openai/codex/blob/main/codex-rs/exec/src/cli.rs).
-The browser inspector remains optional for a person to view. Agents use the CLI.
-
-- [ ] Define one selector contract for the Python API, CLI, inspector, recorder,
-  and replay. Follow Playwright's guidance to
-  [prioritize user-visible behavior](https://playwright.dev/docs/best-practices#test-user-visible-behavior):
-  prefer control type or role plus accessible label or name, then associated
-  label, placeholder, visible text, or visible model identity. Use a control ID
-  only when no unique user-visible selector exists. Keep XUI paths as
-  provenance, not as the default selector.
-- [ ] Make Copy Locator use the same selector-ranking implementation as
-  Recorded Python. Record the chosen signals, match count, and fallback reason
-  so generated code is reviewable and selector changes are explainable.
-- [x] Add `--jq` with the `jq` package only when full jq expressions are
-  required. Do not implement a partial jq language. Update
-  [`README.md`](README.md) and
-  [`.agents/skills/xui-lab-ui/SKILL.md`](.agents/skills/xui-lab-ui/SKILL.md)
-  so the session examples use `--jq` instead of piping stdout to a `jq`
-  binary.
-- [ ] Add `--dry-run` to commands that can reload state, prune artifacts, or
-  terminate a session. Keep input gestures explicit rather than labeling them
-  as harmless dry runs.
 - [ ] Add `xui-lab record --output FILE` and `xui-lab replay FILE` using a
   versioned, selector-stable command format suitable for review and editing.
 - [ ] Add shell-level contract tests with `pytest` for exit status, stdout

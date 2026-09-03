@@ -17,12 +17,39 @@ export type CaptureState =
   | Readonly<{ kind: "empty"; version: number }>
   | Readonly<{ kind: "available"; version: number }>;
 
+export type RankedLocator = Readonly<{
+  selector: Selector;
+  python: string;
+  kind: string;
+  matchCount: number;
+  signals: readonly string[];
+  fallbackReason: string | null;
+}>;
+
 export type KeyboardModifier = "shift" | "control" | "alt";
+
+export type Selector =
+  | Readonly<{ schemaVersion: 1; kind: "role"; role: string; name?: string }>
+  | Readonly<{ schemaVersion: 1; kind: "label"; label: string }>
+  | Readonly<{ schemaVersion: 1; kind: "placeholder"; placeholder: string }>
+  | Readonly<{ schemaVersion: 1; kind: "text"; text: string }>
+  | Readonly<{ schemaVersion: 1; kind: "modelId"; modelId: string }>
+  | Readonly<{ schemaVersion: 1; kind: "controlId"; controlId: string }>
+  | Readonly<{ schemaVersion: 1; kind: "path"; path: string }>;
+
+export function controlIdSelector(controlId: string): Selector {
+  return { schemaVersion: 1, kind: "controlId", controlId };
+}
+
+export function modelIdSelector(modelId: string): Selector {
+  return { schemaVersion: 1, kind: "modelId", modelId };
+}
 
 export type InspectorState = Readonly<{
   tree: TreeNode;
   diagnostics: Readonly<Record<string, unknown>>;
   recording: readonly string[];
+  locators: Readonly<Record<string, RankedLocator>>;
   artifactDir: string;
   subjects: readonly string[];
   fixtures: readonly string[];
@@ -33,13 +60,13 @@ export type InspectorState = Readonly<{
 
 export type InspectorAction =
   | Readonly<{ action: "reload" }>
-  | Readonly<{ action: "highlight"; controlId: string }>
+  | Readonly<{ action: "highlight"; selector: Selector }>
   | Readonly<{ action: "pick"; x: number; y: number }>
   | Readonly<{ action: "resizeViewport"; width: number; height: number; uiScale: number }>
   | Readonly<{ action: "resizeSubject"; width: number; height: number }>
   | Readonly<{ action: "capture" }>
   | Readonly<{ action: "export" }>
-  | Readonly<{ action: "click"; controlId: string }>
+  | Readonly<{ action: "click"; selector: Selector }>
   | Readonly<{ action: "clickAt"; x: number; y: number }>
   | Readonly<{ action: "doubleClickAt"; x: number; y: number }>
   | Readonly<{ action: "rightClickAt"; x: number; y: number }>
@@ -53,14 +80,14 @@ export type InspectorAction =
   | Readonly<{ action: "scrollAt"; x: number; y: number; clicks: number }>
   | Readonly<{
       action: "dragAndDrop";
-      sourceControlId: string;
-      targetControlId: string;
+      source: Selector;
+      target: Selector;
     }>
-  | Readonly<{ action: "fill"; controlId: string; text: string }>
-  | Readonly<{ action: "type"; controlId: string; text: string }>
+  | Readonly<{ action: "fill"; selector: Selector; text: string }>
+  | Readonly<{ action: "type"; selector: Selector; text: string }>
   | Readonly<{
       action: "press";
-      controlId: string;
+      selector: Selector;
       key: string;
       modifiers?: readonly KeyboardModifier[];
     }>
@@ -85,6 +112,14 @@ function stringValue(value: unknown, context: string): string {
   }
 
   return value;
+}
+
+function nonEmptyStringValue(value: unknown, context: string): string {
+  const parsed = stringValue(value, context);
+  if (parsed.length === 0) {
+    throw new Error(`${context} must be non-empty`);
+  }
+  return parsed;
 }
 
 function numberValue(value: unknown, context: string): number {
@@ -115,6 +150,95 @@ function optionalString(record: Record<string, unknown>, key: string): string | 
   const value = record[key];
 
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function parseRankedLocator(value: unknown, context: string): RankedLocator {
+  const record = objectValue(value, context);
+  const fallbackReason = record.fallbackReason;
+  if (fallbackReason !== null && typeof fallbackReason !== "string") {
+    throw new Error(`${context}.fallbackReason must be a string or null`);
+  }
+  return {
+    selector: parseSelector(record.selector, `${context}.selector`),
+    python: stringValue(record.python, `${context}.python`),
+    kind: stringValue(record.kind, `${context}.kind`),
+    matchCount: numberValue(record.matchCount, `${context}.matchCount`),
+    signals: stringArray(record.signals, `${context}.signals`),
+    fallbackReason,
+  };
+}
+
+function parseSelector(value: unknown, context: string): Selector {
+  const record = objectValue(value, context);
+  if (record.schemaVersion !== 1) {
+    throw new Error(`${context}.schemaVersion must be 1`);
+  }
+  const kind = stringValue(record.kind, `${context}.kind`);
+  if (kind === "role") {
+    const name = record.name;
+    if (name !== undefined && typeof name !== "string") {
+      throw new Error(`${context}.name must be a string`);
+    }
+    return {
+      schemaVersion: 1,
+      kind,
+      role: nonEmptyStringValue(record.role, `${context}.role`),
+      name: name === undefined ? undefined : nonEmptyStringValue(name, `${context}.name`),
+    };
+  }
+  if (kind === "label") {
+    return {
+      schemaVersion: 1,
+      kind,
+      label: nonEmptyStringValue(record.label, `${context}.label`),
+    };
+  }
+  if (kind === "placeholder") {
+    return {
+      schemaVersion: 1,
+      kind,
+      placeholder: nonEmptyStringValue(record.placeholder, `${context}.placeholder`),
+    };
+  }
+  if (kind === "text") {
+    return {
+      schemaVersion: 1,
+      kind,
+      text: nonEmptyStringValue(record.text, `${context}.text`),
+    };
+  }
+  if (kind === "modelId") {
+    const modelId = nonEmptyStringValue(record.modelId, `${context}.modelId`);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(modelId)) {
+      throw new Error(`${context}.modelId must be a UUID string`);
+    }
+    return { schemaVersion: 1, kind, modelId };
+  }
+  if (kind === "controlId") {
+    return {
+      schemaVersion: 1,
+      kind,
+      controlId: nonEmptyStringValue(record.controlId, `${context}.controlId`),
+    };
+  }
+  if (kind === "path") {
+    const path = nonEmptyStringValue(record.path, `${context}.path`);
+    if (!path.startsWith("/")) {
+      throw new Error(`${context}.path must be an absolute XUI path`);
+    }
+    return { schemaVersion: 1, kind, path };
+  }
+  throw new Error(`${context}.kind is not supported`);
+}
+
+function parseRankedLocators(value: unknown): Readonly<Record<string, RankedLocator>> {
+  const record = objectValue(value, "state.locators");
+  return Object.fromEntries(
+    Object.entries(record).map(([controlId, locator]) => [
+      controlId,
+      parseRankedLocator(locator, `state.locators.${controlId}`),
+    ]),
+  );
 }
 
 function parseTreeNode(value: unknown, context = "state.tree"): TreeNode {
@@ -155,6 +279,7 @@ export function parseInspectorState(value: unknown): InspectorState {
     tree: parseTreeNode(record.tree),
     diagnostics: objectValue(record.diagnostics, "state.diagnostics"),
     recording: stringArray(record.recording, "state.recording"),
+    locators: parseRankedLocators(record.locators),
     artifactDir: stringValue(record.artifactDir, "state.artifactDir"),
     subjects: stringArray(record.subjects, "state.subjects"),
     fixtures: stringArray(record.fixtures, "state.fixtures"),
@@ -176,6 +301,12 @@ export function parseActionResponse(value: unknown): unknown {
   }
 
   return record.result;
+}
+
+export function reviewableLocatorPython(locator: RankedLocator): string {
+  const fallback = locator.fallbackReason ?? "none";
+  const explanation = `# locator: signals=${locator.signals.join(", ")}; matches=${locator.matchCount}; fallback=${fallback}`;
+  return `${explanation}\n${locator.python}`;
 }
 
 export function recordValue(value: unknown): Readonly<Record<string, unknown>> | undefined {

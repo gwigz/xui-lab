@@ -1,4 +1,9 @@
-import type { KeyboardModifier } from "./contracts";
+import {
+  controlIdSelector,
+  type KeyboardModifier,
+  modelIdSelector,
+  type Selector,
+} from "./contracts";
 
 export type FramePoint = Readonly<{ x: number; y: number }>;
 
@@ -12,8 +17,8 @@ export type FrameDragInput =
     }>
   | Readonly<{
       action: "dragAndDrop";
-      sourceControlId: string;
-      targetControlId: string;
+      source: Selector;
+      target: Selector;
     }>;
 
 export type BrowserFrameInput =
@@ -133,8 +138,8 @@ export function frameDragInput(
   ) {
     return {
       action: "dragAndDrop",
-      sourceControlId: input.sourceControlId,
-      targetControlId: input.targetControlId,
+      source: modelIdSelector(input.sourceModelId),
+      target: controlIdSelector(input.targetControlId),
     };
   }
 

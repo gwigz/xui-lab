@@ -12,7 +12,13 @@ from io import StringIO
 from pathlib import Path
 
 from xui_lab.cli import main, parse_command
-from xui_lab.contracts import ClickCliCommand, SessionStartCliCommand, TreeCliCommand
+from xui_lab.contracts import (
+    ClickCliCommand,
+    ReloadCliCommand,
+    SessionCloseCliCommand,
+    SessionStartCliCommand,
+    TreeCliCommand,
+)
 from xui_lab.session import (
     SessionFile,
     cleanup_stale,
@@ -20,6 +26,7 @@ from xui_lab.session import (
     remove_session,
     send_session_command,
     serve_until_closed,
+    session_path,
     socket_path,
     write_session,
 )
@@ -145,6 +152,14 @@ class SessionStoreTests(unittest.TestCase):
         self.assertIsInstance(command, ClickCliCommand)
         assert isinstance(command, ClickCliCommand)
         self.assertEqual("ok", command.control_id)
+        self.assertEqual(
+            {
+                "schemaVersion": 1,
+                "kind": "controlId",
+                "controlId": "ok",
+            },
+            command.selector_contract().model_dump(mode="json", by_alias=True),
+        )
 
     def test_session_start_parses_to_a_typed_command(self) -> None:
         command = parse_command(
@@ -191,6 +206,110 @@ class SessionStoreTests(unittest.TestCase):
     def test_pid_alive_rejects_missing_processes(self) -> None:
         self.assertFalse(pid_alive(2**31 - 2))
         self.assertTrue(pid_alive(os.getpid()))
+
+    def test_close_dry_run_does_not_remove_a_session(self) -> None:
+        record = SessionFile(
+            schemaVersion=1,
+            sessionId="sess_dry",
+            token="token",
+            status="ready",
+            socketPath=str(socket_path("sess_dry")),
+            subject="test_widgets",
+            runtime="/runtime",
+            source="/source",
+            fork="alchemy",
+            artifacts="/artifacts",
+            requestId="req_1",
+            width=100,
+            height=100,
+            uiScale=1.0,
+            capabilities=("input",),
+            viewerSource=(),
+            pid=os.getpid(),
+        )
+        write_session(record)
+        stale = record.model_copy(
+            update={
+                "session_id": "sess_stale",
+                "socket_path": str(socket_path("sess_stale")),
+                "pid": 2**31 - 2,
+            }
+        )
+        write_session(stale)
+        stdout = StringIO()
+
+        with redirect_stdout(stdout):
+            status = main(["session", "close", "sess_dry", "--dry-run"])
+
+        self.assertEqual(0, status)
+        payload = json.loads(stdout.getvalue())
+        self.assertTrue(payload["dryRun"])
+        self.assertTrue(payload["wouldClose"])
+        self.assertTrue(payload["wouldTerminate"])
+        self.assertTrue(session_path("sess_dry").is_file())
+        self.assertTrue(session_path("sess_stale").is_file())
+
+    def test_close_dry_run_reports_a_missing_session(self) -> None:
+        stdout = StringIO()
+        with redirect_stdout(stdout):
+            status = main(
+                [
+                    "session",
+                    "close",
+                    "sess_missing",
+                    "--dry-run",
+                    "--jq",
+                    ".wouldClose",
+                ]
+            )
+        self.assertEqual(0, status)
+        self.assertEqual("false\n", stdout.getvalue())
+
+    def test_reload_dry_run_does_not_contact_the_session(self) -> None:
+        record = SessionFile(
+            schemaVersion=1,
+            sessionId="sess_reload",
+            token="token",
+            status="ready",
+            socketPath=str(socket_path("sess_reload")),
+            subject="test_widgets",
+            runtime="/runtime",
+            source="/source",
+            fork="alchemy",
+            artifacts="/artifacts",
+            requestId="req_1",
+            width=100,
+            height=100,
+            uiScale=1.0,
+            capabilities=("input",),
+            viewerSource=(),
+            pid=os.getpid(),
+        )
+        write_session(record)
+        stdout = StringIO()
+
+        with redirect_stdout(stdout):
+            status = main(
+                ["reload", "--session", "sess_reload", "--dry-run", "--jq", ".data"]
+            )
+
+        self.assertEqual(0, status)
+        payload = json.loads(stdout.getvalue())
+        self.assertTrue(payload["dryRun"])
+        self.assertTrue(payload["wouldReload"])
+        self.assertEqual("sess_reload", payload["sessionId"])
+        self.assertTrue(session_path("sess_reload").is_file())
+
+    def test_reload_and_close_parse_dry_run(self) -> None:
+        reload_command = parse_command(["reload", "--session", "sess_1", "--dry-run"])
+        self.assertIsInstance(reload_command, ReloadCliCommand)
+        assert isinstance(reload_command, ReloadCliCommand)
+        self.assertTrue(reload_command.dry_run)
+
+        close_command = parse_command(["session", "close", "sess_1", "--dry-run"])
+        self.assertIsInstance(close_command, SessionCloseCliCommand)
+        assert isinstance(close_command, SessionCloseCliCommand)
+        self.assertTrue(close_command.dry_run)
 
 
 if __name__ == "__main__":

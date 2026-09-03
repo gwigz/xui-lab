@@ -15,8 +15,18 @@ from .contracts import (
     ArtifactKind,
     ArtifactManifest,
     RuntimeExchangeEvent,
+    Selector,
     error_record,
     parse_fixture,
+)
+from .contracts import (
+    ControlIdSelectorContract as ControlIdSelector,
+)
+from .contracts import (
+    ModelIdSelectorContract as ModelIdSelector,
+)
+from .contracts import (
+    PathSelectorContract as PathSelector,
 )
 from .domain import Capability, Comparison, Fork, Viewport
 from .errors import (
@@ -28,7 +38,6 @@ from .errors import (
 from .io import git_commit, read_json, write_json
 from .operations import (
     Capture,
-    ControlIdSelector,
     CoordinatePointerAction,
     CoordinateScrollAction,
     Diagnostics,
@@ -37,9 +46,7 @@ from .operations import (
     Frames,
     Highlight,
     KeyInput,
-    ModelIdSelector,
     MouseButton,
-    PathSelector,
     Pick,
     PointerAction,
     PointerEvent,
@@ -49,7 +56,6 @@ from .operations import (
     ResizeSubject,
     ResizeViewport,
     ScrollAction,
-    Selector,
     TextInput,
     WaitForStable,
     control_id_selector,

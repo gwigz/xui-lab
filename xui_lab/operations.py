@@ -4,9 +4,33 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, TypeAlias
-from uuid import UUID
+from typing import Any
 
+from .contracts import (
+    SCHEMA_VERSION,
+    Selector,
+)
+from .contracts import (
+    ControlIdSelectorContract as ControlIdSelector,
+)
+from .contracts import (
+    LabelSelectorContract as LabelSelector,
+)
+from .contracts import (
+    ModelIdSelectorContract as ModelIdSelector,
+)
+from .contracts import (
+    PathSelectorContract as PathSelector,
+)
+from .contracts import (
+    PlaceholderSelectorContract as PlaceholderSelector,
+)
+from .contracts import (
+    RoleSelectorContract as RoleSelector,
+)
+from .contracts import (
+    TextSelectorContract as TextSelector,
+)
 from .errors import InputError
 
 
@@ -18,100 +42,6 @@ class PointerEvent(Enum):
 class MouseButton(Enum):
     LEFT = "left"
     RIGHT = "right"
-
-
-@dataclass(frozen=True)
-class PathSelector:
-    path: str
-
-    def target(self) -> dict[str, Any]:
-        return {"path": self.path}
-
-    def describe(self) -> str:
-        return f"path {self.path!r}"
-
-
-@dataclass(frozen=True)
-class ModelIdSelector:
-    model_id: str
-
-    def target(self) -> dict[str, Any]:
-        return {"modelId": self.model_id}
-
-    def describe(self) -> str:
-        return f"model id {self.model_id!r}"
-
-
-@dataclass(frozen=True)
-class ControlIdSelector:
-    control_id: str
-
-    def target(self) -> dict[str, Any]:
-        return {"controlId": self.control_id}
-
-    def describe(self) -> str:
-        return f"control id {self.control_id!r}"
-
-
-@dataclass(frozen=True)
-class RoleSelector:
-    role: str
-    name: str | None = None
-
-    def target(self) -> dict[str, Any]:
-        payload: dict[str, Any] = {"role": self.role}
-        if self.name is not None:
-            payload["name"] = self.name
-        return payload
-
-    def describe(self) -> str:
-        if self.name is None:
-            return f"role {self.role!r}"
-        return f"role {self.role!r} name {self.name!r}"
-
-
-@dataclass(frozen=True)
-class LabelSelector:
-    label: str
-
-    def target(self) -> dict[str, Any]:
-        return {"label": self.label}
-
-    def describe(self) -> str:
-        return f"label {self.label!r}"
-
-
-@dataclass(frozen=True)
-class PlaceholderSelector:
-    placeholder: str
-
-    def target(self) -> dict[str, Any]:
-        return {"placeholder": self.placeholder}
-
-    def describe(self) -> str:
-        return f"placeholder {self.placeholder!r}"
-
-
-@dataclass(frozen=True)
-class TextSelector:
-    text: str
-
-    def target(self) -> dict[str, Any]:
-        return {"text": self.text}
-
-    def describe(self) -> str:
-        return f"text {self.text!r}"
-
-
-Selector: TypeAlias = (
-    PathSelector
-    | ModelIdSelector
-    | ControlIdSelector
-    | RoleSelector
-    | LabelSelector
-    | PlaceholderSelector
-    | TextSelector
-)
 
 
 @dataclass(frozen=True)
@@ -373,23 +303,26 @@ class Capture:
 def path_selector(value: Any, label: str = "path") -> PathSelector:
     if not isinstance(value, str) or not value.startswith("/"):
         raise InputError(f"{label} must be an absolute XUI path")
-    return PathSelector(value)
+    return PathSelector(schemaVersion=SCHEMA_VERSION, kind="path", path=value)
 
 
 def model_id_selector(value: Any, label: str = "modelId") -> ModelIdSelector:
     if not isinstance(value, str):
         raise InputError(f"{label} must be a UUID string")
     try:
-        parsed = UUID(value)
+        return ModelIdSelector(
+            schemaVersion=SCHEMA_VERSION, kind="modelId", modelId=value
+        )
     except ValueError as error:
         raise InputError(f"{label} must be a UUID string") from error
-    return ModelIdSelector(str(parsed))
 
 
 def control_id_selector(value: Any, label: str = "controlId") -> ControlIdSelector:
     if not isinstance(value, str) or not value:
         raise InputError(f"{label} must be a non-empty string")
-    return ControlIdSelector(value)
+    return ControlIdSelector(
+        schemaVersion=SCHEMA_VERSION, kind="controlId", controlId=value
+    )
 
 
 def role_selector(role: Any, name: Any = None) -> RoleSelector:
@@ -397,22 +330,24 @@ def role_selector(role: Any, name: Any = None) -> RoleSelector:
         raise InputError("role must be a non-empty string")
     if name is not None and (not isinstance(name, str) or not name):
         raise InputError("role name must be a non-empty string")
-    return RoleSelector(role, name)
+    return RoleSelector(schemaVersion=SCHEMA_VERSION, kind="role", role=role, name=name)
 
 
 def label_selector(value: Any) -> LabelSelector:
     if not isinstance(value, str) or not value:
         raise InputError("label must be a non-empty string")
-    return LabelSelector(value)
+    return LabelSelector(schemaVersion=SCHEMA_VERSION, kind="label", label=value)
 
 
 def placeholder_selector(value: Any) -> PlaceholderSelector:
     if not isinstance(value, str) or not value:
         raise InputError("placeholder must be a non-empty string")
-    return PlaceholderSelector(value)
+    return PlaceholderSelector(
+        schemaVersion=SCHEMA_VERSION, kind="placeholder", placeholder=value
+    )
 
 
 def text_selector(value: Any) -> TextSelector:
     if not isinstance(value, str) or not value:
         raise InputError("text must be a non-empty string")
-    return TextSelector(value)
+    return TextSelector(schemaVersion=SCHEMA_VERSION, kind="text", text=value)

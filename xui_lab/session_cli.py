@@ -16,6 +16,8 @@ from .api import Lab
 from .contracts import (
     SCHEMA_VERSION,
     CliCommandBase,
+    ReloadCliCommand,
+    ResultRecord,
     SessionCloseCliCommand,
     SessionJsonlCliCommand,
     SessionServeCliCommand,
@@ -72,7 +74,59 @@ def public_session(record: SessionFile, request_id: str) -> dict[str, Any]:
 
 
 def wire_command(command: CliCommandBase) -> dict[str, Any]:
-    return command.model_dump(mode="json", by_alias=True, exclude={"jq"})
+    return command.model_dump(mode="json", by_alias=True, exclude={"jq", "dry_run"})
+
+
+def preview_session_close(command: SessionCloseCliCommand) -> dict[str, Any]:
+    try:
+        record = read_session(command.session_id)
+    except InputError:
+        return {
+            "schemaVersion": SCHEMA_VERSION,
+            "requestId": command.request_id,
+            "sessionId": command.session_id,
+            "dryRun": True,
+            "wouldClose": False,
+            "wouldTerminate": False,
+        }
+    return {
+        "schemaVersion": SCHEMA_VERSION,
+        "requestId": command.request_id,
+        "sessionId": record.session_id,
+        "dryRun": True,
+        "status": record.status,
+        "pid": record.pid,
+        "wouldClose": True,
+        "wouldTerminate": pid_alive(record.pid),
+    }
+
+
+def preview_reload(command: ReloadCliCommand) -> dict[str, Any]:
+    record = read_session(command.session)
+    if record.status != "ready":
+        raise InputError(f"session is not ready: {command.session}")
+    return ResultRecord(
+        schemaVersion=SCHEMA_VERSION,
+        type="result",
+        requestId=command.request_id,
+        operation="reload",
+        data={
+            "dryRun": True,
+            "wouldReload": True,
+            "sessionId": record.session_id,
+            "subject": record.subject,
+        },
+    ).model_dump(mode="json", by_alias=True)
+
+
+def preview_dry_run(command: Any) -> dict[str, Any] | None:
+    if not getattr(command, "dry_run", False):
+        return None
+    if isinstance(command, SessionCloseCliCommand):
+        return preview_session_close(command)
+    if isinstance(command, ReloadCliCommand):
+        return preview_reload(command)
+    raise InputError("--dry-run is not supported for this command")
 
 
 def emit_document(payload: dict[str, Any], expression: str | None = None) -> None:
@@ -168,6 +222,9 @@ def cmd_session_status(command: SessionStatusCliCommand) -> int:
 
 
 def cmd_session_close(command: SessionCloseCliCommand) -> int:
+    if command.dry_run:
+        emit_document(preview_session_close(command), command.jq)
+        return 0
     cleanup_stale()
     terminated = False
     try:
@@ -243,6 +300,10 @@ def cmd_session_jsonl(command: SessionJsonlCliCommand) -> int:
         payload.setdefault("session", command.session_id)
         payload.setdefault("timeout", command.timeout)
         inner = parse_cli_command(payload)
+        preview = preview_dry_run(inner)
+        if preview is not None:
+            emit_document(preview, command.jq)
+            continue
         response = send_session_command(
             command.session_id,
             wire_command(inner),
@@ -309,6 +370,10 @@ def cmd_session_serve(command: SessionServeCliCommand) -> int:
 
 
 def cmd_session_bound(command: Any) -> int:
+    preview = preview_dry_run(command)
+    if preview is not None:
+        emit_document(preview, command.jq)
+        return 0
     timeout = _timeout(command, 10.0)
     response = send_session_command(
         command.session,

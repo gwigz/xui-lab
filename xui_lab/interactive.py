@@ -32,7 +32,7 @@ def recorded_python(
     actions: list[dict[str, Any]], tree: dict[str, Any] | None = None
 ) -> list[str]:
     """Render runtime actions as editable public API calls."""
-    from .selectors import rank_locator, tree_nodes
+    from .selectors import explain_ranked_locator, rank_locator, tree_nodes
 
     nodes_by_id: dict[str, dict[str, Any]] = {}
     if tree is not None:
@@ -42,6 +42,8 @@ def recorded_python(
                 nodes_by_id[control_id] = node
     lines: list[str] = []
     for action in actions:
+        ranked = None
+        target_ranked = None
         path = action.get("path")
         control_id = action.get("controlId")
         kind = action.get("action")
@@ -52,7 +54,8 @@ def recorded_python(
             and isinstance(control_id, str)
             and control_id in nodes_by_id
         ):
-            locator = rank_locator(nodes_by_id[control_id], tree).python
+            ranked = rank_locator(nodes_by_id[control_id], tree)
+            locator = ranked.python
         elif isinstance(control_id, str) and control_id:
             locator = f"window.get_by_control_id({control_id!r})"
         elif isinstance(path, str):
@@ -60,10 +63,10 @@ def recorded_python(
         else:
             continue
         if kind in {"click", "double_click", "right_click"}:
-            lines.append(f"{locator}.{kind}()")
+            statement = f"{locator}.{kind}()"
         elif kind in {"fill", "text"} and isinstance(action.get("text"), str):
             method = "fill" if kind == "fill" else "type_text"
-            lines.append(f"{locator}.{method}({action['text']!r})")
+            statement = f"{locator}.{method}({action['text']!r})"
         elif kind == "key" and isinstance(action.get("key"), str):
             modifiers = action.get("modifiers")
             if (
@@ -71,32 +74,48 @@ def recorded_python(
                 and modifiers
                 and all(isinstance(modifier, str) for modifier in modifiers)
             ):
-                lines.append(
+                statement = (
                     f"{locator}.press({action['key']!r}, "
                     f"modifiers={tuple(modifiers)!r})"
                 )
             else:
-                lines.append(f"{locator}.press({action['key']!r})")
+                statement = f"{locator}.press({action['key']!r})"
         elif (
             kind == "drag"
             and isinstance(action.get("deltaX"), int)
             and isinstance(action.get("deltaY"), int)
         ):
-            lines.append(
+            statement = (
                 f"{locator}.drag_by(dx={action['deltaX']}, dy={action['deltaY']})"
             )
         elif kind == "scroll" and isinstance(action.get("clicks"), int):
-            lines.append(f"{locator}.scroll({action['clicks']})")
+            statement = f"{locator}.scroll({action['clicks']})"
         elif kind == "drag_and_drop":
             target_control_id = action.get("targetControlId")
             target_path = action.get("targetPath")
-            if isinstance(target_control_id, str) and target_control_id:
+            if (
+                tree is not None
+                and isinstance(target_control_id, str)
+                and target_control_id in nodes_by_id
+            ):
+                target_ranked = rank_locator(nodes_by_id[target_control_id], tree)
+                target = target_ranked.python
+            elif isinstance(target_control_id, str) and target_control_id:
                 target = f"window.get_by_control_id({target_control_id!r})"
             elif isinstance(target_path, str) and target_path:
                 target = f"window.get_by_path({target_path!r})"
             else:
                 continue
-            lines.append(f"{locator}.drag_to({target})")
+            statement = f"{locator}.drag_to({target})"
+        else:
+            continue
+        if ranked is not None:
+            lines.append(explain_ranked_locator(ranked))
+        if target_ranked is not None:
+            lines.append(
+                explain_ranked_locator(target_ranked, subject="target locator")
+            )
+        lines.append(statement)
     return lines
 
 
@@ -155,6 +174,8 @@ class InteractiveSession:
         self.window.close()
 
     def state(self) -> dict[str, Any]:
+        from .selectors import rank_locator, ranked_locator_record, tree_nodes
+
         tree = self.window.query_tree()
         diagnostics = self.window.diagnostics()
         actions = (
@@ -166,6 +187,12 @@ class InteractiveSession:
             "recording": recorded_python(
                 actions if isinstance(actions, list) else [], tree
             ),
+            "locators": {
+                control_id: ranked_locator_record(rank_locator(node, tree))
+                for node in tree_nodes(tree)
+                if isinstance((control_id := node.get("control_id")), str)
+                and control_id
+            },
             "artifactDir": str(self.window.artifact_dir),
             "subjects": sorted(self.subjects),
             "fixtures": sorted(self.fixtures),
@@ -228,8 +255,8 @@ class InteractiveSession:
         if isinstance(request, contracts.ScrollInteractiveAction):
             return self.window.scroll_at(request.x, request.y, request.clicks).data
         if isinstance(request, contracts.DragAndDropInteractiveAction):
-            source = self.window.get_by_control_id(request.source_control_id)
-            target = self.window.get_by_control_id(request.target_control_id)
+            source = self.window.locator(request.source)
+            target = self.window.locator(request.target)
             return source.drag_to(target).data
         if isinstance(request, contracts.TextInteractiveAction):
             locator = self._locator(request)
@@ -289,19 +316,16 @@ class InteractiveSession:
         return path
 
     def _locator(self, request: contracts.TargetedInteractiveAction) -> Locator:
-        if request.control_id is not None:
-            return self.window.get_by_control_id(request.control_id)
-        assert request.path is not None
-        return self.window.get_by_path(request.path)
+        return self.window.locator(request.selector)
 
     def _optional_locator(
         self, request: contracts.HighlightInteractiveAction
     ) -> Locator | None:
-        if request.control_id is not None:
-            return self.window.get_by_control_id(request.control_id)
-        if request.path is not None:
-            return self.window.get_by_path(request.path)
-        return None
+        return (
+            self.window.locator(request.selector)
+            if request.selector is not None
+            else None
+        )
 
     def _replay(self, scenario: Scenario) -> dict[str, Any]:
         diagnostics = self.window.diagnostics()

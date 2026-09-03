@@ -514,6 +514,32 @@ class PlaywrightApiTests(unittest.TestCase):
             ),
         )
 
+    def test_recorded_actions_include_ranked_selector_evidence(self) -> None:
+        tree = {
+            "path": "/root",
+            "control_id": "root",
+            "class": "LLPanel",
+            "visible_chain": True,
+            "children": [
+                {
+                    "path": CHECKBOX_PATH,
+                    "control_id": "checkbox",
+                    "class": "LLCheckBoxCtrl",
+                    "label": "Enabled",
+                    "visible_chain": True,
+                    "children": [],
+                }
+            ],
+        }
+
+        self.assertEqual(
+            [
+                "# locator: signals=role, name; matches=1; fallback=none",
+                "window.get_by_role('checkbox', name='Enabled').click()",
+            ],
+            recorded_python([{"action": "click", "controlId": "checkbox"}], tree),
+        )
+
     def test_interactive_capture_is_available_to_the_browser(self) -> None:
         capture = self.directory / "artifacts" / "latest.png"
         capture.parent.mkdir(parents=True)
@@ -618,6 +644,13 @@ class PlaywrightApiTests(unittest.TestCase):
                 return LocatorStub(control_id)
 
             @staticmethod
+            def locator(selector: object) -> LocatorStub:
+                value = getattr(selector, "control_id", None) or getattr(
+                    selector, "model_id", None
+                )
+                return LocatorStub(str(value))
+
+            @staticmethod
             def click_at(_x: int, _y: int) -> ActionStub:
                 return ActionStub()
 
@@ -647,11 +680,24 @@ class PlaywrightApiTests(unittest.TestCase):
         session._latest_capture = None
         session._capture_version = 0
 
-        session.action({"action": "click", "controlId": "checkbox"})
+        session.action(
+            {
+                "action": "click",
+                "selector": {
+                    "schemaVersion": 1,
+                    "kind": "controlId",
+                    "controlId": "checkbox",
+                },
+            }
+        )
         session.action(
             {
                 "action": "press",
-                "controlId": "line-editor",
+                "selector": {
+                    "schemaVersion": 1,
+                    "kind": "controlId",
+                    "controlId": "line-editor",
+                },
                 "key": "Enter",
                 "modifiers": ["control"],
             }
@@ -673,18 +719,38 @@ class PlaywrightApiTests(unittest.TestCase):
         session.action(
             {
                 "action": "dragAndDrop",
-                "sourceControlId": "inventory-item",
-                "targetControlId": "inventory-folder",
+                "source": {
+                    "schemaVersion": 1,
+                    "kind": "modelId",
+                    "modelId": "30000000-0000-4000-8000-000000000001",
+                },
+                "target": {
+                    "schemaVersion": 1,
+                    "kind": "controlId",
+                    "controlId": "inventory-folder",
+                },
             }
         )
         session.action(
-            {"action": "fill", "controlId": "line-editor", "text": "Known text"}
+            {
+                "action": "fill",
+                "selector": {
+                    "schemaVersion": 1,
+                    "kind": "controlId",
+                    "controlId": "line-editor",
+                },
+                "text": "Known text",
+            }
         )
         with self.assertRaisesRegex(InputError, "XUI Lab contract"):
             session.action(
                 {
                     "action": "press",
-                    "controlId": "line-editor",
+                    "selector": {
+                        "schemaVersion": 1,
+                        "kind": "controlId",
+                        "controlId": "line-editor",
+                    },
                     "key": "Enter",
                     "modifiers": ["meta"],
                 }
@@ -693,7 +759,15 @@ class PlaywrightApiTests(unittest.TestCase):
         self.assertEqual(10, len(capture_names))
         self.assertEqual([("Enter", ("control",))], presses)
         self.assertEqual([(10, 20, -1)], scrolls)
-        self.assertEqual([("inventory-item", "inventory-folder")], drops)
+        self.assertEqual(
+            [
+                (
+                    "30000000-0000-4000-8000-000000000001",
+                    "inventory-folder",
+                )
+            ],
+            drops,
+        )
         self.assertEqual(capture.resolve(), session.latest_capture)
         self.assertEqual(10, session._capture_version)
 

@@ -24,16 +24,18 @@ from .contracts import (
     ResizeViewportCliCommand,
     ResultRecord,
     ScrollCliCommand,
+    Selector,
+    SelectorCliCommand,
     SessionCloseCliCommand,
     TreeCliCommand,
 )
 from .errors import InputError
 from .io import write_json
-from .operations import Selector
 from .selectors import (
     excerpt_node,
     project_fields,
     rank_locator,
+    ranked_locator_record,
     require_unique,
     tree_nodes,
 )
@@ -52,32 +54,8 @@ def parse_fields(value: str | None) -> tuple[str, ...]:
     return fields
 
 
-def selector_from_command(command: Any) -> Selector:
-    from .operations import (
-        control_id_selector,
-        label_selector,
-        model_id_selector,
-        path_selector,
-        placeholder_selector,
-        role_selector,
-        text_selector,
-    )
-
-    if command.control_id is not None:
-        return control_id_selector(command.control_id)
-    if command.model_id is not None:
-        return model_id_selector(command.model_id)
-    if command.path is not None:
-        return path_selector(command.path)
-    if command.role is not None:
-        return role_selector(command.role, command.name)
-    if command.label is not None:
-        return label_selector(command.label)
-    if command.placeholder is not None:
-        return placeholder_selector(command.placeholder)
-    if command.text is not None:
-        return text_selector(command.text)
-    raise InputError("exactly one selector flag is required")
+def selector_from_command(command: SelectorCliCommand) -> Selector:
+    return command.selector_contract()
 
 
 def _result(command: Any, data: dict[str, Any]) -> dict[str, Any]:
@@ -132,13 +110,7 @@ def apply_window_command(window: Window, command: Any) -> dict[str, Any]:
         ranked = rank_locator(node, tree)
         payload = {
             "control": excerpt_node(node, children=False),
-            "locator": {
-                "python": ranked.python,
-                "kind": ranked.kind,
-                "matchCount": ranked.match_count,
-                "signals": list(ranked.signals),
-                "fallbackReason": ranked.fallback_reason,
-            },
+            "locator": ranked_locator_record(ranked),
         }
         if command.include_tree:
             print(INCLUDE_TREE_WARNING, file=sys.stderr)

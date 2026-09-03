@@ -55,7 +55,9 @@ user-local Unix socket under `platformdirs`, and writes a session id, PIDs,
 fork commit, subject, viewport, and capabilities to stdout. `session status`
 and `session close` inspect or stop that process. Close is idempotent and
 reports whether a process was terminated. Dead PIDs are removed on status and
-close.
+close. `--dry-run` on `session close`, `reload`, and `run` shows the session,
+subject, or artifact directory that would change without reloading, pruning,
+or terminating. Input gestures do not accept `--dry-run`.
 
 `session jsonl SESSION_ID` reads one typed CLI command per stdin line and
 writes one result or `ErrorRecord` per stdout line. One-shot commands such as
@@ -65,6 +67,12 @@ writes one result or `ErrorRecord` per stdout line. One-shot commands such as
 Selector flags are `--control-id`, `--model-id`, `--path`, `--role`, `--label`,
 `--placeholder`, and `--text`. Conflicting selector flags are rejected at
 parse time.
+
+Every entry point converts selectors to `selector.schema.json`. The selector is
+a versioned discriminated union. Generated selectors rank a role and accessible
+name first, followed by a label, placeholder, visible text, and model ID. A
+control ID is the final identity fallback. An XUI path records provenance and
+is used only when the control has no runtime identity.
 
 `tree` and `get` return a concise excerpt by default and write the full tree
 to an artifact with path, size, and hash. `--include-tree` inlines the full

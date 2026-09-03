@@ -55,6 +55,29 @@ class StrictContractTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             selector.path = "/root/other"  # type: ignore[misc]
 
+    def test_inspector_actions_use_the_versioned_selector_contract(self) -> None:
+        action = parse_interactive_action(
+            {
+                "schemaVersion": 1,
+                "action": "click",
+                "selector": {
+                    "schemaVersion": 1,
+                    "kind": "role",
+                    "role": "button",
+                    "name": "Save",
+                },
+            }
+        )
+        self.assertEqual("role", action.selector.kind)
+        with self.assertRaises(InputError):
+            parse_interactive_action(
+                {
+                    "schemaVersion": 1,
+                    "action": "click",
+                    "controlId": "save-button",
+                }
+            )
+
     def test_runtime_commands_reject_unknown_fields_and_invalid_variants(self) -> None:
         command = parse_runtime_command(
             {

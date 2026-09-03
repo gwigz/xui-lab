@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Toolbar, ToolbarGroup, ToolbarSeparator } from "@/components/ui/toolbar";
-import { type InspectorState, recordValue } from "../contracts";
+import { type InspectorState, recordValue, reviewableLocatorPython } from "../contracts";
 import type { InspectorStatus, RunInspectorAction } from "../model";
 
 function integer(value: string): number | undefined {
@@ -99,6 +99,7 @@ export function InspectorToolbar({
     integer(subjectWidth) !== undefined && integer(subjectHeight) !== undefined;
   const canPick = integer(pickX) !== undefined && integer(pickY) !== undefined;
   const selected = selectedControlId.length > 0;
+  const selectedSelector = state?.locators[selectedControlId]?.selector;
   const supports = (operation: string) => state?.inputOperations.includes(operation) ?? false;
 
   async function pickControl() {
@@ -119,10 +120,16 @@ export function InspectorToolbar({
       return;
     }
     try {
-      await navigator.clipboard.writeText(
-        `window.get_by_control_id(${JSON.stringify(selectedControlId)})`,
-      );
-      onStatus({ kind: "ready", message: "Locator copied" });
+      const locator = state?.locators[selectedControlId];
+      if (locator === undefined) {
+        throw new Error("Selected control has no ranked locator");
+      }
+      const fallback = locator.fallbackReason ?? "none";
+      await navigator.clipboard.writeText(reviewableLocatorPython(locator));
+      onStatus({
+        kind: "ready",
+        message: `Locator copied · ${locator.signals.join(" + ")} · ${locator.matchCount} match${locator.matchCount === 1 ? "" : "es"} · fallback: ${fallback}`,
+      });
     } catch (error) {
       onStatus({
         kind: "error",
@@ -308,8 +315,12 @@ export function InspectorToolbar({
             <MousePointer2 aria-hidden size={14} /> Pick
           </Button>
           <Button
-            disabled={!selected || !supports("click")}
-            onClick={() => void runAction({ action: "click", controlId: selectedControlId })}
+            disabled={selectedSelector === undefined || !supports("click")}
+            onClick={() =>
+              selectedSelector === undefined
+                ? undefined
+                : void runAction({ action: "click", selector: selectedSelector })
+            }
             size="xs"
             variant="outline"
           >
@@ -329,8 +340,12 @@ export function InspectorToolbar({
             value={text}
           />
           <Button
-            disabled={!selected || !supports("fill")}
-            onClick={() => void runAction({ action: "fill", controlId: selectedControlId, text })}
+            disabled={selectedSelector === undefined || !supports("fill")}
+            onClick={() => {
+              if (selectedSelector !== undefined) {
+                void runAction({ action: "fill", selector: selectedSelector, text });
+              }
+            }}
             size="xs"
             variant="outline"
           >
@@ -345,8 +360,12 @@ export function InspectorToolbar({
             value={key}
           />
           <Button
-            disabled={!selected || key.length === 0 || !supports("key")}
-            onClick={() => void runAction({ action: "press", controlId: selectedControlId, key })}
+            disabled={selectedSelector === undefined || key.length === 0 || !supports("key")}
+            onClick={() => {
+              if (selectedSelector !== undefined) {
+                void runAction({ action: "press", selector: selectedSelector, key });
+              }
+            }}
             size="xs"
             variant="outline"
           >

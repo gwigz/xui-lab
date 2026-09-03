@@ -31,20 +31,24 @@ class PreviewSession:
         selected = "/Floater View/test_floater/content/save_button"
         return {
             "tree": {
+                "control_id": "root",
                 "path": "/Floater View",
                 "class": "LLView",
                 "children": [
                     {
+                        "control_id": "floater",
                         "path": "/Floater View/test_floater",
                         "name": "test_floater",
                         "class": "LLFloater",
                         "children": [
                             {
+                                "control_id": "content",
                                 "path": "/Floater View/test_floater/content",
                                 "name": "content",
                                 "class": "LLPanel",
                                 "children": [
                                     {
+                                        "control_id": "save-button",
                                         "path": selected,
                                         "name": "save_button",
                                         "label": "Save",
@@ -70,10 +74,26 @@ class PreviewSession:
                 f"window.get_by_path({selected!r}).click()",
                 f"window.get_by_path({selected!r}).press('Enter')",
             ],
+            "locators": {
+                "save-button": {
+                    "selector": {
+                        "schemaVersion": 1,
+                        "kind": "role",
+                        "role": "button",
+                        "name": "Save",
+                    },
+                    "python": "window.get_by_role('button', name='Save')",
+                    "kind": "role",
+                    "matchCount": 1,
+                    "signals": ["role", "name"],
+                    "fallbackReason": None,
+                }
+            },
             "artifactDir": "/tmp/xui-lab-inspector-preview",
             "subjects": ["test_widgets", "inventory_explorer"],
             "fixtures": ["inventory-explorer"],
             "scenarios": ["test_floater", "inventory_explorer"],
+            "inputOperations": ["click", "fill", "key"],
             "capture": {
                 "available": self.latest_capture is not None,
                 "version": 1 if self.latest_capture is not None else 0,

@@ -101,7 +101,10 @@ export function App() {
 
   async function selectControl(controlId: string) {
     setSelectedControlId(controlId);
-    await runAction({ action: "highlight", controlId }, "selected");
+    const selector = state?.locators[controlId]?.selector;
+    if (selector !== undefined) {
+      await runAction({ action: "highlight", selector }, "selected");
+    }
   }
 
   return (

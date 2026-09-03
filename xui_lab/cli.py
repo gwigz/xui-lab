@@ -273,7 +273,9 @@ def cmd_run(command: RunCliCommand) -> int:
     if not executable.is_file():
         raise InputError(f"runtime executable not found: {executable}")
     artifact_root = Path(command.artifacts).expanduser().resolve()
-    lab = Lab(ROOT, fork, source, executable, artifact_root)
+    lab = (
+        None if command.dry_run else Lab(ROOT, fork, source, executable, artifact_root)
+    )
     exit_status = 0
     for path in scenario_paths(command.scenarios):
         scenario = load_scenario(ROOT, path)
@@ -284,6 +286,11 @@ def cmd_run(command: RunCliCommand) -> int:
         if scenario.fixture is not None and not scenario.fixture.is_file():
             raise InputError(f"scenario fixture not found: {scenario.fixture}")
         artifact_dir = artifact_directory(artifact_root, scenario.id)
+        if command.dry_run:
+            prune = " (would prune)" if artifact_dir.exists() else ""
+            print(f"{scenario.id}: would run [{artifact_dir}]{prune}")
+            continue
+        assert lab is not None
         try:
             with lab.open(
                 artifact_id=scenario.id,
@@ -358,6 +365,14 @@ def _add_jq(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_dry_run(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show the mutation without applying it.",
+    )
+
+
 def _add_selector_flags(parser: argparse.ArgumentParser) -> None:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--control-id")
@@ -424,6 +439,7 @@ def _add_oneshot_commands(commands: Any) -> None:
     capture.add_argument("--name")
     reload_command = commands.add_parser("reload")
     _add_session_bound(reload_command, selector=False)
+    _add_dry_run(reload_command)
     diagnostics = commands.add_parser("diagnostics")
     _add_session_bound(diagnostics, selector=False)
 
@@ -486,6 +502,7 @@ def parser() -> argparse.ArgumentParser:
     close = session_commands.add_parser("close", help="Close a session.")
     close.add_argument("session_id")
     _add_jq(close)
+    _add_dry_run(close)
     jsonl = session_commands.add_parser(
         "jsonl", help="Send one typed command per stdin line to a session."
     )
@@ -515,6 +532,7 @@ def parser() -> argparse.ArgumentParser:
     run.add_argument("scenarios", nargs="*")
     run.add_argument("--runtime")
     run.add_argument("--artifacts", default=str(ROOT / "artifacts"))
+    _add_dry_run(run)
     interactive = commands.add_parser("interactive")
     interactive.add_argument("subject")
     interactive.add_argument("--runtime")
@@ -554,6 +572,8 @@ def parse_command(argv: list[str] | None = None) -> CliCommand:
         command["sessionId"] = command.pop("session_id")
     if "include_tree" in command:
         command["includeTree"] = command.pop("include_tree")
+    if "dry_run" in command:
+        command["dryRun"] = command.pop("dry_run")
     if "control_id" in command:
         command["controlId"] = command.pop("control_id")
     if "model_id" in command:

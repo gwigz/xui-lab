@@ -5,16 +5,39 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from .contracts import (
+    ControlIdSelectorContract as ControlIdSelector,
+)
+from .contracts import (
+    LabelSelectorContract as LabelSelector,
+)
+from .contracts import (
+    ModelIdSelectorContract as ModelIdSelector,
+)
+from .contracts import (
+    PathSelectorContract as PathSelector,
+)
+from .contracts import (
+    PlaceholderSelectorContract as PlaceholderSelector,
+)
+from .contracts import (
+    RoleSelectorContract as RoleSelector,
+)
+from .contracts import (
+    Selector,
+)
+from .contracts import (
+    TextSelectorContract as TextSelector,
+)
 from .errors import AssertionFailure, InputError
 from .operations import (
-    ControlIdSelector,
-    LabelSelector,
-    ModelIdSelector,
-    PathSelector,
-    PlaceholderSelector,
-    RoleSelector,
-    Selector,
-    TextSelector,
+    control_id_selector,
+    label_selector,
+    model_id_selector,
+    path_selector,
+    placeholder_selector,
+    role_selector,
+    text_selector,
 )
 
 CLASS_ROLES: dict[str, str] = {
@@ -57,11 +80,32 @@ EXCERPT_KEYS = (
 
 @dataclass(frozen=True)
 class RankedLocator:
+    selector: Selector
     python: str
     kind: str
     match_count: int
     signals: tuple[str, ...]
     fallback_reason: str | None
+
+
+def ranked_locator_record(ranked: RankedLocator) -> dict[str, Any]:
+    return {
+        "selector": ranked.selector.model_dump(mode="json", by_alias=True),
+        "python": ranked.python,
+        "kind": ranked.kind,
+        "matchCount": ranked.match_count,
+        "signals": list(ranked.signals),
+        "fallbackReason": ranked.fallback_reason,
+    }
+
+
+def explain_ranked_locator(ranked: RankedLocator, *, subject: str = "locator") -> str:
+    signals = ", ".join(ranked.signals)
+    fallback = ranked.fallback_reason or "none"
+    return (
+        f"# {subject}: signals={signals}; matches={ranked.match_count}; "
+        f"fallback={fallback}"
+    )
 
 
 def tree_nodes(tree: Any) -> list[dict[str, Any]]:
@@ -115,10 +159,10 @@ def is_actionable(node: dict[str, Any]) -> bool:
 def wire_selector(node: dict[str, Any]) -> Selector:
     control_id = node.get("control_id")
     if isinstance(control_id, str) and control_id:
-        return ControlIdSelector(control_id)
+        return control_id_selector(control_id)
     path = node.get("path")
     if isinstance(path, str) and path.startswith("/"):
-        return PathSelector(path)
+        return path_selector(path)
     raise AssertionFailure("matched control has no control id or path")
 
 
@@ -187,10 +231,11 @@ def rank_locator(node: dict[str, Any], tree: Any) -> RankedLocator:
     path = node.get("path")
 
     if role is not None and label is not None:
-        selector: Selector = RoleSelector(role, label)
+        selector: Selector = role_selector(role, label)
         count = _count(tree, selector)
         if count == 1:
             return RankedLocator(
+                selector=selector,
                 python=f"window.get_by_role({role!r}, name={label!r})",
                 kind="role",
                 match_count=1,
@@ -198,10 +243,11 @@ def rank_locator(node: dict[str, Any], tree: Any) -> RankedLocator:
                 fallback_reason=None,
             )
     if label is not None:
-        selector = LabelSelector(label)
+        selector = label_selector(label)
         count = _count(tree, selector)
         if count == 1:
             return RankedLocator(
+                selector=selector,
                 python=f"window.get_by_label({label!r})",
                 kind="label",
                 match_count=1,
@@ -209,10 +255,11 @@ def rank_locator(node: dict[str, Any], tree: Any) -> RankedLocator:
                 fallback_reason=None,
             )
     if placeholder is not None:
-        selector = PlaceholderSelector(placeholder)
+        selector = placeholder_selector(placeholder)
         count = _count(tree, selector)
         if count == 1:
             return RankedLocator(
+                selector=selector,
                 python=f"window.get_by_placeholder({placeholder!r})",
                 kind="placeholder",
                 match_count=1,
@@ -220,10 +267,11 @@ def rank_locator(node: dict[str, Any], tree: Any) -> RankedLocator:
                 fallback_reason=None,
             )
     if text is not None:
-        selector = TextSelector(text)
+        selector = text_selector(text)
         count = _count(tree, selector)
         if count == 1:
             return RankedLocator(
+                selector=selector,
                 python=f"window.get_by_text({text!r})",
                 kind="text",
                 match_count=1,
@@ -231,10 +279,11 @@ def rank_locator(node: dict[str, Any], tree: Any) -> RankedLocator:
                 fallback_reason=None,
             )
     if isinstance(model_id, str) and model_id:
-        selector = ModelIdSelector(model_id)
+        selector = model_id_selector(model_id)
         count = _count(tree, selector)
         if count == 1:
             return RankedLocator(
+                selector=selector,
                 python=f"window.get_by_model_id({model_id!r})",
                 kind="modelId",
                 match_count=1,
@@ -243,17 +292,19 @@ def rank_locator(node: dict[str, Any], tree: Any) -> RankedLocator:
             )
     if isinstance(control_id, str) and control_id:
         return RankedLocator(
+            selector=control_id_selector(control_id),
             python=f"window.get_by_control_id({control_id!r})",
             kind="controlId",
-            match_count=_count(tree, ControlIdSelector(control_id)),
+            match_count=_count(tree, control_id_selector(control_id)),
             signals=("controlId",),
             fallback_reason="no unique user-visible name",
         )
     if isinstance(path, str) and path.startswith("/"):
         return RankedLocator(
+            selector=path_selector(path),
             python=f"window.get_by_path({path!r})",
             kind="path",
-            match_count=_count(tree, PathSelector(path)),
+            match_count=_count(tree, path_selector(path)),
             signals=("path",),
             fallback_reason="path used as provenance fallback",
         )

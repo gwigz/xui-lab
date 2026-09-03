@@ -5,6 +5,7 @@ import {
   findTreeNodeByControlId,
   parseActionResponse,
   parseInspectorState,
+  reviewableLocatorPython,
   treeNodeVisibleRect,
 } from "./contracts";
 
@@ -25,6 +26,16 @@ const validState = {
   },
   diagnostics: { processId: 42 },
   recording: ["window.get_by_path('/root/button').click()"],
+  locators: {
+    "save-button": {
+      selector: { schemaVersion: 1, kind: "role", role: "button", name: "Save" },
+      python: "window.get_by_role('button', name='Save')",
+      kind: "role",
+      matchCount: 1,
+      signals: ["role", "name"],
+      fallbackReason: null,
+    },
+  },
   artifactDir: "/tmp/artifacts",
   subjects: ["test_widgets"],
   fixtures: [],
@@ -39,6 +50,7 @@ describe("parseInspectorState", () => {
 
     expect(state.capture).toEqual({ kind: "available", version: 2 });
     expect(state.inputOperations).toEqual(["click", "drag", "fill"]);
+    expect(state.locators["save-button"]?.signals).toEqual(["role", "name"]);
     expect(findTreeNodeByControlId(state.tree, "save-button")?.title).toBe("Save · LLButton");
   });
 
@@ -46,6 +58,20 @@ describe("parseInspectorState", () => {
     expect(() => parseInspectorState({ ...validState, recording: "not an array" })).toThrow(
       "state.recording must be an array",
     );
+  });
+
+  it("validates the shared selector contract at the HTTP boundary", () => {
+    expect(() =>
+      parseInspectorState({
+        ...validState,
+        locators: {
+          "save-button": {
+            ...validState.locators["save-button"],
+            selector: { schemaVersion: 1, kind: "path", path: "relative/path" },
+          },
+        },
+      }),
+    ).toThrow("must be an absolute XUI path");
   });
 
   it("keeps controls distinct when generated controls share one XUI path", () => {
@@ -87,6 +113,17 @@ describe("parseActionResponse", () => {
         error: { code: "invalid_input", message: "not found" },
       }),
     ).toThrow("invalid_input: not found");
+  });
+});
+
+describe("reviewableLocatorPython", () => {
+  it("records the ranking evidence beside the copied locator", () => {
+    const locator = parseInspectorState(validState).locators["save-button"];
+
+    expect(locator === undefined ? undefined : reviewableLocatorPython(locator)).toBe(
+      "# locator: signals=role, name; matches=1; fallback=none\n" +
+        "window.get_by_role('button', name='Save')",
+    );
   });
 });
 

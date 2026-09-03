@@ -129,8 +129,12 @@ describe("frameDragInput", () => {
       }),
     ).toEqual({
       action: "dragAndDrop",
-      sourceControlId: "inventory-item",
-      targetControlId: "inventory-folder",
+      source: {
+        schemaVersion: 1,
+        kind: "modelId",
+        modelId: "30000000-0000-4000-8000-000000000001",
+      },
+      target: { schemaVersion: 1, kind: "controlId", controlId: "inventory-folder" },
     });
   });
 

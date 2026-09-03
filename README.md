@@ -81,11 +81,16 @@ document. Captures return PNG paths, never image bytes.
 
 Selectors are `--control-id`, `--model-id`, `--path`, `--role`, `--label`,
 `--placeholder`, and `--text`. Pick one. Conflicting flags fail at parse time.
-`--path` is provenance. Prefer a visible name or a model id when you can.
+The CLI converts the selected flag to the same versioned selector contract used
+by the Python API, inspector, recorder, and scenario replay. Prefer a role and
+accessible name, then a label, placeholder, visible text, or model ID. Use a
+control ID only when no user-visible selector is unique. `--path` records XUI
+provenance and is the last fallback.
 
 JSON goes to stdout. Diagnostics go to stderr. After the CLI accepts a JSON
 command, a failure also writes an `ErrorRecord`. Read `code`, not the stderr
-line. Field lists and exit statuses live in
+line. `session close`, `reload`, and `run` accept `--dry-run`. Clicks and
+other input gestures do not. Field lists and exit statuses live in
 [`docs/CLI_CONTRACT.md`](docs/CLI_CONTRACT.md).
 
 ## Replay a scenario

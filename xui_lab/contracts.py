@@ -165,15 +165,33 @@ class PathSelectorContract(VersionedContract):
     kind: Literal["path"]
     path: Annotated[str, StringConstraints(min_length=1, pattern=r"^/")]
 
+    def target(self) -> dict[str, Any]:
+        return {"path": self.path}
+
+    def describe(self) -> str:
+        return f"path {self.path!r}"
+
 
 class ModelIdSelectorContract(VersionedContract):
     kind: Literal["modelId"]
     model_id: UuidString = Field(alias="modelId")
 
+    def target(self) -> dict[str, Any]:
+        return {"modelId": self.model_id}
+
+    def describe(self) -> str:
+        return f"model id {self.model_id!r}"
+
 
 class ControlIdSelectorContract(VersionedContract):
     kind: Literal["controlId"]
     control_id: NonEmptyString = Field(alias="controlId")
+
+    def target(self) -> dict[str, Any]:
+        return {"controlId": self.control_id}
+
+    def describe(self) -> str:
+        return f"control id {self.control_id!r}"
 
 
 class RoleSelectorContract(VersionedContract):
@@ -181,20 +199,49 @@ class RoleSelectorContract(VersionedContract):
     role: NonEmptyString
     name: NonEmptyString | None = None
 
+    def target(self) -> dict[str, Any]:
+        result = {"role": self.role}
+        if self.name is not None:
+            result["name"] = self.name
+        return result
+
+    def describe(self) -> str:
+        if self.name is None:
+            return f"role {self.role!r}"
+        return f"role {self.role!r} name {self.name!r}"
+
 
 class LabelSelectorContract(VersionedContract):
     kind: Literal["label"]
     label: NonEmptyString
+
+    def target(self) -> dict[str, Any]:
+        return {"label": self.label}
+
+    def describe(self) -> str:
+        return f"label {self.label!r}"
 
 
 class PlaceholderSelectorContract(VersionedContract):
     kind: Literal["placeholder"]
     placeholder: NonEmptyString
 
+    def target(self) -> dict[str, Any]:
+        return {"placeholder": self.placeholder}
+
+    def describe(self) -> str:
+        return f"placeholder {self.placeholder!r}"
+
 
 class TextSelectorContract(VersionedContract):
     kind: Literal["text"]
     text: NonEmptyString
+
+    def target(self) -> dict[str, Any]:
+        return {"text": self.text}
+
+    def describe(self) -> str:
+        return f"text {self.text!r}"
 
 
 Selector: TypeAlias = Annotated[
@@ -515,6 +562,7 @@ class RunCliCommand(CliCommandBase):
     scenarios: FrozenTuple[NonEmptyString]
     runtime: str | None
     artifacts: NonEmptyString
+    dry_run: bool = Field(default=False, alias="dryRun")
 
 
 class InteractiveCliCommand(CliCommandBase):
@@ -554,6 +602,7 @@ class SessionCloseCliCommand(CliCommandBase):
     command: Literal["session"]
     session_command: Literal["close"] = Field(alias="sessionCommand")
     session_id: NonEmptyString = Field(alias="sessionId")
+    dry_run: bool = Field(default=False, alias="dryRun")
 
 
 class SessionJsonlCliCommand(CliCommandBase):
@@ -613,6 +662,34 @@ class SelectorCliCommand(SessionBoundCliCommand):
         if self.name is not None and self.role is None:
             raise ValueError("name requires role")
         return self
+
+    def selector_contract(self) -> Selector:
+        if self.role is not None:
+            return RoleSelectorContract(
+                schemaVersion=SCHEMA_VERSION,
+                kind="role",
+                role=self.role,
+                name=self.name,
+            )
+        values = (
+            ("modelId", self.model_id, ModelIdSelectorContract, "modelId"),
+            ("controlId", self.control_id, ControlIdSelectorContract, "controlId"),
+            ("path", self.path, PathSelectorContract, "path"),
+            ("label", self.label, LabelSelectorContract, "label"),
+            (
+                "placeholder",
+                self.placeholder,
+                PlaceholderSelectorContract,
+                "placeholder",
+            ),
+            ("text", self.text, TextSelectorContract, "text"),
+        )
+        for kind, value, contract, field in values:
+            if value is not None:
+                return contract.model_validate(
+                    {"schemaVersion": SCHEMA_VERSION, "kind": kind, field: value}
+                )
+        raise AssertionError("validated CLI selector is missing")
 
 
 class TreeCliCommand(SessionBoundCliCommand):
@@ -687,6 +764,7 @@ class CaptureCliCommand(SessionBoundCliCommand):
 
 class ReloadCliCommand(SessionBoundCliCommand):
     command: Literal["reload"]
+    dry_run: bool = Field(default=False, alias="dryRun")
 
 
 class DiagnosticsCliCommand(SessionBoundCliCommand):
@@ -906,14 +984,7 @@ class InteractiveActionBase(VersionedContract):
 
 
 class TargetedInteractiveAction(InteractiveActionBase):
-    path: Annotated[str, StringConstraints(min_length=1, pattern=r"^/")] | None = None
-    control_id: NonEmptyString | None = Field(default=None, alias="controlId")
-
-    @model_validator(mode="after")
-    def validate_target(self) -> TargetedInteractiveAction:
-        if (self.path is None) == (self.control_id is None):
-            raise ValueError("action requires exactly one selector")
-        return self
+    selector: Selector
 
 
 class SimpleInteractiveAction(InteractiveActionBase):
@@ -922,14 +993,7 @@ class SimpleInteractiveAction(InteractiveActionBase):
 
 class HighlightInteractiveAction(InteractiveActionBase):
     action: Literal["highlight"]
-    path: Annotated[str, StringConstraints(min_length=1, pattern=r"^/")] | None = None
-    control_id: NonEmptyString | None = Field(default=None, alias="controlId")
-
-    @model_validator(mode="after")
-    def validate_optional_target(self) -> HighlightInteractiveAction:
-        if self.path is not None and self.control_id is not None:
-            raise ValueError("highlight accepts at most one selector")
-        return self
+    selector: Selector | None = None
 
 
 class PickInteractiveAction(InteractiveActionBase):
@@ -984,8 +1048,8 @@ class ScrollInteractiveAction(InteractiveActionBase):
 
 class DragAndDropInteractiveAction(InteractiveActionBase):
     action: Literal["dragAndDrop"]
-    source_control_id: NonEmptyString = Field(alias="sourceControlId")
-    target_control_id: NonEmptyString = Field(alias="targetControlId")
+    source: Selector
+    target: Selector
 
 
 class TextInteractiveAction(TargetedInteractiveAction):
