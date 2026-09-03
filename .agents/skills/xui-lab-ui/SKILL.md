@@ -102,6 +102,28 @@ jq -nc --arg s "$SESSION" '{schemaVersion:1,command:"tree",session:$s}' \
 `--timeout` bounds startup, socket waits, and runtime requests. Use
 `operations --json` for argument shapes and `schema` when you change contracts.
 
+## Inspect screenshots without filling context
+
+`capture` returns an absolute PNG path, not pixels the model can see. Pass the
+path to Codex's `view_image` tool. Start with `detail: high`. Use
+`detail: original` only when the resized image hides needed detail. Never print
+or inline image bytes.
+
+For each edit:
+
+1. Build and open a session. Reload after an XUI edit. Rebuild and start a new
+   session after a C++ edit.
+2. Perform the user's task. Query only the relevant `get`, `tree --fields`, or
+   `tree --jq` data. Leave full artifacts on disk.
+3. Capture only states that answer a visual question and the final state. Load
+   one PNG at a time, note the specific defect, and edit again.
+4. Repeat the task and inspect the final PNG. Add structural scenario
+   assertions for stable behavior.
+
+Screenshots show clipping, spacing, alignment, text, and hierarchy. The tree
+and event results prove state and input behavior. Use a highlighted capture to
+identify a control, then an ordinary capture to judge the final pixels.
+
 ## Drive the production UI
 
 Find the `LLFloaterReg` registration, controller, XUI, callbacks, and model.

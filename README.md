@@ -15,8 +15,8 @@ Only `test_widgets` is declared usable today.
 
 Agents should follow
 [`.agents/skills/xui-lab-ui/SKILL.md`](.agents/skills/xui-lab-ui/SKILL.md).
-That skill starts a session and drives it with JSON CLI commands. This page is
-for a person looking at the floater.
+That skill starts a session and drives it with JSON CLI commands. This document
+is for the inspector UI usage.
 
 ## Get a floater on screen
 
