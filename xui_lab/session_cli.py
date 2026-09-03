@@ -15,6 +15,7 @@ from typing import Any
 from .api import Lab
 from .contracts import (
     SCHEMA_VERSION,
+    CliCommandBase,
     SessionCloseCliCommand,
     SessionJsonlCliCommand,
     SessionServeCliCommand,
@@ -25,6 +26,7 @@ from .contracts import (
 from .domain import Capability, ForkId, Viewport
 from .errors import InputError
 from .io import resolved_source
+from .json_output import emit_json_document
 from .oneshot import apply_window_command
 from .session import (
     SessionFile,
@@ -69,8 +71,12 @@ def public_session(record: SessionFile, request_id: str) -> dict[str, Any]:
     }
 
 
-def emit_document(payload: dict[str, Any]) -> None:
-    print(json.dumps(payload, separators=(",", ":")))
+def wire_command(command: CliCommandBase) -> dict[str, Any]:
+    return command.model_dump(mode="json", by_alias=True, exclude={"jq"})
+
+
+def emit_document(payload: dict[str, Any], expression: str | None = None) -> None:
+    emit_json_document(payload, expression)
 
 
 def cmd_session_start(
@@ -138,7 +144,7 @@ def cmd_session_start(
         terminate_pid(process.pid)
         remove_session(session_id)
         raise
-    emit_document(public_session(ready, command.request_id))
+    emit_document(public_session(ready, command.request_id), command.jq)
     return 0
 
 
@@ -146,7 +152,7 @@ def cmd_session_status(command: SessionStatusCliCommand) -> int:
     cleanup_stale()
     if command.session_id is not None:
         record = read_session(command.session_id)
-        emit_document(public_session(record, command.request_id))
+        emit_document(public_session(record, command.request_id), command.jq)
         return 0
     emit_document(
         {
@@ -155,7 +161,8 @@ def cmd_session_status(command: SessionStatusCliCommand) -> int:
             "sessions": [
                 public_session(record, command.request_id) for record in list_sessions()
             ],
-        }
+        },
+        command.jq,
     )
     return 0
 
@@ -173,7 +180,8 @@ def cmd_session_close(command: SessionCloseCliCommand) -> int:
                 "sessionId": command.session_id,
                 "closed": True,
                 "terminated": False,
-            }
+            },
+            command.jq,
         )
         return 0
     timeout = _timeout(command, 10.0)
@@ -181,7 +189,7 @@ def cmd_session_close(command: SessionCloseCliCommand) -> int:
         try:
             send_session_command(
                 command.session_id,
-                command.model_dump(mode="json", by_alias=True),
+                wire_command(command),
                 timeout=timeout,
             )
             terminated = True
@@ -197,7 +205,8 @@ def cmd_session_close(command: SessionCloseCliCommand) -> int:
             "sessionId": command.session_id,
             "closed": True,
             "terminated": terminated,
-        }
+        },
+        command.jq,
     )
     return 0
 
@@ -236,10 +245,10 @@ def cmd_session_jsonl(command: SessionJsonlCliCommand) -> int:
         inner = parse_cli_command(payload)
         response = send_session_command(
             command.session_id,
-            inner.model_dump(mode="json", by_alias=True),
+            wire_command(inner),
             timeout=timeout,
         )
-        emit_document(response)
+        emit_document(response, command.jq)
         if response.get("type") == "error":
             exit_status = 2 if response.get("code") == "invalid_input" else 1
     return exit_status
@@ -303,10 +312,10 @@ def cmd_session_bound(command: Any) -> int:
     timeout = _timeout(command, 10.0)
     response = send_session_command(
         command.session,
-        command.model_dump(mode="json", by_alias=True),
+        wire_command(command),
         timeout=timeout,
     )
-    emit_document(response)
+    emit_document(response, command.jq)
     if response.get("type") == "error":
         code = response.get("code")
         return 2 if code in {"invalid_input", "invalid_cli_command"} else 1

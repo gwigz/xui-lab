@@ -480,6 +480,7 @@ class CliCommandBase(VersionedContract):
     viewer_source: FrozenTuple[NonEmptyString] = Field(alias="viewerSource")
     request_id: NonEmptyString = Field(alias="requestId")
     timeout: PositiveFloat | None = None
+    jq: NonEmptyString | None = None
 
 
 class CheckCliCommand(CliCommandBase):

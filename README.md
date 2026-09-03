@@ -65,10 +65,10 @@ out, then send one-shot commands at that process.
 
 ```sh
 SESSION=$(./xui-lab --viewer-source alchemy=/path/to/alchemy \
-  session start test_widgets --runtime /path/to/xui-lab | jq -r .sessionId)
+  session start test_widgets --runtime /path/to/xui-lab --jq .sessionId)
 
 ./xui-lab tree --session "$SESSION"
-./xui-lab get --session "$SESSION" --label OK
+./xui-lab get --session "$SESSION" --label OK --jq .data.locator
 ./xui-lab click --session "$SESSION" --control-id CONTROL
 ./xui-lab fill --session "$SESSION" --control-id EDITOR --value "hello"
 ./xui-lab session close "$SESSION"
@@ -76,7 +76,8 @@ SESSION=$(./xui-lab --viewer-source alchemy=/path/to/alchemy \
 
 `tree` and `get` return a short excerpt by default. The full tree lands in an
 artifact with path, size, and hash. `--include-tree` inlines the whole tree.
-`--fields` keeps a few keys. Captures return PNG paths, never image bytes.
+`--fields` keeps a few keys. `--jq` runs a jq expression on the JSON
+document. Captures return PNG paths, never image bytes.
 
 Selectors are `--control-id`, `--model-id`, `--path`, `--role`, `--label`,
 `--placeholder`, and `--text`. Pick one. Conflicting flags fail at parse time.

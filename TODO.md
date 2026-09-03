@@ -30,7 +30,7 @@ The browser inspector remains optional for a person to view. Agents use the CLI.
 - [ ] Make Copy Locator use the same selector-ranking implementation as
   Recorded Python. Record the chosen signals, match count, and fallback reason
   so generated code is reviewable and selector changes are explainable.
-- [ ] Add `--jq` with the `jq` package only when full jq expressions are
+- [x] Add `--jq` with the `jq` package only when full jq expressions are
   required. Do not implement a partial jq language. Update
   [`README.md`](README.md) and
   [`.agents/skills/xui-lab-ui/SKILL.md`](.agents/skills/xui-lab-ui/SKILL.md)

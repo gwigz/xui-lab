@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 import uuid
 from collections.abc import Sequence
@@ -63,6 +62,7 @@ from .interactive import (
     serve_inspector,
 )
 from .io import parse_manifest, parse_source_overrides, read_json, resolved_source
+from .json_output import compile_jq, emit_json_document
 from .repository import check_repository
 from .scenarios import discover_scenarios, load_scenario
 from .session_cli import (
@@ -104,12 +104,12 @@ def new_request_id() -> str:
     return "req_" + uuid.uuid4().hex
 
 
-def emit_json(model: ContractModel, *, exclude_none: bool = False) -> None:
-    print(
-        json.dumps(
-            model.model_dump(mode="json", by_alias=True, exclude_none=exclude_none),
-            separators=(",", ":"),
-        )
+def emit_json(
+    model: ContractModel, *, exclude_none: bool = False, jq: str | None = None
+) -> None:
+    emit_json_document(
+        model.model_dump(mode="json", by_alias=True, exclude_none=exclude_none),
+        jq,
     )
 
 
@@ -199,7 +199,7 @@ def cmd_check(command: CheckCliCommand) -> int:
 
 
 def cmd_operations(command: OperationsCliCommand) -> int:
-    emit_json(operations_contract(request_id=command.request_id))
+    emit_json(operations_contract(request_id=command.request_id), jq=command.jq)
     return 0
 
 
@@ -216,7 +216,7 @@ def cmd_subjects(command: SubjectsCliCommand) -> int:
         runtime=optional_runtime(command.runtime),
         request_id=command.request_id,
     )
-    emit_json(document)
+    emit_json(document, jq=command.jq)
     return 0
 
 
@@ -226,7 +226,7 @@ def cmd_schema(command: SchemaCliCommand) -> int:
         requestId=command.request_id,
         schemas=schema_documents(),
     )
-    emit_json(catalog)
+    emit_json(catalog, jq=command.jq)
     return 0
 
 
@@ -241,7 +241,7 @@ def cmd_preflight(command: PreflightCliCommand) -> int:
         operation=command.operation,
         request_id=command.request_id,
     )
-    emit_json(document)
+    emit_json(document, jq=command.jq)
     if command.operation is not None:
         requested = next(
             item for item in document.operations if item.name == command.operation
@@ -350,6 +350,14 @@ def cmd_interactive(command: InteractiveCliCommand) -> int:
     )
 
 
+def _add_jq(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--jq",
+        metavar="EXPR",
+        help="Filter JSON output with a jq expression.",
+    )
+
+
 def _add_selector_flags(parser: argparse.ArgumentParser) -> None:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--control-id")
@@ -366,6 +374,7 @@ def _add_session_bound(parser: argparse.ArgumentParser, *, selector: bool) -> No
     parser.add_argument("--session", required=True)
     parser.add_argument("--include-tree", action="store_true")
     parser.add_argument("--fields")
+    _add_jq(parser)
     if selector:
         _add_selector_flags(parser)
 
@@ -433,13 +442,18 @@ def parser() -> argparse.ArgumentParser:
         "operations", help="List supported query and input operations."
     )
     operations.add_argument("--json", action="store_true", required=True)
+    _add_jq(operations)
     subjects = commands.add_parser(
         "subjects",
         help="List declared subjects and whether the runtime can open them.",
     )
     subjects.add_argument("--json", action="store_true", required=True)
     subjects.add_argument("--runtime")
-    commands.add_parser("schema", help="Print the versioned JSON Schema catalog.")
+    _add_jq(subjects)
+    schema = commands.add_parser(
+        "schema", help="Print the versioned JSON Schema catalog."
+    )
+    _add_jq(schema)
     preflight = commands.add_parser(
         "preflight",
         help="Report capability and operation availability for a subject.",
@@ -448,6 +462,7 @@ def parser() -> argparse.ArgumentParser:
     preflight.add_argument("--subject")
     preflight.add_argument("--operation")
     preflight.add_argument("--runtime")
+    _add_jq(preflight)
     session = commands.add_parser(
         "session", help="Start, inspect, or close a lab session."
     )
@@ -462,16 +477,20 @@ def parser() -> argparse.ArgumentParser:
     start.add_argument("--height", type=int, default=800)
     start.add_argument("--ui-scale", type=float, default=1.0)
     start.add_argument("--artifacts", default=str(ROOT / "artifacts"))
+    _add_jq(start)
     status = session_commands.add_parser(
         "status", help="Show one session or every session."
     )
     status.add_argument("session_id", nargs="?")
+    _add_jq(status)
     close = session_commands.add_parser("close", help="Close a session.")
     close.add_argument("session_id")
+    _add_jq(close)
     jsonl = session_commands.add_parser(
         "jsonl", help="Send one typed command per stdin line to a session."
     )
     jsonl.add_argument("session_id")
+    _add_jq(jsonl)
     serve = session_commands.add_parser("serve")
     serve.add_argument("--session-id", required=True)
     _add_oneshot_commands(commands)
@@ -543,7 +562,10 @@ def parse_command(argv: list[str] | None = None) -> CliCommand:
         command["targetControlId"] = command.pop("target_control_id")
     request_id = command.pop("request_id", None)
     command["requestId"] = request_id or new_request_id()
-    return parse_cli_command(command)
+    parsed = parse_cli_command(command)
+    if parsed.jq is not None:
+        compile_jq(parsed.jq)
+    return parsed
 
 
 def _unreachable(value: NoReturn) -> NoReturn:

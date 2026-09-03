@@ -12,8 +12,8 @@ in `AGENTS.md`. JSON fields and exit statuses live in `docs/CLI_CONTRACT.md`.
 Machine-specific build paths live in `AGENTS.local.md` when that file exists.
 
 Stdout is JSON. Stderr is diagnostics. After a JSON command is accepted, a
-failure also writes an `ErrorRecord`. Branch on `code`. Pipe stdout to `jq`.
-Use `--fields` when you only need a few keys. Do not parse prose.
+failure also writes an `ErrorRecord`. Branch on `code`. Use `--jq` for jq
+expressions. Use `--fields` when you only need a few keys. Do not parse prose.
 
 ## Explore or change
 
@@ -37,11 +37,11 @@ RUNTIME=/absolute/path/to/xui-lab
 SOURCE=/absolute/path/to/alchemy
 
 ./xui-lab --viewer-source alchemy="$SOURCE" \
-  subjects --json --runtime "$RUNTIME" | jq -r '.subjects[].name'
+  subjects --json --runtime "$RUNTIME" --jq '.subjects[].name'
 
 ./xui-lab --viewer-source alchemy="$SOURCE" \
   preflight --json --subject SUBJECT --operation click \
-  --runtime "$RUNTIME" | jq '.operations[] | select(.name=="click")'
+  --runtime "$RUNTIME" --jq '.operations[] | select(.name=="click")'
 ```
 
 Run preflight with the same `--runtime` you will start. Pass `--request-id`
@@ -57,7 +57,7 @@ Then start a hidden session and keep the id:
 
 ```sh
 SESSION=$(./xui-lab --viewer-source alchemy="$SOURCE" \
-  session start test_widgets --runtime "$RUNTIME" | jq -r .sessionId)
+  session start test_widgets --runtime "$RUNTIME" --jq .sessionId)
 ```
 
 `session status` and `session close` take that id. Close is idempotent. Dead
@@ -69,20 +69,20 @@ asked to look at the window.
 One-shot commands need `--session`. They print one JSON document.
 
 ```sh
-./xui-lab tree --session "$SESSION" | jq '.data.tree.control_id, .data.treeArtifact.path'
+./xui-lab tree --session "$SESSION" --jq '.data.tree.control_id, .data.treeArtifact.path'
 ./xui-lab tree --session "$SESSION" --fields tree.path,tree.control_id
-./xui-lab get --session "$SESSION" --label OK | jq .data.locator
+./xui-lab get --session "$SESSION" --label OK --jq .data.locator
 ./xui-lab click --session "$SESSION" --control-id CONTROL
 ./xui-lab fill --session "$SESSION" --control-id EDITOR --value "hello"
 ./xui-lab press --session "$SESSION" --control-id EDITOR --key Enter
 ./xui-lab scroll --session "$SESSION" --control-id SPINNER --clicks -2
-./xui-lab capture --session "$SESSION" --name after-click | jq .data.path
+./xui-lab capture --session "$SESSION" --name after-click --jq .data.path
 ./xui-lab session close "$SESSION"
 ```
 
 `tree` and `get` return an excerpt. The full tree is an artifact with `path`,
 `size`, and `sha256`. `--include-tree` inlines it and warns on stderr. Prefer
-`--fields` or `jq` over dumping the whole tree. Captures return PNG paths,
+`--fields` or `--jq` over dumping the whole tree. Captures return PNG paths,
 never image bytes.
 
 Selectors, one flag only: `--control-id`, `--model-id`, `--path`, `--role`,

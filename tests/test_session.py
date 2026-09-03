@@ -169,6 +169,24 @@ class SessionStoreTests(unittest.TestCase):
         assert isinstance(command, TreeCliCommand)
         self.assertTrue(command.include_tree)
         self.assertEqual("tree.path,treeArtifact.path", command.fields)
+        self.assertIsNone(command.jq)
+
+    def test_tree_parses_jq_with_fields(self) -> None:
+        command = parse_command(
+            [
+                "tree",
+                "--session",
+                "sess_1",
+                "--fields",
+                "tree.path",
+                "--jq",
+                ".data",
+            ]
+        )
+        self.assertIsInstance(command, TreeCliCommand)
+        assert isinstance(command, TreeCliCommand)
+        self.assertEqual("tree.path", command.fields)
+        self.assertEqual(".data", command.jq)
 
     def test_pid_alive_rejects_missing_processes(self) -> None:
         self.assertFalse(pid_alive(2**31 - 2))

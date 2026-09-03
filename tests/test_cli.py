@@ -407,6 +407,110 @@ class CommandLineTests(unittest.TestCase):
             <= catalog.schemas.keys()
         )
 
+    def test_jq_writes_raw_strings_and_compact_objects(self) -> None:
+        stdout = StringIO()
+
+        with redirect_stdout(stdout):
+            status = main(
+                [
+                    "--request-id",
+                    "req_jq",
+                    "session",
+                    "close",
+                    "sess_missing",
+                    "--jq",
+                    ".sessionId",
+                ]
+            )
+
+        self.assertEqual(0, status)
+        self.assertEqual("sess_missing\n", stdout.getvalue())
+
+        compact = StringIO()
+        with redirect_stdout(compact):
+            status = main(
+                ["session", "close", "sess_missing", "--jq", "{sessionId, closed}"]
+            )
+        self.assertEqual(0, status)
+        self.assertEqual(
+            '{"sessionId":"sess_missing","closed":true}\n', compact.getvalue()
+        )
+
+    def test_jq_selects_subjects_and_preflight_operations(self) -> None:
+        names = StringIO()
+        with redirect_stdout(names):
+            status = main(["subjects", "--json", "--jq", ".subjects[].name"])
+        self.assertEqual(0, status)
+        self.assertEqual("test_widgets\n", names.getvalue())
+
+        selected = StringIO()
+        with redirect_stdout(selected):
+            status = main(
+                [
+                    "preflight",
+                    "--json",
+                    "--subject",
+                    "test_widgets",
+                    "--operation",
+                    "click",
+                    "--jq",
+                    '.operations[] | select(.name=="click") | .name',
+                ]
+            )
+        self.assertEqual(0, status)
+        self.assertEqual("click\n", selected.getvalue())
+
+    def test_invalid_jq_fails_before_json_output(self) -> None:
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            status = main(
+                [
+                    "--request-id",
+                    "req_jq",
+                    "subjects",
+                    "--json",
+                    "--jq",
+                    "not a jq program",
+                ]
+            )
+
+        self.assertEqual(2, status)
+        self.assertIn("invalid --jq expression", stderr.getvalue())
+        record = ErrorRecord.model_validate_json(stdout.getvalue())
+        self.assertEqual("invalid_input", record.code)
+        self.assertEqual("subjects", record.operation)
+        self.assertEqual("req_jq", record.request_id)
+
+    def test_jq_does_not_rewrite_error_records(self) -> None:
+        stdout = StringIO()
+        stderr = StringIO()
+
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            status = main(
+                [
+                    "--request-id",
+                    "req_jq_error",
+                    "subjects",
+                    "--json",
+                    "--runtime",
+                    "/missing-runtime",
+                    "--jq",
+                    ".subjects",
+                ]
+            )
+
+        self.assertEqual(2, status)
+        record = ErrorRecord.model_validate_json(stdout.getvalue())
+        self.assertEqual("invalid_input", record.code)
+        self.assertEqual("subjects", record.operation)
+        self.assertIn("runtime executable not found", record.message)
+
+    def test_check_rejects_jq(self) -> None:
+        with self.assertRaises(SystemExit):
+            parse_command(["check", "--jq", "."])
+
 
 if __name__ == "__main__":
     unittest.main()

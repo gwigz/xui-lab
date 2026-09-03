@@ -45,7 +45,8 @@ Omit `--runtime` to inspect declarations without probing a binary. When
 `--runtime` is present, a subject is openable only if the binary reports the
 same fork and commit as the selected source. JSON commands do not print color,
 prompts, or progress animation. Pass `--request-id` before the subcommand, or
-the CLI generates one and copies it into the JSON document.
+the CLI generates one and copies it into the JSON document. `--jq` filters
+these documents the same way it filters session output.
 
 ## Sessions and one-shot commands
 
@@ -67,13 +68,18 @@ parse time.
 
 `tree` and `get` return a concise excerpt by default and write the full tree
 to an artifact with path, size, and hash. `--include-tree` inlines the full
-tree and prints a size warning on stderr. `--fields` projects dotted keys.
+tree and prints a size warning on stderr. `--fields` projects dotted keys
+from one-shot `data`. `--jq EXPR` runs a jq program on the JSON document
+that would have been printed. String results are raw, without quotes, so
+`--jq .sessionId` can be captured into a shell variable. Multiple results
+are written one per line. `--jq` does not rewrite `ErrorRecord` output.
+An invalid expression fails with status `2` before the command runs.
 `--timeout` bounds session startup, socket waits, and runtime requests.
 Capture results return file paths, never image bytes.
 
 ```sh
-./xui-lab session start test_widgets --runtime /path/to/xui-lab
-./xui-lab tree --session sess_abc
+./xui-lab session start test_widgets --runtime /path/to/xui-lab --jq .sessionId
+./xui-lab tree --session sess_abc --jq .data.tree.control_id
 ./xui-lab click --session sess_abc --control-id ok
 ./xui-lab session close sess_abc
 ```
