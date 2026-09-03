@@ -6,6 +6,9 @@
 __pycache__/
 /.venv/
 /inspector/node_modules/
+/inspector/test-results/
+/inspector/playwright-report/
+/inspector/blob-report/
 
 /artifacts/
 /.audit/

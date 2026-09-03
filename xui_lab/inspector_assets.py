@@ -19,10 +19,11 @@ REQUIRED_ASSETS = (
 def inspector_source_fingerprint() -> str:
     """Return the deterministic fingerprint written by the Vite build."""
     digest = hashlib.sha256()
+    ignored = {"node_modules", "test-results", "playwright-report", "blob-report"}
     paths = sorted(
         path
         for path in INSPECTOR_SOURCE.rglob("*")
-        if path.is_file() and "node_modules" not in path.parts
+        if path.is_file() and ignored.isdisjoint(path.parts)
     )
     for path in paths:
         digest.update(path.relative_to(INSPECTOR_SOURCE).as_posix().encode())

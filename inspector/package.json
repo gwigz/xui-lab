@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "build": "tsc -b && vite build",
-    "check": "npm run check:api && biome check . && tsc -b && vitest run && vite build",
+    "check": "npm run check:api && biome check . && tsc -b && vitest run && vite build && playwright test",
     "check:api": "node scripts/generate-api.mjs --check",
     "dev": "vite",
     "generate:api": "node scripts/generate-api.mjs",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@base-ui/react": "1.7.0",
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.11",
+    "@playwright/test": "1.62.1",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "26.4.1",
     "@types/react": "19.2.18",

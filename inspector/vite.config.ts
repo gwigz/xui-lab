@@ -4,11 +4,16 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig, type Plugin } from "vitest/config";
 
 const sourceRoot = fileURLToPath(new URL(".", import.meta.url));
 const outputRoot = resolve(sourceRoot, "../xui_lab/_inspector");
-const ignoredDirectories = new Set(["node_modules"]);
+const ignoredDirectories = new Set([
+  "node_modules",
+  "test-results",
+  "playwright-report",
+  "blob-report",
+]);
 
 function sourcePaths(directory: string): string[] {
   return readdirSync(directory, { withFileTypes: true })
@@ -59,6 +64,9 @@ export default defineConfig({
         proxyTimeout: 0,
       },
     },
+  },
+  test: {
+    include: ["src/**/*.test.ts"],
   },
   build: {
     outDir: outputRoot,

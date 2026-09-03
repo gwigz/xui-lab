@@ -112,9 +112,9 @@ export function frameDragInput(
   input: Readonly<{
     start: FramePoint;
     end: FramePoint;
-    sourceControlId?: string;
-    sourceModelId?: string;
-    targetControlId?: string;
+    sourceControlId?: string | undefined;
+    sourceModelId?: string | undefined;
+    targetControlId?: string | undefined;
     supportsDragAndDrop: boolean;
   }>,
 ): FrameDragInput {

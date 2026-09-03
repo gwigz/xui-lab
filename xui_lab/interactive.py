@@ -164,6 +164,9 @@ class InteractiveSession:
     def close(self) -> None:
         self.window.close()
 
+    def artifact_directory(self) -> Path:
+        return self.window.artifact_dir
+
     def state(self) -> dict[str, Any]:
         from .selectors import rank_locator, ranked_locator_record, tree_nodes
 

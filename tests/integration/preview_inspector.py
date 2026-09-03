@@ -18,6 +18,14 @@ from xui_lab.inspector_http import serve_inspector  # noqa: E402
 class PreviewSession:
     def __init__(self, capture: Path | None):
         self.latest_capture = capture
+        self._artifact_dir = (
+            capture.parent
+            if capture is not None
+            else Path("/tmp/xui-lab-inspector-preview")
+        )
+
+    def artifact_directory(self) -> Path:
+        return self._artifact_dir
 
     def capture_path(self, version: int) -> Path | None:
         if self.latest_capture is None or version != 1:
@@ -94,7 +102,7 @@ class PreviewSession:
                     "fallbackReason": None,
                 }
             },
-            "artifactDir": "/tmp/xui-lab-inspector-preview",
+            "artifactDir": str(self._artifact_dir),
             "subjects": ["test_widgets", "inventory_explorer"],
             "fixtures": ["inventory-explorer"],
             "scenarios": ["test_floater", "inventory_explorer"],

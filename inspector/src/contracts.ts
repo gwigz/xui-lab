@@ -303,15 +303,16 @@ export function parseInspectorSessionEvent(value: unknown): InspectorSessionEven
   const record = objectValue(value, "session event");
   const requestId = optionalString(record, "requestId");
   const captureVersion = record.captureVersion;
+  const parsedCaptureVersion =
+    captureVersion === undefined || captureVersion === null
+      ? undefined
+      : nonNegativeIntValue(captureVersion, "session event.captureVersion");
 
   return {
     eventId: nonNegativeIntValue(record.eventId, "session event.eventId"),
     stateVersion: nonNegativeIntValue(record.stateVersion, "session event.stateVersion"),
-    requestId,
-    captureVersion:
-      captureVersion === undefined || captureVersion === null
-        ? undefined
-        : nonNegativeIntValue(captureVersion, "session event.captureVersion"),
+    ...(requestId === undefined ? {} : { requestId }),
+    ...(parsedCaptureVersion === undefined ? {} : { captureVersion: parsedCaptureVersion }),
   };
 }
 

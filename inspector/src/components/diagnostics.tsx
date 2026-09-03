@@ -62,8 +62,8 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
   const pointerStart = useRef<Readonly<{
     pointerId: number;
     point: FramePoint;
-    sourceControlId?: string;
-    sourceModelId?: string;
+    sourceControlId?: string | undefined;
+    sourceModelId?: string | undefined;
   }> | null>(null);
   const suppressClick = useRef(false);
   const inputQueue = useRef<Promise<void>>(Promise.resolve());

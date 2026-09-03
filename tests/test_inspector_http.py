@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import queue
 import re
 import tempfile
@@ -13,25 +15,36 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+import httpx
 from fastapi.testclient import TestClient
 
+from xui_lab.errors import InputError
 from xui_lab.inspector_http import (
     MAX_ACTION_BYTES,
     SECURITY_HEADERS,
     InspectorBusyError,
     InspectorWorker,
+    _RedactTokenFilter,
+    contained_session_file,
     create_inspector_app,
     format_sse_event,
+    inspector_host_allowed,
     inspector_openapi_document,
     inspector_openapi_hash,
+    inspector_origin_allowed,
+    inspector_public_url,
 )
 
 SESSION_TOKEN = "test-inspector-token"
+BASE_URL = "http://127.0.0.1"
 
 
 class SessionStub:
-    def __init__(self, capture: Path | None = None) -> None:
+    def __init__(
+        self, capture: Path | None = None, artifact_dir: Path | None = None
+    ) -> None:
         self.latest_capture = capture
+        self._artifact_dir = artifact_dir or Path("/tmp/xui-lab-inspector")
         self.closed = False
         self.action_delay = 0.0
         self.release = threading.Event()
@@ -44,7 +57,7 @@ class SessionStub:
             "diagnostics": {"processId": 7},
             "recording": [],
             "locators": {},
-            "artifactDir": "/tmp/xui-lab-inspector",
+            "artifactDir": str(self._artifact_dir),
             "subjects": ["test_widgets"],
             "fixtures": [],
             "scenarios": ["test_floater"],
@@ -54,6 +67,9 @@ class SessionStub:
                 "version": 1 if capture is not None else 0,
             },
         }
+
+    def artifact_directory(self) -> Path:
+        return self._artifact_dir
 
     def capture_path(self, version: int) -> Path | None:
         if self.latest_capture is None or version != 1:
@@ -82,9 +98,15 @@ class SessionStub:
 
 
 class InspectorHttpTests(unittest.TestCase):
-    def client(self, session: SessionStub) -> TestClient:
+    def client(self, session: SessionStub, *, port: int | None = None) -> TestClient:
         client = TestClient(
-            create_inspector_app(InspectorWorker(session), session_token=SESSION_TOKEN)
+            create_inspector_app(
+                InspectorWorker(session),
+                session_token=SESSION_TOKEN,
+                host="127.0.0.1",
+                port=port,
+            ),
+            base_url=BASE_URL if port is None else f"{BASE_URL}:{port}",
         )
         client.cookies.set("xui_lab_session", SESSION_TOKEN)
         return client
@@ -93,7 +115,7 @@ class InspectorHttpTests(unittest.TestCase):
         app = create_inspector_app(
             InspectorWorker(SessionStub()), session_token=SESSION_TOKEN
         )
-        with TestClient(app) as client:
+        with TestClient(app, base_url=BASE_URL) as client:
             rejected = client.get("/api/v1/state")
             index = client.get("/")
             accepted = client.get("/api/v1/state")
@@ -228,13 +250,17 @@ class InspectorHttpTests(unittest.TestCase):
         directory = Path(tempfile.mkdtemp())
         png = directory / "latest.png"
         png.write_bytes(b"png bytes")
-        session = SessionStub(png)
+        session = SessionStub(png, artifact_dir=directory)
         with self.client(session) as client:
             found = client.get("/api/v1/captures/1")
             missing = client.get("/api/v1/captures/9")
+            ignored_path = client.get(
+                "/api/v1/captures/1", params={"path": "/etc/passwd"}
+            )
         self.assertEqual(200, found.status_code)
         self.assertEqual("image/png", found.headers["content-type"])
         self.assertEqual(b"png bytes", found.content)
+        self.assertEqual(b"png bytes", ignored_path.content)
         self.assertEqual(404, missing.status_code)
         self.assertEqual("not_found", missing.json()["code"])
 
@@ -413,7 +439,8 @@ class InspectorHttpTests(unittest.TestCase):
         session = SessionStub()
         worker = InspectorWorker(session)
         app = create_inspector_app(worker, session_token=SESSION_TOKEN)
-        with TestClient(app) as client:
+        with TestClient(app, base_url=BASE_URL) as client:
+            client.cookies.set("xui_lab_session", SESSION_TOKEN)
             client.get("/")
             self.assertEqual(200, client.get("/api/v1/state").status_code)
             thread = worker._thread
@@ -461,6 +488,191 @@ class InspectorHttpTests(unittest.TestCase):
         self.assertIsNotNone(match)
         assert match is not None
         self.assertEqual(inspector_openapi_hash(), match.group(1))
+
+    def test_rejects_non_loopback_bind_addresses(self) -> None:
+        with self.assertRaisesRegex(InputError, "loopback"):
+            create_inspector_app(session_token=SESSION_TOKEN, host="0.0.0.0")
+
+    def test_loopback_host_and_origin_rules(self) -> None:
+        self.assertTrue(inspector_host_allowed("127.0.0.1", port=None))
+        self.assertTrue(inspector_host_allowed("127.0.0.1:8765", port=8765))
+        self.assertTrue(inspector_host_allowed("localhost:8765", port=8765))
+        self.assertTrue(inspector_host_allowed("[::1]:8765", port=8765))
+        self.assertFalse(inspector_host_allowed("evil.example", port=None))
+        self.assertFalse(inspector_host_allowed("127.0.0.1.attacker.com", port=None))
+        self.assertFalse(inspector_host_allowed("127.0.0.1:9999", port=8765))
+        self.assertFalse(inspector_host_allowed(None, port=None))
+        self.assertTrue(inspector_origin_allowed(None, port=8765))
+        self.assertTrue(inspector_origin_allowed("http://127.0.0.1:8765", port=8765))
+        self.assertFalse(inspector_origin_allowed("http://evil.example", port=None))
+        self.assertFalse(inspector_origin_allowed("null", port=None))
+        self.assertFalse(inspector_origin_allowed("https://127.0.0.1:8765", port=8765))
+        self.assertEqual(
+            "http://127.0.0.1:8765/", inspector_public_url("127.0.0.1", 8765)
+        )
+        self.assertEqual("http://[::1]:8765/", inspector_public_url("::1", 8765))
+
+    def test_rejects_unexpected_host_and_origin_headers(self) -> None:
+        app = create_inspector_app(
+            InspectorWorker(SessionStub()),
+            session_token=SESSION_TOKEN,
+            port=8765,
+        )
+        with TestClient(app, base_url="http://127.0.0.1:8765") as client:
+            client.cookies.set("xui_lab_session", SESSION_TOKEN)
+            host = client.get("http://evil.example:8765/api/v1/state")
+            origin = client.get(
+                "/api/v1/state", headers={"Origin": "http://evil.example"}
+            )
+            allowed = client.get(
+                "/api/v1/state", headers={"Origin": "http://127.0.0.1:8765"}
+            )
+        self.assertEqual(403, host.status_code)
+        self.assertEqual("invalid_host", host.json()["code"])
+        self.assertEqual("application/problem+json", host.headers["content-type"])
+        self.assertEqual(403, origin.status_code)
+        self.assertEqual("invalid_origin", origin.json()["code"])
+        self.assertEqual(200, allowed.status_code)
+
+    def test_refuses_captures_outside_the_session_artifact_directory(self) -> None:
+        directory = Path(tempfile.mkdtemp())
+        outside = Path(tempfile.mkdtemp()) / "secret.png"
+        outside.write_bytes(b"not a session artifact")
+        session = SessionStub(outside, artifact_dir=directory)
+        with self.client(session) as client:
+            response = client.get("/api/v1/captures/1")
+        self.assertEqual(404, response.status_code)
+        self.assertEqual("not_found", response.json()["code"])
+        self.assertNotIn(str(outside), response.text)
+
+    def test_contained_session_file_rejects_escaped_paths(self) -> None:
+        directory = Path(tempfile.mkdtemp())
+        inside = directory / "frame.png"
+        inside.write_bytes(b"png")
+        outside = directory.parent / "outside.png"
+        outside.write_bytes(b"no")
+        self.assertEqual(inside.resolve(), contained_session_file(inside, directory))
+        self.assertIsNone(contained_session_file(outside, directory))
+        self.assertIsNone(
+            contained_session_file(directory / ".." / outside.name, directory)
+        )
+
+    def test_session_token_stays_out_of_payloads_and_logs(self) -> None:
+        record = logging.LogRecord(
+            name="uvicorn.access",
+            level=logging.INFO,
+            pathname=__file__,
+            lineno=1,
+            msg="cookie %s=%s",
+            args=("xui_lab_session", SESSION_TOKEN),
+            exc_info=None,
+        )
+        self.assertTrue(_RedactTokenFilter(SESSION_TOKEN).filter(record))
+        self.assertNotIn(SESSION_TOKEN, record.getMessage())
+        self.assertIn("[redacted]", record.getMessage())
+        with self.client(SessionStub()) as client:
+            state = client.get("/api/v1/state")
+            action = client.post("/api/v1/actions", json={"action": "capture"})
+            denied = client.get("/api/v1/state", headers={"Origin": "http://evil.test"})
+        self.assertNotIn(SESSION_TOKEN, state.text)
+        self.assertNotIn(SESSION_TOKEN, action.text)
+        self.assertNotIn(SESSION_TOKEN, denied.text)
+
+    def test_worker_close_disconnects_sse_subscribers(self) -> None:
+        session = SessionStub()
+        worker = InspectorWorker(session)
+        worker.start()
+        subscriber = worker.subscribe()
+        try:
+            self.assertIsNotNone(subscriber.get(timeout=1))
+            worker.close()
+            self.assertIsNone(subscriber.get(timeout=1))
+            self.assertEqual([], worker._subscribers)
+        finally:
+            worker.close()
+
+    def test_content_types_match_the_inspector_contract(self) -> None:
+        directory = Path(tempfile.mkdtemp())
+        png = directory / "latest.png"
+        png.write_bytes(b"png bytes")
+        with self.client(SessionStub(png, artifact_dir=directory)) as client:
+            html = client.get("/")
+            state = client.get("/api/v1/state")
+            capture = client.get("/api/v1/captures/1")
+            problem = client.post("/api/v1/actions", json={"action": "missing"})
+        events = inspector_openapi_document()["paths"]["/api/v1/events"]["get"]
+        self.assertEqual("text/html; charset=utf-8", html.headers["content-type"])
+        self.assertEqual("application/json", state.headers["content-type"])
+        self.assertEqual("image/png", capture.headers["content-type"])
+        self.assertEqual("application/problem+json", problem.headers["content-type"])
+        self.assertIn("text/event-stream", events["responses"]["200"]["content"])
+        for name, value in SECURITY_HEADERS.items():
+            self.assertEqual(value, state.headers[name.lower()])
+
+
+class InspectorAsgiTests(unittest.IsolatedAsyncioTestCase):
+    async def test_httpx_drives_the_asgi_app_without_a_socket(self) -> None:
+        session = SessionStub()
+        worker = InspectorWorker(session)
+        worker.start()
+        app = create_inspector_app(worker, session_token=SESSION_TOKEN)
+        try:
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(
+                transport=transport, base_url=BASE_URL
+            ) as client:
+                rejected = await client.get("/api/v1/state")
+                index = await client.get("/")
+                accepted = await client.get("/api/v1/state")
+        finally:
+            worker.close()
+        self.assertEqual(401, rejected.status_code)
+        self.assertEqual("invalid_session", rejected.json()["code"])
+        self.assertEqual(200, index.status_code)
+        self.assertEqual(200, accepted.status_code)
+        self.assertIn("HttpOnly", index.headers["set-cookie"])
+
+    async def test_sse_disconnect_unsubscribes_without_opening_a_port(self) -> None:
+        session = SessionStub()
+        worker = InspectorWorker(session)
+        worker.start()
+        app = create_inspector_app(worker, session_token=SESSION_TOKEN)
+        incoming: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        await incoming.put({"type": "http.request", "body": b"", "more_body": False})
+        disconnected = False
+
+        async def receive() -> dict[str, Any]:
+            return await incoming.get()
+
+        async def send(message: dict[str, Any]) -> None:
+            nonlocal disconnected
+            if message["type"] == "http.response.body" and not disconnected:
+                disconnected = True
+                await incoming.put({"type": "http.disconnect"})
+
+        scope = {
+            "type": "http",
+            "asgi": {"version": "3.0", "spec_version": "2.3"},
+            "http_version": "1.1",
+            "method": "GET",
+            "scheme": "http",
+            "path": "/api/v1/events",
+            "raw_path": b"/api/v1/events",
+            "query_string": b"",
+            "root_path": "",
+            "headers": [
+                (b"host", b"127.0.0.1"),
+                (b"cookie", f"xui_lab_session={SESSION_TOKEN}".encode()),
+                (b"accept", b"text/event-stream"),
+            ],
+            "client": ("127.0.0.1", 50000),
+            "server": ("127.0.0.1", 80),
+        }
+        try:
+            await asyncio.wait_for(app(scope, receive, send), timeout=2)
+            self.assertEqual([], worker._subscribers)
+        finally:
+            worker.close()
 
 
 if __name__ == "__main__":

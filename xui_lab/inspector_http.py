@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import queue
 import secrets
 import socket
@@ -20,6 +21,7 @@ from functools import lru_cache
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any, Literal, Protocol
+from urllib.parse import urlsplit
 
 import uvicorn
 from fastapi import FastAPI, Request
@@ -62,6 +64,7 @@ EVENT_POLL_SECONDS = 0.25
 WATCH_INTERVAL_SECONDS = 0.7
 QUEUE_FULL_MESSAGE = "inspector session is busy"
 SESSION_COOKIE = "xui_lab_session"
+LOOPBACK_HOSTNAMES = frozenset({"127.0.0.1", "localhost", "::1"})
 SECURITY_HEADERS = {
     "Cache-Control": "no-store",
     "Content-Security-Policy": (
@@ -71,6 +74,7 @@ SECURITY_HEADERS = {
     "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
 }
+TOKEN_PLACEHOLDER = "[redacted]"
 
 
 class InspectorBusyError(InputError):
@@ -84,11 +88,119 @@ class InspectorLimitError(InputError):
 class InspectorSession(Protocol):
     def action(self, request: dict[str, Any]) -> dict[str, Any]: ...
 
+    def artifact_directory(self) -> Path: ...
+
     def capture_path(self, version: int) -> Path | None: ...
 
     def close(self) -> None: ...
 
     def state(self) -> dict[str, Any]: ...
+
+
+def is_loopback_hostname(hostname: str) -> bool:
+    host = hostname.strip().lower().rstrip(".")
+    if host.startswith("[") and host.endswith("]"):
+        host = host[1:-1]
+    return host in LOOPBACK_HOSTNAMES
+
+
+def parse_host_header(value: str) -> tuple[str, int | None]:
+    host = value.strip()
+    if not host:
+        raise ValueError("host is empty")
+    if host.startswith("["):
+        end = host.find("]")
+        if end < 0:
+            raise ValueError("host IPv6 bracket is unclosed")
+        hostname = host[1:end]
+        rest = host[end + 1 :]
+        if rest == "":
+            return hostname, None
+        if not rest.startswith(":"):
+            raise ValueError("host IPv6 port is invalid")
+        return hostname, int(rest[1:])
+    if host.count(":") == 1:
+        hostname, port_text = host.rsplit(":", 1)
+        if not hostname:
+            raise ValueError("host is empty")
+        return hostname, int(port_text)
+    return host, None
+
+
+def inspector_host_allowed(host_header: str | None, *, port: int | None) -> bool:
+    if host_header is None:
+        return False
+    try:
+        hostname, header_port = parse_host_header(host_header)
+    except ValueError:
+        return False
+    if not is_loopback_hostname(hostname):
+        return False
+    if port is None:
+        return True
+    actual_port = 80 if header_port is None else header_port
+    return actual_port == port
+
+
+def inspector_origin_allowed(origin: str | None, *, port: int | None) -> bool:
+    if origin is None or origin == "":
+        return True
+    parsed = urlsplit(origin)
+    if (
+        parsed.scheme != "http"
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path not in {"", "/"}
+        or parsed.query
+        or parsed.fragment
+        or parsed.hostname is None
+        or not is_loopback_hostname(parsed.hostname)
+    ):
+        return False
+    if port is None:
+        return True
+    actual_port = 80 if parsed.port is None else parsed.port
+    return actual_port == port
+
+
+def inspector_public_url(host: str, port: int) -> str:
+    hostname = f"[{host}]" if ":" in host else host
+    return f"http://{hostname}:{port}/"
+
+
+def contained_session_file(path: Path, artifact_dir: Path) -> Path | None:
+    try:
+        resolved = path.resolve()
+        root = artifact_dir.resolve()
+        resolved.relative_to(root)
+    except (OSError, ValueError):
+        return None
+    if not resolved.is_file():
+        return None
+    return resolved
+
+
+class _RedactTokenFilter(logging.Filter):
+    def __init__(self, token: str) -> None:
+        super().__init__()
+        self._token = token
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        if self._token and self._token in message:
+            record.msg = message.replace(self._token, TOKEN_PLACEHOLDER)
+            record.args = ()
+        return True
+
+
+def install_token_redaction(token: str) -> None:
+    token_filter = _RedactTokenFilter(token)
+    for name in ("uvicorn", "uvicorn.access", "uvicorn.error"):
+        logger = logging.getLogger(name)
+        if not any(
+            isinstance(existing, _RedactTokenFilter) for existing in logger.filters
+        ):
+            logger.addFilter(token_filter)
 
 
 class InspectorCaptureInfo(ContractModel):
@@ -297,7 +409,10 @@ class InspectorWorker:
         )
 
     def capture_path(self, version: int) -> Path | None:
-        return self._session.capture_path(version)
+        path = self._session.capture_path(version)
+        if path is None:
+            return None
+        return contained_session_file(path, self._session.artifact_directory())
 
     def subscribe(
         self, *, last_event_id: int | None = None
@@ -459,10 +574,11 @@ def _request_id(payload: dict[str, Any]) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
-class _SecurityHeadersMiddleware:
-    def __init__(self, app: ASGIApp, *, session_token: str):
+class _InspectorGateMiddleware:
+    def __init__(self, app: ASGIApp, *, session_token: str, port: int | None) -> None:
         self.app = app
         self._session_token = session_token
+        self._port = port
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -480,13 +596,30 @@ class _SecurityHeadersMiddleware:
             await send(message)
 
         request = Request(scope)
+        operation = operation_for(request.url.path)
+        if not inspector_host_allowed(request.headers.get("host"), port=self._port):
+            record = http_error_record(
+                "inspector host is not allowed",
+                code="invalid_host",
+                operation=operation,
+            )
+            await error_json(record, status=403)(scope, receive, send_with_headers)
+            return
+        if not inspector_origin_allowed(request.headers.get("origin"), port=self._port):
+            record = http_error_record(
+                "inspector origin is not allowed",
+                code="invalid_origin",
+                operation=operation,
+            )
+            await error_json(record, status=403)(scope, receive, send_with_headers)
+            return
         if request.url.path.startswith("/api/v1/") and not secrets.compare_digest(
             request.cookies.get(SESSION_COOKIE, ""), self._session_token
         ):
             record = http_error_record(
                 "inspector session is invalid",
                 code="invalid_session",
-                operation=operation_for(request.url.path),
+                operation=operation,
             )
             await error_json(record, status=401)(scope, receive, send_with_headers)
             return
@@ -495,7 +628,11 @@ class _SecurityHeadersMiddleware:
 
 
 def create_inspector_app(
-    worker: InspectorWorker | None = None, *, session_token: str
+    worker: InspectorWorker | None = None,
+    *,
+    session_token: str,
+    host: str = "127.0.0.1",
+    port: int | None = None,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -508,6 +645,8 @@ def create_inspector_app(
             if isinstance(configured, InspectorWorker):
                 configured.close()
 
+    if not is_loopback_hostname(host):
+        raise InputError("inspector must bind to a loopback address")
     app = FastAPI(
         title="XUI Lab Inspector",
         version="1",
@@ -518,7 +657,7 @@ def create_inspector_app(
     )
     if worker is not None:
         app.state.worker = worker
-    app.add_middleware(_SecurityHeadersMiddleware, session_token=session_token)
+    app.add_middleware(_InspectorGateMiddleware, session_token=session_token, port=port)
 
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(
@@ -937,14 +1076,23 @@ def serve_inspector(
     port: int = 0,
     open_browser: bool = True,
 ) -> int:
+    if not is_loopback_hostname(host):
+        raise InputError("inspector must bind to a loopback address")
     assets_problem = inspector_assets_problem()
     if assets_problem is not None:
         raise RuntimeFailure(f"{assets_problem}; {inspector_build_instruction()}")
     worker = InspectorWorker(session)
-    app = create_inspector_app(worker, session_token=secrets.token_urlsafe(32))
+    session_token = secrets.token_urlsafe(32)
+    install_token_redaction(session_token)
     sock = socket.create_server((host, port))
     bound_host, bound_port = sock.getsockname()[:2]
-    url = f"http://{bound_host}:{bound_port}/"
+    app = create_inspector_app(
+        worker,
+        session_token=session_token,
+        host=bound_host,
+        port=bound_port,
+    )
+    url = inspector_public_url(bound_host, bound_port)
     print(f"xui-lab inspector: {url}", flush=True)
     if open_browser:
         threading.Timer(0.2, webbrowser.open, args=(url,)).start()
