@@ -2,12 +2,22 @@
 
 from __future__ import annotations
 
+import hashlib
 import shutil
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
 from .assertions import check_observation
+from .contracts import (
+    SCHEMA_VERSION,
+    ArtifactEntry,
+    ArtifactKind,
+    ArtifactManifest,
+    RuntimeExchangeEvent,
+    error_record,
+    parse_fixture,
+)
 from .domain import Capability, Comparison, Fork, Viewport
 from .errors import (
     AssertionFailure,
@@ -54,12 +64,6 @@ def artifact_directory(root: Path, artifact_id: str) -> Path:
     if candidate.parent != resolved_root:
         raise InputError(f"artifact directory escapes artifact root: {artifact_id}")
     return candidate
-
-
-def _mapping(value: Any, label: str) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        raise RuntimeFailure(f"{label} must be an object")
-    return value
 
 
 def _tree_nodes(tree: Any) -> list[dict[str, Any]]:
@@ -159,6 +163,13 @@ class Lab:
         stability: WaitForStable = WaitForStable(),
         interactive: bool = False,
     ) -> Window:
+        fixture_data = None
+        if fixture is not None:
+            fixture_contract = parse_fixture(read_json(fixture))
+            fixture_data = fixture_contract.model_dump(
+                mode="json", by_alias=True, exclude_none=True
+            )
+        fork_commit = git_commit(self.viewer_source)
         artifact_dir = artifact_directory(self.artifact_root, artifact_id)
         if artifact_dir.exists():
             shutil.rmtree(artifact_dir)
@@ -168,13 +179,21 @@ class Lab:
             artifact_dir / "runtime.log",
             mode="interactive" if interactive else "scenario",
         )
-        window = Window(runtime, artifact_dir, stability)
+        window = Window(
+            runtime,
+            artifact_dir,
+            stability,
+            artifact_id=artifact_id,
+            fork=str(self.fork.id),
+            fork_commit=fork_commit,
+            subject=subject,
+            fixture=fixture_contract.id if fixture is not None else None,
+        )
         try:
-            fixture_data = read_json(fixture) if fixture else None
             initialize = {
                 "op": "initialize",
                 "fork": self.fork.id,
-                "forkCommit": git_commit(self.viewer_source),
+                "forkCommit": fork_commit,
                 "resourceRoot": str(
                     self.viewer_source.joinpath(*self.fork.resource_root.parts)
                 ),
@@ -188,15 +207,7 @@ class Lab:
                 "artifactDir": str(artifact_dir),
             }
             hello = window._request(initialize)
-            supported = _mapping(hello, "initialize result").get(
-                "supportedCapabilities"
-            )
-            if not isinstance(supported, list) or any(
-                not isinstance(value, str) for value in supported
-            ):
-                raise RuntimeFailure(
-                    "initialize response has invalid supportedCapabilities"
-                )
+            supported = hello["supportedCapabilities"]
             missing = sorted(str(value) for value in capabilities - set(supported))
             if missing:
                 raise CapabilityError(
@@ -206,26 +217,9 @@ class Lab:
             installed = window._request(
                 {"op": "installCapabilities", "capabilities": sorted(capabilities)}
             )
-            installed_map = _mapping(installed, "installCapabilities result")
-            installed_capabilities = installed_map.get("capabilities")
-            event_apis = installed_map.get("eventApis")
-            input_operations = installed_map.get("inputOperations")
-            if not isinstance(installed_capabilities, list) or any(
-                not isinstance(value, str) for value in installed_capabilities
-            ):
-                raise RuntimeFailure(
-                    "installCapabilities response has invalid capabilities"
-                )
-            if not isinstance(event_apis, dict):
-                raise RuntimeFailure(
-                    "installCapabilities response has invalid eventApis"
-                )
-            if not isinstance(input_operations, list) or any(
-                not isinstance(value, str) for value in input_operations
-            ):
-                raise RuntimeFailure(
-                    "installCapabilities response has invalid inputOperations"
-                )
+            installed_capabilities = installed["capabilities"]
+            event_apis = installed["eventApis"]
+            input_operations = installed["inputOperations"]
             missing = sorted(
                 str(value) for value in capabilities - set(installed_capabilities)
             )
@@ -246,7 +240,16 @@ class Lab:
 
 class Window:
     def __init__(
-        self, runtime: RuntimeProcess, artifact_dir: Path, stability: WaitForStable
+        self,
+        runtime: RuntimeProcess,
+        artifact_dir: Path,
+        stability: WaitForStable,
+        *,
+        artifact_id: str,
+        fork: str,
+        fork_commit: str,
+        subject: str,
+        fixture: str | None,
     ):
         self.runtime = runtime
         self.artifact_dir = artifact_dir
@@ -255,6 +258,11 @@ class Window:
         self.capabilities: frozenset[Capability] = frozenset()
         self.event_apis: dict[str, Any] = {}
         self.input_operations: frozenset[str] = frozenset()
+        self._artifact_id = artifact_id
+        self._fork = fork
+        self._fork_commit = fork_commit
+        self._subject = subject
+        self._fixture = fixture
         self._finished = False
 
     def _install(
@@ -267,10 +275,23 @@ class Window:
         self.event_apis = event_apis
         self.input_operations = input_operations
 
-    def _request(self, command: dict[str, Any]) -> Any:
+    def _request(self, command: dict[str, Any]) -> dict[str, Any]:
         response = self.runtime.request(command)
-        self.trace.append({"command": command, "response": response})
-        return response.get("result")
+        event = RuntimeExchangeEvent(
+            schemaVersion=SCHEMA_VERSION,
+            type="event",
+            event="runtimeExchange",
+            sequence=len(self.trace),
+            operation=str(command.get("op", "unknown")),
+            command={"schemaVersion": SCHEMA_VERSION, **command},
+            response=response,
+        )
+        self.trace.append(
+            event.model_dump(mode="json", by_alias=True, exclude_none=True)
+        )
+        result = response["result"]
+        assert isinstance(result, dict)
+        return result
 
     def raw(self, command: dict[str, Any]) -> Any:
         return self._request(dict(command))
@@ -290,8 +311,7 @@ class Window:
     def advance_frames(self, count: int) -> dict[str, Any]:
         if not isinstance(count, int) or isinstance(count, bool) or count < 0:
             raise InputError("frame count must be a non-negative integer")
-        result = self._request(Frames(count).to_command())
-        return _mapping(result, "frames result")
+        return self._request(Frames(count).to_command())
 
     def resize_viewport(
         self, width: int, height: int, *, ui_scale: float | None = None
@@ -311,13 +331,11 @@ class Window:
             or ui_scale <= 0
         ):
             raise InputError("viewport ui_scale must be positive")
-        result = self._request(ResizeViewport(width, height, ui_scale).to_command())
-        return _mapping(result, "resize viewport result")
+        return self._request(ResizeViewport(width, height, ui_scale).to_command())
 
     def resize_subject(self, width: int, height: int) -> dict[str, Any]:
         self._validate_positive_size(width, height, "subject")
-        result = self._request(ResizeSubject(width, height).to_command())
-        return _mapping(result, "resize subject result")
+        return self._request(ResizeSubject(width, height).to_command())
 
     def click_at(self, x: int, y: int) -> ActionResult:
         self._validate_coordinates((x, y))
@@ -380,21 +398,18 @@ class Window:
         self._require_operation("XUILab", "input")
         self._require_input_operation(action)
         self.wait_for_stable()
-        result = _mapping(self._request(operation.to_command()), f"{action} result")
+        result = self._request(operation.to_command())
         self.wait_for_stable()
         return ActionResult(action, result)
 
     def reload(self) -> dict[str, Any]:
-        result = self._request(Reload().to_command())
-        return _mapping(result, "reload result")
+        return self._request(Reload().to_command())
 
     def query_tree(self) -> dict[str, Any]:
-        result = self._request(QueryTree().to_command())
-        return _mapping(result, "tree result")
+        return self._request(QueryTree().to_command())
 
     def diagnostics(self) -> dict[str, Any]:
-        result = self._request(Diagnostics().to_command())
-        return _mapping(result, "diagnostics result")
+        return self._request(Diagnostics().to_command())
 
     def capture(self, name: str, *, highlight: Locator | None = None) -> dict[str, Any]:
         if (
@@ -406,18 +421,17 @@ class Window:
             or "\\" in name
         ):
             raise InputError("capture name must not create subdirectories")
-        result = self._request(
+        return self._request(
             Capture(
                 name=name,
                 include_overlay=highlight is not None,
                 highlight=highlight.selector if highlight is not None else None,
             ).to_command()
         )
-        return _mapping(result, "capture result")
 
     def pick(self, x: int, y: int) -> Control:
         self._require_capability("inspection")
-        result = _mapping(self._request(Pick(x, y).to_command()), "pick result")
+        result = self._request(Pick(x, y).to_command())
         path = result.get("path")
         if not isinstance(path, str) or not path:
             raise AssertionFailure(f"no visible control at screen position ({x}, {y})")
@@ -431,10 +445,9 @@ class Window:
 
     def highlight(self, locator: Locator | None) -> dict[str, Any]:
         self._require_capability("inspection")
-        result = self._request(
+        return self._request(
             Highlight(locator.selector if locator is not None else None).to_command()
         )
-        return _mapping(result, "highlight result")
 
     def _require_capability(self, capability: str) -> None:
         if Capability(capability) not in self.capabilities:
@@ -459,7 +472,7 @@ class Window:
 
     def wait_for_stable(self, stability: WaitForStable | None = None) -> dict[str, Any]:
         policy = stability or self.stability
-        result = _mapping(self._request(policy.to_command()), "stable result")
+        result = self._request(policy.to_command())
         if result.get("stable") is True:
             return result
         first = self._request(QueryTree().to_command())
@@ -484,16 +497,14 @@ class Window:
     def expect_menu_visible(self, expected: bool = True) -> dict[str, Any]:
         self._require_capability("menus")
         self.wait_for_stable()
-        result = _mapping(self._request(QueryMenus().to_command()), "menu query result")
+        result = self._request(QueryMenus().to_command())
         check_observation("menus", result, "/visible", Comparison.EQUALS, expected)
         return result
 
     def expect_recorded_effect(self, field: str, expected: Any) -> dict[str, Any]:
         self._require_capability("external_effects")
         self.wait_for_stable()
-        result = _mapping(
-            self._request(Diagnostics().to_command()), "diagnostics result"
-        )
+        result = self._request(Diagnostics().to_command())
         effects = result.get("effects")
         matches = (
             [
@@ -512,6 +523,12 @@ class Window:
 
     def _collect_failure(self, failure: BaseException) -> None:
         diagnostics: dict[str, Any] = {"passed": False, "error": str(failure)}
+        write_json(
+            self.artifact_dir / "error.json",
+            error_record(failure, operation="scenario").model_dump(
+                mode="json", by_alias=True, exclude_none=True
+            ),
+        )
         for operation, filename, key in (
             (Capture(name="frame"), "frame.png", "capture"),
             (QueryTree(), "ui-tree.json", "tree"),
@@ -546,12 +563,64 @@ class Window:
                 self.artifact_dir / "diagnostics.json",
                 {"passed": False, "error": str(close_failure)},
             )
+            write_json(
+                self.artifact_dir / "error.json",
+                error_record(close_failure, operation="shutdown").model_dump(
+                    mode="json", by_alias=True, exclude_none=True
+                ),
+            )
+        self._write_artifact_manifest()
         self._finished = True
         if close_failure is not None:
             raise close_failure
 
     def close(self) -> None:
         self._finish(None)
+
+    @staticmethod
+    def _artifact_kind(path: Path) -> ArtifactKind:
+        if path.suffix == ".png":
+            return "frame"
+        if path.name.endswith(".png.json"):
+            return "captureMetadata"
+        kinds: dict[str, ArtifactKind] = {
+            "ui-tree.json": "tree",
+            "ui-tree-export.json": "tree",
+            "event-trace.json": "eventTrace",
+            "diagnostics.json": "diagnostics",
+            "diagnostics-runtime.json": "diagnostics",
+            "error.json": "error",
+            "runtime.log": "runtimeLog",
+        }
+        return kinds.get(path.name, "other")
+
+    def _write_artifact_manifest(self) -> None:
+        entries = []
+        for path in sorted(self.artifact_dir.rglob("*")):
+            if not path.is_file() or path.name == "artifact-manifest.json":
+                continue
+            data = path.read_bytes()
+            entries.append(
+                ArtifactEntry(
+                    kind=self._artifact_kind(path),
+                    path=str(path.resolve()),
+                    size=len(data),
+                    sha256=hashlib.sha256(data).hexdigest(),
+                )
+            )
+        manifest = ArtifactManifest(
+            schemaVersion=SCHEMA_VERSION,
+            artifactId=self._artifact_id,
+            fork=self._fork,
+            forkCommit=self._fork_commit,
+            subject=self._subject,
+            fixture=self._fixture,
+            artifacts=tuple(entries),
+        )
+        write_json(
+            self.artifact_dir / "artifact-manifest.json",
+            manifest.model_dump(mode="json", by_alias=True, exclude_none=True),
+        )
 
     def __enter__(self) -> Window:
         return self
@@ -610,9 +679,7 @@ class Locator:
         self.window.wait_for_stable()
         self.resolve()
         operation = PointerAction(event, button, self.selector)
-        result = _mapping(
-            self.window._request(operation.to_command()), f"{event.value} result"
-        )
+        result = self.window._request(operation.to_command())
         self.window.wait_for_stable()
         return ActionResult(event.value, result)
 
@@ -635,7 +702,7 @@ class Locator:
         self.window.wait_for_stable()
         self.resolve()
         operation = KeyInput(key, self.selector, modifiers)
-        result = _mapping(self.window._request(operation.to_command()), "key result")
+        result = self.window._request(operation.to_command())
         self.window.wait_for_stable()
         return ActionResult("key", result)
 
@@ -648,7 +715,7 @@ class Locator:
         self.window._require_input_operation("fill" if operation.replace else "text")
         self.window.wait_for_stable()
         self.resolve()
-        result = _mapping(self.window._request(operation.to_command()), "text result")
+        result = self.window._request(operation.to_command())
         self.window.wait_for_stable()
         return ActionResult("fill" if operation.replace else "text", result)
 
@@ -659,10 +726,7 @@ class Locator:
         self.window._require_input_operation("scroll")
         self.window.wait_for_stable()
         self.resolve()
-        result = _mapping(
-            self.window._request(ScrollAction(clicks, self.selector).to_command()),
-            "scroll result",
-        )
+        result = self.window._request(ScrollAction(clicks, self.selector).to_command())
         self.window.wait_for_stable()
         return ActionResult("scroll", result)
 
@@ -676,11 +740,8 @@ class Locator:
         self.window._require_input_operation("drag")
         self.window.wait_for_stable()
         self.resolve()
-        result = _mapping(
-            self.window._request(
-                DragAction(selector=self.selector, delta_x=dx, delta_y=dy).to_command()
-            ),
-            "drag result",
+        result = self.window._request(
+            DragAction(selector=self.selector, delta_x=dx, delta_y=dy).to_command()
         )
         self.window.wait_for_stable()
         return ActionResult("drag", result)
@@ -694,11 +755,8 @@ class Locator:
         self.window.wait_for_stable()
         self.resolve()
         target.resolve()
-        result = _mapping(
-            self.window._request(
-                DragAndDropAction(self.selector, target.selector).to_command()
-            ),
-            "drag-and-drop result",
+        result = self.window._request(
+            DragAndDropAction(self.selector, target.selector).to_command()
         )
         self.window.wait_for_stable()
         return ActionResult("dragAndDrop", result)

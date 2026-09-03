@@ -4,7 +4,16 @@ set -euo pipefail
 repository_root=$(git rev-parse --show-toplevel)
 cd "$repository_root"
 
+./scripts/generate-schemas --check
 check-jsonschema --check-metaschema schemas/*.schema.json
 check-jsonschema --schemafile schemas/forks.schema.json forks.json
 check-jsonschema --schemafile schemas/adapter.schema.json adapters/*/adapter.json
 check-jsonschema --schemafile schemas/fixture.schema.json fixtures/*.json
+check-jsonschema --schemafile schemas/command.schema.json examples/commands/*.json
+check-jsonschema --schemafile schemas/selector.schema.json examples/selectors/*.json
+check-jsonschema --schemafile schemas/result.schema.json examples/results/*.json
+check-jsonschema --schemafile schemas/event.schema.json examples/events/*.json
+check-jsonschema --schemafile schemas/error.schema.json examples/errors/*.json
+check-jsonschema \
+  --schemafile schemas/artifact-manifest.schema.json \
+  examples/artifact-manifests/*.json

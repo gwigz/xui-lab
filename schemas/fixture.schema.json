@@ -1,20 +1,144 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://xui-lab.local/schemas/fixture.schema.json",
-  "title": "xui-lab deterministic viewer fixture",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["schemaVersion", "id", "agent", "inventory", "avatarNames"],
-  "properties": {
-    "$schema": { "type": "string" },
-    "schemaVersion": { "const": 1 },
-    "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
-    "agent": {
-      "type": "object",
-      "required": ["id", "name"],
-      "properties": { "id": { "type": "string", "format": "uuid" }, "name": { "type": "string" } }
+  "$defs": {
+    "AgentFixtureContract": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "AgentFixtureContract",
+      "type": "object"
     },
-    "inventory": { "type": "array", "items": { "type": "object", "required": ["id", "parentId", "kind", "name"] } },
-    "avatarNames": { "type": "array", "items": { "type": "object", "required": ["id", "displayName", "userName"] } }
-  }
+    "AvatarNameFixtureContract": {
+      "additionalProperties": false,
+      "properties": {
+        "displayName": {
+          "minLength": 1,
+          "title": "Displayname",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "userName": {
+          "minLength": 1,
+          "title": "Username",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "displayName",
+        "userName"
+      ],
+      "title": "AvatarNameFixtureContract",
+      "type": "object"
+    },
+    "InventoryEntryContract": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "root",
+            "folder",
+            "notecard"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "parentId": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "title": "Parentid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "parentId",
+        "kind",
+        "name"
+      ],
+      "title": "InventoryEntryContract",
+      "type": "object"
+    }
+  },
+  "$id": "https://xui-lab.local/schemas/fixture.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "$Schema"
+    },
+    "agent": {
+      "$ref": "#/$defs/AgentFixtureContract"
+    },
+    "avatarNames": {
+      "items": {
+        "$ref": "#/$defs/AvatarNameFixtureContract"
+      },
+      "title": "Avatarnames",
+      "type": "array"
+    },
+    "id": {
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9_-]*$",
+      "title": "Id",
+      "type": "string"
+    },
+    "inventory": {
+      "items": {
+        "$ref": "#/$defs/InventoryEntryContract"
+      },
+      "minItems": 1,
+      "title": "Inventory",
+      "type": "array"
+    },
+    "schemaVersion": {
+      "const": 1,
+      "title": "Schemaversion",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "id",
+    "agent",
+    "inventory",
+    "avatarNames"
+  ],
+  "title": "xui-lab deterministic viewer fixture",
+  "type": "object"
 }

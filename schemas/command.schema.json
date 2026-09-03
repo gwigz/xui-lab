@@ -1,0 +1,1442 @@
+{
+  "$defs": {
+    "AgentFixtureContract": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "AgentFixtureContract",
+      "type": "object"
+    },
+    "AvatarNameFixtureContract": {
+      "additionalProperties": false,
+      "properties": {
+        "displayName": {
+          "minLength": 1,
+          "title": "Displayname",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "userName": {
+          "minLength": 1,
+          "title": "Username",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "displayName",
+        "userName"
+      ],
+      "title": "AvatarNameFixtureContract",
+      "type": "object"
+    },
+    "CaptureCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "highlight": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WirePathSelector"
+            },
+            {
+              "$ref": "#/$defs/WireModelIdSelector"
+            },
+            {
+              "$ref": "#/$defs/WireControlIdSelector"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Highlight"
+        },
+        "includeOverlay": {
+          "title": "Includeoverlay",
+          "type": "boolean"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "op": {
+          "const": "capture",
+          "title": "Op",
+          "type": "string"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "op",
+        "includeOverlay"
+      ],
+      "title": "CaptureCommand",
+      "type": "object"
+    },
+    "DiagnosticsCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "diagnostics",
+          "title": "Op",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "op"
+      ],
+      "title": "DiagnosticsCommand",
+      "type": "object"
+    },
+    "DragAndDropInputCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "const": "dragAndDrop",
+          "title": "Event",
+          "type": "string"
+        },
+        "op": {
+          "const": "input",
+          "title": "Op",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WirePathSelector"
+            },
+            {
+              "$ref": "#/$defs/WireModelIdSelector"
+            },
+            {
+              "$ref": "#/$defs/WireControlIdSelector"
+            }
+          ],
+          "title": "Source"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WirePathSelector"
+            },
+            {
+              "$ref": "#/$defs/WireModelIdSelector"
+            },
+            {
+              "$ref": "#/$defs/WireControlIdSelector"
+            }
+          ],
+          "title": "Target"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "op",
+        "event",
+        "source",
+        "target"
+      ],
+      "title": "DragAndDropInputCommand",
+      "type": "object"
+    },
+    "DragInputCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "controlId": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Controlid"
+        },
+        "deltaX": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deltax"
+        },
+        "deltaY": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Deltay"
+        },
+        "endX": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Endx"
+        },
+        "endY": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Endy"
+        },
+        "event": {
+          "const": "drag",
+          "title": "Event",
+          "type": "string"
+        },
+        "modelId": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Modelid"
+        },
+        "op": {
+          "const": "input",
+          "title": "Op",
+          "type": "string"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "^/",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        },
+        "startX": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Startx"
+        },
+        "startY": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Starty"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "op",
+        "event"
+      ],
+      "title": "DragInputCommand",
+      "type": "object"
+    },
+    "FixtureContract": {
+      "additionalProperties": false,
+      "properties": {
+        "$schema": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "$Schema"
+        },
+        "agent": {
+          "$ref": "#/$defs/AgentFixtureContract"
+        },
+        "avatarNames": {
+          "items": {
+            "$ref": "#/$defs/AvatarNameFixtureContract"
+          },
+          "title": "Avatarnames",
+          "type": "array"
+        },
+        "id": {
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "inventory": {
+          "items": {
+            "$ref": "#/$defs/InventoryEntryContract"
+          },
+          "minItems": 1,
+          "title": "Inventory",
+          "type": "array"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "id",
+        "agent",
+        "inventory",
+        "avatarNames"
+      ],
+      "title": "FixtureContract",
+      "type": "object"
+    },
+    "FramesCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "minimum": 0,
+          "title": "Count",
+          "type": "integer"
+        },
+        "op": {
+          "const": "frames",
+          "title": "Op",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "op",
+        "count"
+      ],
+      "title": "FramesCommand",
+      "type": "object"
+    },
+    "HighlightCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "highlight",
+          "title": "Op",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WirePathSelector"
+            },
+            {
+              "$ref": "#/$defs/WireModelIdSelector"
+            },
+            {
+              "$ref": "#/$defs/WireControlIdSelector"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Target"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "op",
+        "target"
+      ],
+      "title": "HighlightCommand",
+      "type": "object"
+    },
+    "InitializeCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "artifactDir": {
+          "minLength": 1,
+          "title": "Artifactdir",
+          "type": "string"
+        },
+        "fixture": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FixtureContract"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fork": {
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Fork",
+          "type": "string"
+        },
+        "forkCommit": {
+          "minLength": 1,
+          "title": "Forkcommit",
+          "type": "string"
+        },
+        "op": {
+          "const": "initialize",
+          "title": "Op",
+          "type": "string"
+        },
+        "resourceRoot": {
+          "minLength": 1,
+          "title": "Resourceroot",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        },
+        "subject": {
+          "minLength": 1,
+          "title": "Subject",
+          "type": "string"
+        },
+        "viewport": {
+          "$ref": "#/$defs/ViewportContract"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "op",
+        "fork",
+        "forkCommit",
+        "resourceRoot",
+        "subject",
+        "viewport",
+        "fixture",
+        "artifactDir"
+      ],
+      "title": "InitializeCommand",
+      "type": "object"
+    },
+    "InstallCapabilitiesCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "capabilities": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Capabilities",
+          "type": "array"
+        },
+        "op": {
+          "const": "installCapabilities",
+          "title": "Op",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "op",
+        "capabilities"
+      ],
+      "title": "InstallCapabilitiesCommand",
+      "type": "object"
+    },
+    "InventoryEntryContract": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "root",
+            "folder",
+            "notecard"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "parentId": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "title": "Parentid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "parentId",
+        "kind",
+        "name"
+      ],
+      "title": "InventoryEntryContract",
+      "type": "object"
+    },
+    "InventoryQueryCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "inventory",
+          "title": "Kind",
+          "type": "string"
+        },
+        "op": {
+          "const": "query",
+          "title": "Op",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "op",
+        "kind"
+      ],
+      "title": "InventoryQueryCommand",
+      "type": "object"
+    },
+    "KeyInputCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "controlId": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Controlid"
+        },
+        "event": {
+          "const": "key",
+          "title": "Event",
+          "type": "string"
+        },
+        "key": {
+          "minLength": 1,
+          "title": "Key",
+          "type": "string"
+        },
+        "modelId": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Modelid"
+        },
+        "modifiers": {
+          "items": {
+            "enum": [
+              "shift",
+              "control",
+              "alt"
+            ],
+            "type": "string"
+          },
+          "title": "Modifiers",
+          "type": "array"
+        },
+        "op": {
+          "const": "input",
+          "title": "Op",
+          "type": "string"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "^/",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "op",
+        "event",
+        "key",
+        "modifiers"
+      ],
+      "title": "KeyInputCommand",
+      "type": "object"
+    },
+    "MenusQueryCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "menus",
+          "title": "Kind",
+          "type": "string"
+        },
+        "op": {
+          "const": "query",
+          "title": "Op",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "op",
+        "kind"
+      ],
+      "title": "MenusQueryCommand",
+      "type": "object"
+    },
+    "PickCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "pick",
+          "title": "Op",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        },
+        "x": {
+          "title": "X",
+          "type": "integer"
+        },
+        "y": {
+          "title": "Y",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "op",
+        "x",
+        "y"
+      ],
+      "title": "PickCommand",
+      "type": "object"
+    },
+    "PointerInputCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "button": {
+          "enum": [
+            "left",
+            "right"
+          ],
+          "title": "Button",
+          "type": "string"
+        },
+        "controlId": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Controlid"
+        },
+        "event": {
+          "enum": [
+            "click",
+            "doubleClick"
+          ],
+          "title": "Event",
+          "type": "string"
+        },
+        "modelId": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Modelid"
+        },
+        "op": {
+          "const": "input",
+          "title": "Op",
+          "type": "string"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "^/",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        },
+        "x": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "X"
+        },
+        "y": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Y"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "op",
+        "event",
+        "button"
+      ],
+      "title": "PointerInputCommand",
+      "type": "object"
+    },
+    "ReloadCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "reload",
+          "title": "Op",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "op"
+      ],
+      "title": "ReloadCommand",
+      "type": "object"
+    },
+    "ResizeSubjectCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "exclusiveMinimum": 0,
+          "title": "Height",
+          "type": "integer"
+        },
+        "op": {
+          "const": "resizeSubject",
+          "title": "Op",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "title": "Width",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "op",
+        "width",
+        "height"
+      ],
+      "title": "ResizeSubjectCommand",
+      "type": "object"
+    },
+    "ResizeViewportCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "exclusiveMinimum": 0,
+          "title": "Height",
+          "type": "integer"
+        },
+        "op": {
+          "const": "resizeViewport",
+          "title": "Op",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        },
+        "uiScale": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uiscale"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "title": "Width",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "op",
+        "width",
+        "height"
+      ],
+      "title": "ResizeViewportCommand",
+      "type": "object"
+    },
+    "ScrollInputCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "clicks": {
+          "title": "Clicks",
+          "type": "integer"
+        },
+        "controlId": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Controlid"
+        },
+        "event": {
+          "const": "scroll",
+          "title": "Event",
+          "type": "string"
+        },
+        "modelId": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Modelid"
+        },
+        "op": {
+          "const": "input",
+          "title": "Op",
+          "type": "string"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "^/",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        },
+        "x": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "X"
+        },
+        "y": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Y"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "op",
+        "event",
+        "clicks"
+      ],
+      "title": "ScrollInputCommand",
+      "type": "object"
+    },
+    "ShutdownCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "op": {
+          "const": "shutdown",
+          "title": "Op",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "op"
+      ],
+      "title": "ShutdownCommand",
+      "type": "object"
+    },
+    "StableCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "consecutiveFrames": {
+          "exclusiveMinimum": 0,
+          "title": "Consecutiveframes",
+          "type": "integer"
+        },
+        "maximumFrames": {
+          "exclusiveMinimum": 0,
+          "title": "Maximumframes",
+          "type": "integer"
+        },
+        "op": {
+          "const": "stable",
+          "title": "Op",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "op",
+        "consecutiveFrames",
+        "maximumFrames"
+      ],
+      "title": "StableCommand",
+      "type": "object"
+    },
+    "TextInputCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "controlId": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Controlid"
+        },
+        "event": {
+          "enum": [
+            "fill",
+            "text"
+          ],
+          "title": "Event",
+          "type": "string"
+        },
+        "modelId": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Modelid"
+        },
+        "op": {
+          "const": "input",
+          "title": "Op",
+          "type": "string"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "^/",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "op",
+        "event",
+        "text"
+      ],
+      "title": "TextInputCommand",
+      "type": "object"
+    },
+    "TreeQueryCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "tree",
+          "title": "Kind",
+          "type": "string"
+        },
+        "op": {
+          "const": "query",
+          "title": "Op",
+          "type": "string"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "^/",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "op",
+        "kind"
+      ],
+      "title": "TreeQueryCommand",
+      "type": "object"
+    },
+    "ValueQueryCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "value",
+          "title": "Kind",
+          "type": "string"
+        },
+        "op": {
+          "const": "query",
+          "title": "Op",
+          "type": "string"
+        },
+        "path": {
+          "minLength": 1,
+          "pattern": "^/",
+          "title": "Path",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "op",
+        "kind",
+        "path"
+      ],
+      "title": "ValueQueryCommand",
+      "type": "object"
+    },
+    "ViewportContract": {
+      "additionalProperties": false,
+      "properties": {
+        "height": {
+          "exclusiveMinimum": 0,
+          "title": "Height",
+          "type": "integer"
+        },
+        "uiScale": {
+          "exclusiveMinimum": 0,
+          "title": "Uiscale",
+          "type": "number"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "title": "Width",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "width",
+        "height",
+        "uiScale"
+      ],
+      "title": "ViewportContract",
+      "type": "object"
+    },
+    "WireControlIdSelector": {
+      "additionalProperties": false,
+      "properties": {
+        "controlId": {
+          "minLength": 1,
+          "title": "Controlid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "controlId"
+      ],
+      "title": "WireControlIdSelector",
+      "type": "object"
+    },
+    "WireModelIdSelector": {
+      "additionalProperties": false,
+      "properties": {
+        "modelId": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "title": "Modelid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "modelId"
+      ],
+      "title": "WireModelIdSelector",
+      "type": "object"
+    },
+    "WirePathSelector": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "minLength": 1,
+          "pattern": "^/",
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "WirePathSelector",
+      "type": "object"
+    }
+  },
+  "$id": "https://xui-lab.local/schemas/command.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "anyOf": [
+    {
+      "$ref": "#/$defs/InitializeCommand"
+    },
+    {
+      "$ref": "#/$defs/InstallCapabilitiesCommand"
+    },
+    {
+      "$ref": "#/$defs/FramesCommand"
+    },
+    {
+      "$ref": "#/$defs/StableCommand"
+    },
+    {
+      "$ref": "#/$defs/ResizeViewportCommand"
+    },
+    {
+      "$ref": "#/$defs/ResizeSubjectCommand"
+    },
+    {
+      "$ref": "#/$defs/ReloadCommand"
+    },
+    {
+      "discriminator": {
+        "mapping": {
+          "inventory": "#/$defs/InventoryQueryCommand",
+          "menus": "#/$defs/MenusQueryCommand",
+          "tree": "#/$defs/TreeQueryCommand",
+          "value": "#/$defs/ValueQueryCommand"
+        },
+        "propertyName": "kind"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/TreeQueryCommand"
+        },
+        {
+          "$ref": "#/$defs/MenusQueryCommand"
+        },
+        {
+          "$ref": "#/$defs/InventoryQueryCommand"
+        },
+        {
+          "$ref": "#/$defs/ValueQueryCommand"
+        }
+      ]
+    },
+    {
+      "discriminator": {
+        "mapping": {
+          "click": "#/$defs/PointerInputCommand",
+          "doubleClick": "#/$defs/PointerInputCommand",
+          "drag": "#/$defs/DragInputCommand",
+          "dragAndDrop": "#/$defs/DragAndDropInputCommand",
+          "fill": "#/$defs/TextInputCommand",
+          "key": "#/$defs/KeyInputCommand",
+          "scroll": "#/$defs/ScrollInputCommand",
+          "text": "#/$defs/TextInputCommand"
+        },
+        "propertyName": "event"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/PointerInputCommand"
+        },
+        {
+          "$ref": "#/$defs/ScrollInputCommand"
+        },
+        {
+          "$ref": "#/$defs/DragInputCommand"
+        },
+        {
+          "$ref": "#/$defs/DragAndDropInputCommand"
+        },
+        {
+          "$ref": "#/$defs/KeyInputCommand"
+        },
+        {
+          "$ref": "#/$defs/TextInputCommand"
+        }
+      ]
+    },
+    {
+      "$ref": "#/$defs/PickCommand"
+    },
+    {
+      "$ref": "#/$defs/HighlightCommand"
+    },
+    {
+      "$ref": "#/$defs/DiagnosticsCommand"
+    },
+    {
+      "$ref": "#/$defs/CaptureCommand"
+    },
+    {
+      "$ref": "#/$defs/ShutdownCommand"
+    }
+  ],
+  "title": "xui-lab runtime command"
+}

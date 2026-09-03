@@ -1,0 +1,173 @@
+{
+  "$defs": {
+    "ArtifactEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "const": "artifact",
+          "title": "Event",
+          "type": "string"
+        },
+        "operation": {
+          "minLength": 1,
+          "title": "Operation",
+          "type": "string"
+        },
+        "path": {
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "requestId": {
+          "minLength": 1,
+          "title": "Requestid",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        },
+        "type": {
+          "const": "event",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "type",
+        "event",
+        "requestId",
+        "operation",
+        "path"
+      ],
+      "title": "ArtifactEvent",
+      "type": "object"
+    },
+    "ProgressEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "completed": {
+          "minimum": 0,
+          "title": "Completed",
+          "type": "integer"
+        },
+        "event": {
+          "const": "progress",
+          "title": "Event",
+          "type": "string"
+        },
+        "operation": {
+          "minLength": 1,
+          "title": "Operation",
+          "type": "string"
+        },
+        "requestId": {
+          "minLength": 1,
+          "title": "Requestid",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        },
+        "total": {
+          "exclusiveMinimum": 0,
+          "title": "Total",
+          "type": "integer"
+        },
+        "type": {
+          "const": "event",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "type",
+        "event",
+        "requestId",
+        "operation",
+        "completed",
+        "total"
+      ],
+      "title": "ProgressEvent",
+      "type": "object"
+    },
+    "RuntimeExchangeEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "additionalProperties": true,
+          "title": "Command",
+          "type": "object"
+        },
+        "event": {
+          "const": "runtimeExchange",
+          "title": "Event",
+          "type": "string"
+        },
+        "operation": {
+          "minLength": 1,
+          "title": "Operation",
+          "type": "string"
+        },
+        "response": {
+          "additionalProperties": true,
+          "title": "Response",
+          "type": "object"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        },
+        "sequence": {
+          "minimum": 0,
+          "title": "Sequence",
+          "type": "integer"
+        },
+        "type": {
+          "const": "event",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "type",
+        "event",
+        "sequence",
+        "operation",
+        "command",
+        "response"
+      ],
+      "title": "RuntimeExchangeEvent",
+      "type": "object"
+    }
+  },
+  "$id": "https://xui-lab.local/schemas/event.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "discriminator": {
+    "mapping": {
+      "artifact": "#/$defs/ArtifactEvent",
+      "progress": "#/$defs/ProgressEvent",
+      "runtimeExchange": "#/$defs/RuntimeExchangeEvent"
+    },
+    "propertyName": "event"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/ProgressEvent"
+    },
+    {
+      "$ref": "#/$defs/ArtifactEvent"
+    },
+    {
+      "$ref": "#/$defs/RuntimeExchangeEvent"
+    }
+  ],
+  "title": "xui-lab event record"
+}

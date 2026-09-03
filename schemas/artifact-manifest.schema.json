@@ -1,0 +1,122 @@
+{
+  "$defs": {
+    "ArtifactEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "frame",
+            "captureMetadata",
+            "tree",
+            "eventTrace",
+            "diagnostics",
+            "error",
+            "runtimeLog",
+            "other"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "path": {
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size": {
+          "minimum": 0,
+          "title": "Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "path",
+        "size",
+        "sha256"
+      ],
+      "title": "ArtifactEntry",
+      "type": "object"
+    }
+  },
+  "$id": "https://xui-lab.local/schemas/artifact-manifest.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "artifactId": {
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9_-]*$",
+      "title": "Artifactid",
+      "type": "string"
+    },
+    "artifacts": {
+      "items": {
+        "$ref": "#/$defs/ArtifactEntry"
+      },
+      "title": "Artifacts",
+      "type": "array"
+    },
+    "fixture": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fixture"
+    },
+    "fork": {
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9_-]*$",
+      "title": "Fork",
+      "type": "string"
+    },
+    "forkCommit": {
+      "minLength": 1,
+      "title": "Forkcommit",
+      "type": "string"
+    },
+    "requestId": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Requestid"
+    },
+    "schemaVersion": {
+      "const": 1,
+      "title": "Schemaversion",
+      "type": "integer"
+    },
+    "subject": {
+      "minLength": 1,
+      "title": "Subject",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "artifactId",
+    "fork",
+    "forkCommit",
+    "subject",
+    "artifacts"
+  ],
+  "title": "xui-lab artifact manifest",
+  "type": "object"
+}

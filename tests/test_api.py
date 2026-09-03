@@ -7,10 +7,12 @@ import textwrap
 import threading
 import unittest
 from pathlib import Path
-from urllib.request import urlopen
+from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 
 from xui_lab.api import Lab
-from xui_lab.domain import Capability, Viewport, parse_manifest
+from xui_lab.contracts import ArtifactManifest
+from xui_lab.domain import Capability, Viewport
 from xui_lab.errors import AssertionFailure, InputError, RuntimeFailure
 from xui_lab.interactive import (
     InspectorHandler,
@@ -19,7 +21,7 @@ from xui_lab.interactive import (
     InteractiveSession,
     recorded_python,
 )
-from xui_lab.io import read_json
+from xui_lab.io import parse_manifest, read_json
 from xui_lab.scenarios import load_scenario
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -232,6 +234,21 @@ class PlaywrightApiTests(unittest.TestCase):
             ).is_file()
         )
 
+    def test_completed_run_writes_a_valid_artifact_manifest(self) -> None:
+        with self.open():
+            pass
+
+        manifest_path = (
+            self.directory
+            / "artifacts"
+            / "python_api_test_widgets"
+            / "artifact-manifest.json"
+        )
+        manifest = ArtifactManifest.model_validate(read_json(manifest_path))
+        self.assertEqual("python_api_test_widgets", manifest.artifact_id)
+        self.assertEqual("alchemy", manifest.fork)
+        self.assertIn("eventTrace", {entry.kind for entry in manifest.artifacts})
+
     def test_supported_pointer_actions_use_the_same_input_operation(self) -> None:
         with self.open() as window:
             locator = window.get_by_path(CHECKBOX_PATH)
@@ -375,6 +392,9 @@ class PlaywrightApiTests(unittest.TestCase):
         self.assertIn("resizeViewport", operations)
         self.assertIn("resizeSubject", operations)
         self.assertNotIn("resize", operations)
+        self.assertTrue(
+            all(command["schemaVersion"] == 1 for command in self.commands())
+        )
 
     def test_recorded_actions_render_as_editable_locator_calls(self) -> None:
         self.assertEqual(
@@ -588,7 +608,7 @@ class PlaywrightApiTests(unittest.TestCase):
         session.action(
             {"action": "fill", "controlId": "line-editor", "text": "Known text"}
         )
-        with self.assertRaisesRegex(InputError, "modifiers must contain only"):
+        with self.assertRaisesRegex(InputError, "XUI Lab contract"):
             session.action(
                 {
                     "action": "press",
@@ -656,6 +676,42 @@ class PlaywrightApiTests(unittest.TestCase):
         finally:
             thread.join(timeout=2)
             server.server_close()
+
+    def test_inspector_translates_validation_failures_to_error_records(self) -> None:
+        session = object.__new__(InteractiveSession)
+        server = InspectorServer(("127.0.0.1", 0), InspectorHandler)
+        server.session = session
+        thread = threading.Thread(target=server.handle_request)
+        thread.start()
+        try:
+            host, port = server.server_address
+            request = Request(
+                f"http://{host}:{port}/api/action",
+                data=json.dumps(
+                    {"action": "pick", "x": "not-an-integer", "y": 20}
+                ).encode(),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with self.assertRaises(HTTPError) as raised:
+                urlopen(request, timeout=2)
+            response = json.loads(raised.exception.read())
+        finally:
+            thread.join(timeout=2)
+            server.server_close()
+
+        self.assertEqual(
+            {
+                "schemaVersion": 1,
+                "type": "error",
+                "code": "invalid_interactive_action",
+                "message": "interactive action violates the XUI Lab contract",
+                "operation": "inspector.action",
+                "retryable": False,
+            },
+            response["error"],
+        )
+        self.assertNotIn("int_type", json.dumps(response))
 
     def test_python_scenario_runs_through_window_and_locator(self) -> None:
         scenario = load_scenario(ROOT, ROOT / "tests" / "scenarios" / "test_floater.py")

@@ -81,7 +81,12 @@ describe("parseActionResponse", () => {
   });
 
   it("turns API failures into errors", () => {
-    expect(() => parseActionResponse({ ok: false, error: "not found" })).toThrow("not found");
+    expect(() =>
+      parseActionResponse({
+        ok: false,
+        error: { code: "invalid_input", message: "not found" },
+      }),
+    ).toThrow("invalid_input: not found");
   });
 });
 

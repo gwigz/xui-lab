@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "type": "event",
+  "event": "progress",
+  "requestId": "request-1",
+  "operation": "capture",
+  "completed": 1,
+  "total": 2
+}

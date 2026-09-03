@@ -1,0 +1,108 @@
+{
+  "$defs": {
+    "ControlIdSelectorContract": {
+      "additionalProperties": false,
+      "properties": {
+        "controlId": {
+          "minLength": 1,
+          "title": "Controlid",
+          "type": "string"
+        },
+        "kind": {
+          "const": "controlId",
+          "title": "Kind",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "controlId"
+      ],
+      "title": "ControlIdSelectorContract",
+      "type": "object"
+    },
+    "ModelIdSelectorContract": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "modelId",
+          "title": "Kind",
+          "type": "string"
+        },
+        "modelId": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "title": "Modelid",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "modelId"
+      ],
+      "title": "ModelIdSelectorContract",
+      "type": "object"
+    },
+    "PathSelectorContract": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "path",
+          "title": "Kind",
+          "type": "string"
+        },
+        "path": {
+          "minLength": 1,
+          "pattern": "^/",
+          "title": "Path",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "path"
+      ],
+      "title": "PathSelectorContract",
+      "type": "object"
+    }
+  },
+  "$id": "https://xui-lab.local/schemas/selector.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "discriminator": {
+    "mapping": {
+      "controlId": "#/$defs/ControlIdSelectorContract",
+      "modelId": "#/$defs/ModelIdSelectorContract",
+      "path": "#/$defs/PathSelectorContract"
+    },
+    "propertyName": "kind"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/PathSelectorContract"
+    },
+    {
+      "$ref": "#/$defs/ModelIdSelectorContract"
+    },
+    {
+      "$ref": "#/$defs/ControlIdSelectorContract"
+    }
+  ],
+  "title": "xui-lab selector"
+}

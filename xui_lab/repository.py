@@ -5,13 +5,15 @@ from __future__ import annotations
 import configparser
 import json
 import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any
 
-from .domain import Fork, parse_manifest
+from .contracts import parse_adapter, parse_fixture
+from .domain import Fork
 from .errors import InputError, XUILabError
 from .inspector_assets import inspector_assets_problem, inspector_build_instruction
+from .io import parse_manifest
 from .markdown_style import audit_markdown
 from .scenarios import discover_scenarios
 
@@ -44,30 +46,11 @@ class Adapter:
     subjects: dict[str, frozenset[str]]
 
 
-def require_mapping(value: Any, label: str) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        raise CheckError(f"{label} must be an object")
-    return value
-
-
-def require_string(mapping: dict[str, Any], key: str, label: str) -> str:
-    value = mapping.get(key)
-    if not isinstance(value, str) or not value:
-        raise CheckError(f"{label}.{key} must be a non-empty string")
-    return value
-
-
 def relative_path(value: str, label: str) -> Path:
     path = PurePosixPath(value)
     if path.is_absolute() or ".." in path.parts:
         raise CheckError(f"{label} must be a repository-relative path")
     return REPO_ROOT.joinpath(*path.parts)
-
-
-def reject_unknown_keys(mapping: dict[str, Any], allowed: set[str], label: str) -> None:
-    unknown = sorted(set(mapping) - allowed)
-    if unknown:
-        raise CheckError(f"{label} contains unknown keys: {', '.join(unknown)}")
 
 
 def load_manifest() -> tuple[str, list[Fork]]:
@@ -147,75 +130,37 @@ def check_agent_guidance() -> None:
         )
 
 
+def check_contract_schemas() -> None:
+    result = subprocess.run(
+        [str(REPO_ROOT / "scripts" / "check-schemas")],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode:
+        detail = result.stdout.strip() or result.stderr.strip()
+        raise CheckError(f"contract schema check failed: {detail}")
+
+
 def load_adapter(fork: Fork) -> Adapter:
     path = fork.adapter / "adapter.json"
     try:
-        data = require_mapping(json.loads(path.read_text()), f"adapter {fork.id}")
-    except (OSError, json.JSONDecodeError) as error:
+        contract = parse_adapter(json.loads(path.read_text()))
+    except (OSError, json.JSONDecodeError, InputError) as error:
         raise CheckError(f"cannot read {path}: {error}") from error
-    allowed = {
-        "$schema",
-        "schemaVersion",
-        "fork",
-        "productionTarget",
-        "capabilities",
-        "subjects",
-    }
-    reject_unknown_keys(data, allowed, f"adapter {fork.id}")
-    if data.get("schemaVersion") != 1:
-        raise CheckError(f"adapter {fork.id}.schemaVersion must be 1")
-    if data.get("fork") != fork.id:
+    if contract.fork != fork.id:
         raise CheckError(f"adapter {fork.id}.fork must be {fork.id}")
-    require_string(data, "productionTarget", f"adapter {fork.id}")
-    capabilities_value = data.get("capabilities")
-    if not isinstance(capabilities_value, list) or any(
-        not isinstance(value, str) or not value for value in capabilities_value
-    ):
-        raise CheckError(f"adapter {fork.id}.capabilities must be an array of strings")
-    capabilities = frozenset(capabilities_value)
-    if len(capabilities) != len(capabilities_value):
-        raise CheckError(f"adapter {fork.id}.capabilities contains duplicates")
-    subjects_value = require_mapping(
-        data.get("subjects"), f"adapter {fork.id}.subjects"
+    return Adapter(
+        frozenset(contract.capabilities),
+        {name: frozenset(required) for name, required in contract.subjects.items()},
     )
-    subjects: dict[str, frozenset[str]] = {}
-    for subject, required_value in subjects_value.items():
-        if not isinstance(subject, str) or not subject:
-            raise CheckError(f"adapter {fork.id}.subjects contains an invalid name")
-        if not isinstance(required_value, list) or any(
-            not isinstance(value, str) or not value for value in required_value
-        ):
-            raise CheckError(
-                f"adapter {fork.id}.subjects.{subject} must be an array of strings"
-            )
-        required = frozenset(required_value)
-        unknown = sorted(required - capabilities)
-        if unknown:
-            raise CheckError(
-                f"adapter {fork.id}.subjects.{subject} uses unknown capabilities: "
-                f"{', '.join(unknown)}"
-            )
-        subjects[subject] = required
-    return Adapter(capabilities, subjects)
 
 
 def check_fixture(path: Path) -> None:
     try:
-        data = require_mapping(json.loads(path.read_text()), str(path))
-    except (OSError, json.JSONDecodeError) as error:
+        parse_fixture(json.loads(path.read_text()))
+    except (OSError, json.JSONDecodeError, InputError) as error:
         raise CheckError(f"cannot read fixture {path}: {error}") from error
-    if data.get("schemaVersion") != 1:
-        raise CheckError(f"{path}.schemaVersion must be 1")
-    inventory = data.get("inventory")
-    if not isinstance(inventory, list):
-        raise CheckError(f"{path}.inventory must be an array")
-    identifiers: set[str] = set()
-    for index, entry_value in enumerate(inventory):
-        entry = require_mapping(entry_value, f"{path}.inventory[{index}]")
-        identifier = require_string(entry, "id", f"{path}.inventory[{index}]")
-        if identifier in identifiers:
-            raise CheckError(f"{path} contains duplicate inventory id: {identifier}")
-        identifiers.add(identifier)
 
 
 def check_scenarios(adapters: dict[str, Adapter]) -> None:
@@ -292,6 +237,7 @@ def check_repository(viewer_sources: list[str]) -> str:
     submodule_paths = load_submodule_paths()
     check_spec()
     check_agent_guidance()
+    check_contract_schemas()
     adapters: dict[str, Adapter] = {}
     for fork in forks:
         check_fork(

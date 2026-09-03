@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "artifactId": "run-1",
+  "fork": "alchemy",
+  "forkCommit": "0123456789abcdef0123456789abcdef01234567",
+  "subject": "test_widgets",
+  "requestId": "request-1",
+  "artifacts": [
+    {
+      "kind": "runtimeLog",
+      "path": "/tmp/xui-lab/run-1/runtime.log",
+      "size": 0,
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  ]
+}

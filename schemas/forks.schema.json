@@ -1,41 +1,33 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://xui-lab.local/schemas/forks.schema.json",
-  "title": "xui-lab viewer fork manifest",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["schemaVersion", "defaultFork", "forks"],
-  "properties": {
-    "$schema": {
-      "type": "string"
-    },
-    "schemaVersion": {
-      "const": 1
-    },
-    "defaultFork": {
-      "$ref": "#/$defs/id"
-    },
-    "forks": {
-      "type": "array",
-      "minItems": 1,
-      "items": {
-        "$ref": "#/$defs/fork"
-      }
-    }
-  },
   "$defs": {
-    "id": {
-      "type": "string",
-      "pattern": "^[a-z][a-z0-9_-]*$"
-    },
-    "relativePath": {
-      "type": "string",
-      "minLength": 1,
-      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"
-    },
-    "fork": {
-      "type": "object",
+    "ForkContract": {
       "additionalProperties": false,
+      "properties": {
+        "adapter": {
+          "minLength": 1,
+          "title": "Adapter",
+          "type": "string"
+        },
+        "displayName": {
+          "minLength": 1,
+          "title": "Displayname",
+          "type": "string"
+        },
+        "id": {
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "resourceRoot": {
+          "minLength": 1,
+          "title": "Resourceroot",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/ForkSourceContract"
+        }
+      },
       "required": [
         "id",
         "displayName",
@@ -43,34 +35,72 @@
         "adapter",
         "resourceRoot"
       ],
+      "title": "ForkContract",
+      "type": "object"
+    },
+    "ForkSourceContract": {
+      "additionalProperties": false,
       "properties": {
-        "id": {
-          "$ref": "#/$defs/id"
+        "path": {
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
         },
-        "displayName": {
-          "type": "string",
-          "minLength": 1
-        },
-        "source": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["type", "path"],
-          "properties": {
-            "type": {
-              "const": "submodule"
-            },
-            "path": {
-              "$ref": "#/$defs/relativePath"
-            }
-          }
-        },
-        "adapter": {
-          "$ref": "#/$defs/relativePath"
-        },
-        "resourceRoot": {
-          "$ref": "#/$defs/relativePath"
+        "type": {
+          "const": "submodule",
+          "title": "Type",
+          "type": "string"
         }
-      }
+      },
+      "required": [
+        "type",
+        "path"
+      ],
+      "title": "ForkSourceContract",
+      "type": "object"
     }
-  }
+  },
+  "$id": "https://xui-lab.local/schemas/forks.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "$Schema"
+    },
+    "defaultFork": {
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9_-]*$",
+      "title": "Defaultfork",
+      "type": "string"
+    },
+    "forks": {
+      "items": {
+        "$ref": "#/$defs/ForkContract"
+      },
+      "minItems": 1,
+      "title": "Forks",
+      "type": "array"
+    },
+    "schemaVersion": {
+      "const": 1,
+      "title": "Schemaversion",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "defaultFork",
+    "forks"
+  ],
+  "title": "xui-lab viewer fork manifest",
+  "type": "object"
 }

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "type": "result",
+  "requestId": "request-1",
+  "operation": "tree",
+  "data": {
+    "path": "/root"
+  }
+}

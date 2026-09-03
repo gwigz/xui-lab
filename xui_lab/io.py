@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import json
 import subprocess
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
-from .domain import Fork, ForkId, Manifest
+from .contracts import parse_fork_manifest
+from .domain import Fork, ForkId, ForkSource, Manifest
 from .errors import InputError
 
 
@@ -25,6 +26,21 @@ def write_json(path: Path, value: Any) -> None:
     path.write_text(
         json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
+
+
+def parse_manifest(root: Path, raw: Any) -> Manifest:
+    contract = parse_fork_manifest(raw)
+    forks = {
+        ForkId(entry.id): Fork(
+            id=ForkId(entry.id),
+            display_name=entry.display_name,
+            source=ForkSource(root.joinpath(*PurePosixPath(entry.source.path).parts)),
+            adapter=root.joinpath(*PurePosixPath(entry.adapter).parts),
+            resource_root=PurePosixPath(entry.resource_root),
+        )
+        for entry in contract.forks
+    }
+    return Manifest(ForkId(contract.default_fork), forks)
 
 
 def parse_source_overrides(values: list[str], manifest: Manifest) -> dict[ForkId, Path]:

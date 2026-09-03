@@ -8,9 +8,9 @@ import unittest
 from pathlib import Path
 
 from xui_lab.api import Lab, artifact_directory
-from xui_lab.domain import Capability, Viewport, parse_manifest
+from xui_lab.domain import Capability, Viewport
 from xui_lab.errors import InputError, RuntimeFailure
-from xui_lab.io import read_json
+from xui_lab.io import parse_manifest, read_json
 from xui_lab.protocol import RuntimeProcess
 from xui_lab.scenarios import Scenario, discover_scenarios, load_scenario
 
@@ -152,7 +152,7 @@ class RuntimeProcessTests(unittest.TestCase):
             """,
             )
             with self.assertRaisesRegex(RuntimeFailure, "stalled.*query"):
-                runtime.request({"op": "query"})
+                runtime.request({"op": "query", "kind": "tree"})
 
     def test_request_reports_runtime_exit(self) -> None:
         with tempfile.TemporaryDirectory() as directory_text:
@@ -165,7 +165,7 @@ class RuntimeProcessTests(unittest.TestCase):
             """,
             )
             with self.assertRaisesRegex(RuntimeFailure, "exited with status 7"):
-                runtime.request({"op": "query"})
+                runtime.request({"op": "query", "kind": "tree"})
 
     def test_request_reports_closed_response_stream(self) -> None:
         with tempfile.TemporaryDirectory() as directory_text:
@@ -183,7 +183,7 @@ class RuntimeProcessTests(unittest.TestCase):
             with self.assertRaisesRegex(
                 RuntimeFailure, "closed its response stream.*query"
             ):
-                runtime.request({"op": "query"})
+                runtime.request({"op": "query", "kind": "tree"})
 
     def test_request_reports_invalid_json_response(self) -> None:
         with tempfile.TemporaryDirectory() as directory_text:
@@ -196,7 +196,7 @@ class RuntimeProcessTests(unittest.TestCase):
             """,
             )
             with self.assertRaisesRegex(RuntimeFailure, "invalid response.*JSON"):
-                runtime.request({"op": "query"})
+                runtime.request({"op": "query", "kind": "tree"})
 
     def test_request_reports_invalid_response_shape(self) -> None:
         with tempfile.TemporaryDirectory() as directory_text:
@@ -209,9 +209,9 @@ class RuntimeProcessTests(unittest.TestCase):
             """,
             )
             with self.assertRaisesRegex(
-                RuntimeFailure, "invalid response.*Boolean 'ok'"
+                RuntimeFailure, "invalid response.*XUI Lab contract"
             ):
-                runtime.request({"op": "query"})
+                runtime.request({"op": "query", "kind": "tree"})
 
     def test_shutdown_reports_runtime_that_does_not_exit(self) -> None:
         with tempfile.TemporaryDirectory() as directory_text:

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import urlsplit
 
+from . import contracts
 from .api import Lab, Locator, Window
 from .domain import Capability, Viewport
 from .errors import InputError, RuntimeFailure, XUILabError
@@ -25,7 +26,6 @@ from .scenarios import Scenario
 _ACTIONS_WITHOUT_AUTOMATIC_CAPTURE = frozenset(
     {"capture", "export", "highlight", "pick"}
 )
-_KEY_MODIFIERS = frozenset({"shift", "control", "alt"})
 
 
 def recorded_python(actions: list[dict[str, Any]]) -> list[str]:
@@ -158,16 +158,21 @@ class InteractiveSession:
         }
 
     def action(self, request: dict[str, Any]) -> dict[str, Any]:
-        action = request.get("action")
-        if not isinstance(action, str):
-            raise InputError("interactive action must be a string")
-        result = self._perform_action(action, request)
-        if action not in _ACTIONS_WITHOUT_AUTOMATIC_CAPTURE:
-            self._capture(action)
+        action = contracts.parse_interactive_action({"schemaVersion": 1, **request})
+        result = self._perform_action(action)
+        if action.action not in _ACTIONS_WITHOUT_AUTOMATIC_CAPTURE:
+            self._capture(action.action)
         return result
 
-    def _perform_action(self, action: str, request: dict[str, Any]) -> dict[str, Any]:
-        if action == "reload":
+    def _perform_action(self, request: contracts.InteractiveAction) -> dict[str, Any]:
+        if isinstance(request, contracts.SimpleInteractiveAction):
+            if request.action == "capture":
+                return self._capture("manual")
+            if request.action == "export":
+                tree = self.window.query_tree()
+                path = self.window.artifact_dir / "ui-tree-export.json"
+                write_json(path, tree)
+                return {"path": str(path)}
             before = self.window.runtime.pid
             result = self.window.reload()
             return {
@@ -175,123 +180,66 @@ class InteractiveSession:
                 "processIdBefore": before,
                 "processIdAfter": self.window.runtime.pid,
             }
-        if action == "highlight":
+        if isinstance(request, contracts.HighlightInteractiveAction):
             locator = self._optional_locator(request)
             return self.window.highlight(locator)
-        if action == "pick":
-            x = request.get("x")
-            y = request.get("y")
-            if (
-                not isinstance(x, int)
-                or isinstance(x, bool)
-                or not isinstance(y, int)
-                or isinstance(y, bool)
-            ):
-                raise InputError("pick coordinates must be integers")
-            control = self.window.pick(x, y)
+        if isinstance(request, contracts.PickInteractiveAction):
+            control = self.window.pick(request.x, request.y)
             self.window.highlight(self.window.locator(control.selector))
             return control.info
-        if action == "resizeViewport":
-            width = request.get("width")
-            height = request.get("height")
-            scale = request.get("uiScale")
-            if not isinstance(width, int) or not isinstance(height, int):
-                raise InputError("resize width and height must be integers")
-            if not isinstance(scale, (int, float)):
-                raise InputError("resize uiScale must be a number")
-            return self.window.resize_viewport(width, height, ui_scale=float(scale))
-        if action == "resizeSubject":
-            width = request.get("width")
-            height = request.get("height")
-            if not isinstance(width, int) or not isinstance(height, int):
-                raise InputError("subject width and height must be integers")
-            return self.window.resize_subject(width, height)
-        if action == "capture":
-            return self._capture("manual")
-        if action == "export":
-            tree = self.window.query_tree()
-            path = self.window.artifact_dir / "ui-tree-export.json"
-            write_json(path, tree)
-            return {"path": str(path)}
-        if action == "click":
+        if isinstance(request, contracts.ResizeViewportInteractiveAction):
+            return self.window.resize_viewport(
+                request.width, request.height, ui_scale=request.ui_scale
+            )
+        if isinstance(request, contracts.ResizeSubjectInteractiveAction):
+            return self.window.resize_subject(request.width, request.height)
+        if isinstance(request, contracts.LocatorInteractiveAction):
             return self._locator(request).click().data
-        if action == "clickAt":
-            x, y = self._coordinates(request, ("x", "y"))
-            return self.window.click_at(x, y).data
-        if action == "doubleClickAt":
-            x, y = self._coordinates(request, ("x", "y"))
-            return self.window.double_click_at(x, y).data
-        if action == "rightClickAt":
-            x, y = self._coordinates(request, ("x", "y"))
-            return self.window.right_click_at(x, y).data
-        if action == "drag":
-            start_x, start_y, end_x, end_y = self._coordinates(
-                request, ("startX", "startY", "endX", "endY")
-            )
-            return self.window.drag(start_x, start_y, end_x, end_y).data
-        if action == "scrollAt":
-            x, y, clicks = self._coordinates(request, ("x", "y", "clicks"))
-            return self.window.scroll_at(x, y, clicks).data
-        if action == "dragAndDrop":
-            source_control_id = request.get("sourceControlId")
-            target_control_id = request.get("targetControlId")
-            if not isinstance(source_control_id, str) or not source_control_id:
-                raise InputError("sourceControlId must be a non-empty string")
-            if not isinstance(target_control_id, str) or not target_control_id:
-                raise InputError("targetControlId must be a non-empty string")
-            source = self.window.get_by_control_id(source_control_id)
-            target = self.window.get_by_control_id(target_control_id)
+        if isinstance(request, contracts.CoordinateInteractiveAction):
+            if request.action == "doubleClickAt":
+                return self.window.double_click_at(request.x, request.y).data
+            if request.action == "rightClickAt":
+                return self.window.right_click_at(request.x, request.y).data
+            return self.window.click_at(request.x, request.y).data
+        if isinstance(request, contracts.DragInteractiveAction):
+            return self.window.drag(
+                request.start_x, request.start_y, request.end_x, request.end_y
+            ).data
+        if isinstance(request, contracts.ScrollInteractiveAction):
+            return self.window.scroll_at(request.x, request.y, request.clicks).data
+        if isinstance(request, contracts.DragAndDropInteractiveAction):
+            source = self.window.get_by_control_id(request.source_control_id)
+            target = self.window.get_by_control_id(request.target_control_id)
             return source.drag_to(target).data
-        if action == "fill":
-            text = request.get("text")
-            if not isinstance(text, str):
-                raise InputError("fill text must be a string")
-            return self._locator(request).fill(text).data
-        if action == "type":
-            text = request.get("text")
-            if not isinstance(text, str) or not text:
-                raise InputError("text must be a non-empty string")
-            return self._locator(request).type_text(text).data
-        if action == "press":
-            key = request.get("key")
-            if not isinstance(key, str) or not key:
-                raise InputError("key must be a non-empty string")
-            modifiers = request.get("modifiers", [])
-            if not isinstance(modifiers, list) or any(
-                not isinstance(modifier, str) or modifier not in _KEY_MODIFIERS
-                for modifier in modifiers
-            ):
-                raise InputError("modifiers must contain only shift, control, and alt")
-            return self._locator(request).press(key, modifiers=tuple(modifiers)).data
-        if action == "replay":
-            scenario_id = request.get("scenario")
-            scenario = (
-                self.scenarios.get(scenario_id)
-                if isinstance(scenario_id, str)
-                else None
+        if isinstance(request, contracts.TextInteractiveAction):
+            locator = self._locator(request)
+            return (
+                locator.fill(request.text).data
+                if request.action == "fill"
+                else locator.type_text(request.text).data
             )
+        if isinstance(request, contracts.PressInteractiveAction):
+            return (
+                self._locator(request)
+                .press(request.key, modifiers=request.modifiers)
+                .data
+            )
+        if isinstance(request, contracts.ReplayInteractiveAction):
+            scenario = self.scenarios.get(request.scenario)
             if scenario is None:
-                raise InputError(f"unknown scenario: {scenario_id}")
+                raise InputError(f"unknown scenario: {request.scenario}")
             return self._replay(scenario)
-        if action == "switch":
-            subject = request.get("subject")
-            fixture_id = request.get("fixture")
-            fixture = (
-                self.fixtures.get(fixture_id)
-                if isinstance(fixture_id, str) and fixture_id
-                else None
-            )
-            if not isinstance(subject, str):
-                raise InputError("subject must be a string")
+        if isinstance(request, contracts.SwitchInteractiveAction):
+            fixture = self.fixtures.get(request.fixture) if request.fixture else None
             self.window.close()
-            self.window = self._open(subject, fixture)
+            self.window = self._open(request.subject, fixture)
             self._latest_capture = None
             return {
-                "subject": subject,
-                "fixture": fixture_id or "",
+                "subject": request.subject,
+                "fixture": request.fixture or "",
                 "processId": self.window.runtime.pid,
             }
-        raise InputError(f"unknown interactive action: {action}")
+        raise AssertionError("unhandled validated interactive action")
 
     @property
     def latest_capture(self) -> Path | None:
@@ -320,31 +268,20 @@ class InteractiveSession:
             raise RuntimeFailure(f"capture result is not a PNG file: {path}")
         return path
 
-    def _locator(self, request: dict[str, Any]) -> Locator:
-        control_id = request.get("controlId")
-        if isinstance(control_id, str) and control_id:
-            return self.window.get_by_control_id(control_id)
-        path = request.get("path")
-        if not isinstance(path, str):
-            raise InputError("action path must be a string")
-        return self.window.get_by_path(path)
+    def _locator(self, request: contracts.TargetedInteractiveAction) -> Locator:
+        if request.control_id is not None:
+            return self.window.get_by_control_id(request.control_id)
+        assert request.path is not None
+        return self.window.get_by_path(request.path)
 
-    def _optional_locator(self, request: dict[str, Any]) -> Locator | None:
-        if request.get("controlId") or request.get("path"):
-            return self._locator(request)
+    def _optional_locator(
+        self, request: contracts.HighlightInteractiveAction
+    ) -> Locator | None:
+        if request.control_id is not None:
+            return self.window.get_by_control_id(request.control_id)
+        if request.path is not None:
+            return self.window.get_by_path(request.path)
         return None
-
-    @staticmethod
-    def _coordinates(
-        request: dict[str, Any], names: tuple[str, ...]
-    ) -> tuple[int, ...]:
-        values: list[int] = []
-        for name in names:
-            value = request.get(name)
-            if not isinstance(value, int) or isinstance(value, bool):
-                raise InputError(f"{', '.join(names)} must be integers")
-            values.append(value)
-        return tuple(values)
 
     def _replay(self, scenario: Scenario) -> dict[str, Any]:
         diagnostics = self.window.diagnostics()
@@ -456,7 +393,16 @@ class InspectorHandler(BaseHTTPRequestHandler):
                 result = self.server.session.action(value)
             self._json(200, {"ok": True, "result": result})
         except (ValueError, XUILabError) as error:
-            self._json(400, {"ok": False, "error": str(error)})
+            record = contracts.error_record(error, operation="inspector.action")
+            self._json(
+                400,
+                {
+                    "ok": False,
+                    "error": record.model_dump(
+                        mode="json", by_alias=True, exclude_none=True
+                    ),
+                },
+            )
 
     def log_message(self, _format: str, *_args: object) -> None:
         return

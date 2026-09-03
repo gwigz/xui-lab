@@ -9,7 +9,14 @@ import threading
 from pathlib import Path
 from typing import Any, TextIO
 
-from .errors import RuntimeFailure
+from .contracts import (
+    RuntimeError,
+    RuntimeSuccess,
+    parse_runtime_command,
+    parse_runtime_response,
+    parse_runtime_result,
+)
+from .errors import InputError, RuntimeFailure
 
 
 class RuntimeProcess:
@@ -70,7 +77,12 @@ class RuntimeProcess:
     def request(
         self, command: dict[str, Any], *, timeout: float | None = None
     ) -> dict[str, Any]:
-        operation = command.get("op", "unknown")
+        candidate = {"schemaVersion": 1, **command}
+        validated_command = parse_runtime_command(candidate)
+        operation = validated_command.op
+        command_data = validated_command.model_dump(
+            mode="json", by_alias=True, exclude_none=True
+        )
         if self._closed:
             raise RuntimeFailure("runtime process is closed")
         if self._failed:
@@ -84,7 +96,9 @@ class RuntimeProcess:
             )
         assert self._process.stdin is not None
         try:
-            self._process.stdin.write(json.dumps(command, separators=(",", ":")) + "\n")
+            self._process.stdin.write(
+                json.dumps(command_data, separators=(",", ":")) + "\n"
+            )
             self._process.stdin.flush()
         except OSError as error:
             self._failed = True
@@ -122,26 +136,30 @@ class RuntimeProcess:
                 f"runtime closed its response stream while still running during '{operation}'"
             )
         try:
-            response = json.loads(line)
+            response_data = json.loads(line)
         except json.JSONDecodeError as error:
             self._failed = True
             raise RuntimeFailure(
                 f"runtime returned an invalid response to '{operation}': invalid JSON: {line.rstrip()}"
             ) from error
-        if not isinstance(response, dict) or not isinstance(response.get("ok"), bool):
+        try:
+            response = parse_runtime_response(response_data, operation)
+        except InputError as error:
             self._failed = True
             raise RuntimeFailure(
-                f"runtime returned an invalid response to '{operation}': expected an object with Boolean 'ok'"
-            )
-        if not response["ok"]:
-            error_data = response.get("error", {})
-            if isinstance(error_data, dict):
-                raise RuntimeFailure(
-                    f"{error_data.get('code', 'runtime_error')}: "
-                    f"{error_data.get('message', 'runtime command failed')}"
-                )
-            raise RuntimeFailure("runtime command failed")
-        return response
+                f"runtime returned an invalid response to '{operation}': {error}"
+            ) from error
+        if isinstance(response, RuntimeError):
+            raise RuntimeFailure(f"{response.error.code}: {response.error.message}")
+        assert isinstance(response, RuntimeSuccess)
+        try:
+            result = parse_runtime_result(response.result, operation)
+        except InputError as error:
+            self._failed = True
+            raise RuntimeFailure(
+                f"runtime returned an invalid result for '{operation}': {error}"
+            ) from error
+        return {"ok": True, "result": result}
 
     def _terminate(self) -> int:
         status = self._process.poll()

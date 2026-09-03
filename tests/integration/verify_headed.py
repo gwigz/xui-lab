@@ -16,13 +16,13 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from xui_lab.api import Lab
-from xui_lab.domain import Capability, ForkId, Viewport, parse_manifest
+from xui_lab.domain import Capability, ForkId, Viewport
 from xui_lab.interactive import (
     InteractiveConfig,
     InteractiveSession,
     discover_fixtures,
 )
-from xui_lab.io import git_commit, read_json, write_json
+from xui_lab.io import git_commit, parse_manifest, read_json, write_json
 from xui_lab.scenarios import discover_scenarios
 
 ROOT = Path(__file__).resolve().parents[2]

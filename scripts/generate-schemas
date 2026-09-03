@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+"""Generate or compare the checked-in Pydantic JSON Schemas."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from xui_lab.contracts import schema_documents  # noqa: E402
+
+
+def rendered(document: dict[str, object]) -> str:
+    return json.dumps(document, indent=2, sort_keys=True) + "\n"
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--check", action="store_true")
+    args = parser.parse_args()
+    stale: list[str] = []
+    for filename, document in schema_documents().items():
+        path = ROOT / "schemas" / filename
+        expected = rendered(document)
+        if args.check:
+            try:
+                actual = path.read_text(encoding="utf-8")
+            except OSError:
+                actual = ""
+            if actual != expected:
+                stale.append(str(path.relative_to(ROOT)))
+        else:
+            path.write_text(expected, encoding="utf-8")
+    if stale:
+        print("generated schemas are stale: " + ", ".join(stale))
+        print("run: ./scripts/generate-schemas")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

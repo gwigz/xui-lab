@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "type": "error",
+  "code": "invalid_selector",
+  "message": "selector violates the XUI Lab contract",
+  "operation": "click",
+  "retryable": false,
+  "requestId": "request-1",
+  "selector": {
+    "schemaVersion": 1,
+    "kind": "path",
+    "path": "/root/missing"
+  }
+}

@@ -8,8 +8,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from .api import Lab, artifact_directory
+from .contracts import AdapterContract, parse_adapter, parse_cli_command
 from .cpp_quality import format_cpp, tidy_cpp
-from .domain import Capability, Fork, ForkId, Manifest, Viewport, parse_manifest
+from .domain import Capability, Fork, ForkId, Manifest, Viewport
 from .errors import InputError, XUILabError
 from .interactive import (
     InteractiveConfig,
@@ -17,7 +18,7 @@ from .interactive import (
     discover_fixtures,
     serve_inspector,
 )
-from .io import parse_source_overrides, read_json, resolved_source
+from .io import parse_manifest, parse_source_overrides, read_json, resolved_source
 from .repository import check_repository
 from .scenarios import discover_scenarios, load_scenario
 
@@ -39,11 +40,8 @@ def select_fork(args: argparse.Namespace) -> tuple[Fork, Path]:
     return fork, resolved_source(fork, overrides)
 
 
-def adapter_config(fork: Fork) -> dict[str, object]:
-    data = read_json(fork.adapter / "adapter.json")
-    if not isinstance(data, dict) or data.get("schemaVersion") != 1:
-        raise InputError(f"invalid adapter contract: {fork.adapter / 'adapter.json'}")
-    return data
+def adapter_config(fork: Fork) -> AdapterContract:
+    return parse_adapter(read_json(fork.adapter / "adapter.json"))
 
 
 def runtime_path(_fork: Fork, _source: Path, explicit: str | None) -> Path:
@@ -108,18 +106,10 @@ def cmd_interactive(args: argparse.Namespace) -> int:
     if not executable.is_file():
         raise InputError(f"runtime executable not found: {executable}")
     config = adapter_config(fork)
-    raw_subjects = config.get("subjects")
-    if not isinstance(raw_subjects, dict):
-        raise InputError("adapter subjects must be an object")
-    subjects: dict[str, frozenset[Capability]] = {}
-    for name, raw_capabilities in raw_subjects.items():
-        if (
-            not isinstance(name, str)
-            or not isinstance(raw_capabilities, list)
-            or any(not isinstance(value, str) for value in raw_capabilities)
-        ):
-            raise InputError("adapter subjects contain an invalid capability list")
-        subjects[name] = frozenset(Capability(value) for value in raw_capabilities)
+    subjects = {
+        name: frozenset(Capability(value) for value in capabilities)
+        for name, capabilities in config.subjects.items()
+    }
     if args.subject not in subjects:
         raise InputError(f"subject is not declared by the adapter: {args.subject}")
 
@@ -207,7 +197,26 @@ def parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     try:
         args = parser().parse_args(argv)
-        result = args.handler(args)
+        command = {
+            "schemaVersion": 1,
+            **{key: value for key, value in vars(args).items() if key != "handler"},
+        }
+        command["viewerSource"] = command.pop("viewer_source")
+        if "cpp_command" in command:
+            command["cppCommand"] = command.pop("cpp_command")
+        if "compile_commands" in command:
+            command["compileCommands"] = command.pop("compile_commands")
+        if "ui_scale" in command:
+            command["uiScale"] = command.pop("ui_scale")
+        if "artifact_id" in command:
+            command["artifactId"] = command.pop("artifact_id")
+        if "no_browser" in command:
+            command["noBrowser"] = command.pop("no_browser")
+        validated = parse_cli_command(command)
+        domain_args = argparse.Namespace(
+            **validated.model_dump(exclude={"schema_version"})
+        )
+        result = args.handler(domain_args)
         if not isinstance(result, int) or isinstance(result, bool):
             raise InputError("command handler returned an invalid exit status")
         return result

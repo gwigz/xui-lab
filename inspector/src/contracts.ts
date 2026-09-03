@@ -169,7 +169,10 @@ export function parseActionResponse(value: unknown): unknown {
   const ok = booleanValue(record.ok, "action response.ok");
 
   if (!ok) {
-    throw new Error(stringValue(record.error, "action response.error"));
+    const error = objectValue(record.error, "action response.error");
+    const code = stringValue(error.code, "action response.error.code");
+    const message = stringValue(error.message, "action response.error.message");
+    throw new Error(`${code}: ${message}`);
   }
 
   return record.result;

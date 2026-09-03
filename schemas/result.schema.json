@@ -1,0 +1,41 @@
+{
+  "$id": "https://xui-lab.local/schemas/result.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "additionalProperties": true,
+      "title": "Data",
+      "type": "object"
+    },
+    "operation": {
+      "minLength": 1,
+      "title": "Operation",
+      "type": "string"
+    },
+    "requestId": {
+      "minLength": 1,
+      "title": "Requestid",
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": 1,
+      "title": "Schemaversion",
+      "type": "integer"
+    },
+    "type": {
+      "const": "result",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "type",
+    "requestId",
+    "operation",
+    "data"
+  ],
+  "title": "xui-lab result record",
+  "type": "object"
+}
