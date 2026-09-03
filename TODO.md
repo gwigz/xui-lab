@@ -102,6 +102,56 @@ The browser inspector remains optional for a person to view. Agents use the CLI.
 - [ ] Publish short copy-paste examples for discovery, one-shot inspection, a
   persistent resize gesture, capture, scenario execution, and cleanup.
 
+## Harden the web inspector and HTTP API
+
+The browser inspector is a human-facing adapter over the same command
+dispatcher as the CLI. Keep HTTP and React concerns out of scenario and runtime
+logic. Do not create a second operation model for the inspector.
+
+- [ ] Pin `fastapi` and `uvicorn` as runtime dependencies. Replace the
+  `ThreadingHTTPServer` implementation after parity tests cover asset serving,
+  API routes, security headers, shutdown, and the existing session lock.
+- [ ] Put the inspector endpoints under `/api/v1`. Provide `GET /state`, `POST
+  /actions`, `GET /events`, and `GET /captures/{version}` beneath that prefix.
+  Route actions through the Pydantic command models used by the CLI and JSONL.
+- [ ] Generate and check in the OpenAPI document from the FastAPI routes and
+  Pydantic models. Make `./xui-lab check` fail when the document is stale.
+- [ ] Pin `openapi-typescript` as a frontend development dependency. Generate
+  the route, request, response, event, and error types from the checked-in
+  OpenAPI document. Delete the handwritten wire types that the generated types
+  replace.
+- [ ] Pin `openapi-fetch` and route inspector requests through one generated,
+  typed client. Keep authentication, request IDs, timeouts, and error decoding
+  in that client instead of React components.
+- [ ] Pin `ajv` and validate every HTTP response and server event against the
+  Pydantic-generated JSON Schemas before the frontend uses it. Convert valid
+  wire values into UI models once. Do not add a parallel Zod schema.
+- [ ] Return errors as
+  [RFC 9457 Problem Details](https://www.rfc-editor.org/rfc/rfc9457.html) with
+  stable XUI Lab fields for `code`, `requestId`, `operation`, retryability, and
+  artifact paths. Do not expose FastAPI or Pydantic error formats.
+- [ ] Keep the inspector on a random loopback port. Issue a random session token
+  at startup and require it on every API request. Reject unexpected `Host` and
+  `Origin` headers, and keep the token out of logs and artifacts.
+- [ ] Replace the 700 ms state polling loop with
+  [Server-Sent Events](https://fastapi.tiangolo.com/tutorial/server-sent-events/).
+  Send small events with event ID, request ID, state version, and artifact
+  references. Refetch state after an invalidation event instead of streaming
+  the complete tree. Keep actions as HTTP requests.
+- [ ] Add `@tanstack/react-query` when the versioned API lands. Make it own
+  server-state fetches, action invalidation, cancellation, and retry policy.
+  Feed state-version events from SSE into query invalidation.
+- [ ] Pin `httpx` as a development dependency. Test the real FastAPI ASGI app
+  with `pytest` without opening a port. Cover validation, authentication,
+  Problem Details, content types, security headers, SSE disconnects, and clean
+  shutdown.
+- [ ] Pin `@playwright/test` before the timeline and filmstrip work. Run it
+  against the deterministic preview backend. Cover initial load, actions,
+  reconnects, error display, capture changes, keyboard use, and failure traces.
+- [ ] Enable `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` for the
+  inspector. Include generated types, schema validation, and Playwright tests
+  in `npm run check --prefix inspector`.
+
 ## Prove the design with Inventory Explorer
 
 - [ ] Make model-ID targeting choose a visible `LLFolderViewItem` with a usable
