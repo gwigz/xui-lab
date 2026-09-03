@@ -134,12 +134,15 @@ class CommandLineTests(unittest.TestCase):
         self.assertFalse(document.source.overridden)
         self.assertRegex(document.source.commit, r"^[0-9a-f]{40}$")
         self.assertEqual(
-            ["test_widgets"], [subject.name for subject in document.subjects]
+            ["inventory_explorer", "test_widgets"],
+            [subject.name for subject in document.subjects],
         )
-        subject = document.subjects[0]
-        self.assertEqual(("input", "inspection"), subject.required_capabilities)
-        self.assertFalse(subject.openable)
-        self.assertEqual("runtime_not_selected", subject.unavailable_reason)
+        widgets = next(
+            subject for subject in document.subjects if subject.name == "test_widgets"
+        )
+        self.assertEqual(("input", "inspection"), widgets.required_capabilities)
+        self.assertFalse(widgets.openable)
+        self.assertEqual("runtime_not_selected", widgets.unavailable_reason)
 
     def test_subjects_json_records_an_overridden_viewer_source(self) -> None:
         listed = StringIO()
@@ -189,8 +192,11 @@ class CommandLineTests(unittest.TestCase):
         self.assertEqual(catalog.fork, document.runtime.fork)
         self.assertEqual(catalog.source.commit, document.runtime.commit)
         self.assertTrue(document.runtime.matched)
-        self.assertTrue(document.subjects[0].openable)
-        self.assertIsNone(document.subjects[0].unavailable_reason)
+        widgets = next(
+            subject for subject in document.subjects if subject.name == "test_widgets"
+        )
+        self.assertTrue(widgets.openable)
+        self.assertIsNone(widgets.unavailable_reason)
 
     def test_subjects_json_reports_source_mismatch_for_a_stale_runtime(self) -> None:
         listed = StringIO()
@@ -212,8 +218,11 @@ class CommandLineTests(unittest.TestCase):
         document = SubjectsContract.model_validate_json(stdout.getvalue())
         assert document.runtime is not None
         self.assertFalse(document.runtime.matched)
-        self.assertFalse(document.subjects[0].openable)
-        self.assertEqual("source_mismatch", document.subjects[0].unavailable_reason)
+        widgets = next(
+            subject for subject in document.subjects if subject.name == "test_widgets"
+        )
+        self.assertFalse(widgets.openable)
+        self.assertEqual("source_mismatch", widgets.unavailable_reason)
 
     def test_subjects_json_rejects_invalid_runtime_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as directory_text:
@@ -364,7 +373,7 @@ class CommandLineTests(unittest.TestCase):
         stderr = StringIO()
 
         with redirect_stdout(stdout), redirect_stderr(stderr):
-            status = main(["preflight", "--json", "--subject", "inventory_explorer"])
+            status = main(["preflight", "--json", "--subject", "not_a_subject"])
 
         self.assertEqual(2, status)
         self.assertIn("not declared", stderr.getvalue())
@@ -441,7 +450,7 @@ class CommandLineTests(unittest.TestCase):
         with redirect_stdout(names):
             status = main(["subjects", "--json", "--jq", ".subjects[].name"])
         self.assertEqual(0, status)
-        self.assertEqual("test_widgets\n", names.getvalue())
+        self.assertEqual("inventory_explorer\ntest_widgets\n", names.getvalue())
 
         selected = StringIO()
         with redirect_stdout(selected):

@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from xui_lab.api import Lab, artifact_directory
+from xui_lab.cli import scenario_paths
 from xui_lab.domain import Capability, Viewport
 from xui_lab.errors import InputError, RuntimeFailure
 from xui_lab.io import parse_manifest, read_json
@@ -42,6 +43,15 @@ class DomainTests(unittest.TestCase):
         self.assertTrue(scenarios)
         for scenario in scenarios.values():
             self.assertIn(scenario.fork, manifest.forks)
+
+    def test_underscore_scenarios_load_but_stay_out_of_discovery(self) -> None:
+        discovered = discover_scenarios(ROOT)
+        discovered_paths = scenario_paths([])
+        for path in sorted((ROOT / "tests" / "scenarios").glob("_*.py")):
+            scenario = load_scenario(ROOT, path)
+            self.assertNotIn(scenario.id, discovered)
+            self.assertNotIn(path, discovered_paths)
+            self.assertEqual([path], scenario_paths([str(path)]))
 
     def test_python_scenario_requires_one_scenario_value(self) -> None:
         with tempfile.TemporaryDirectory() as directory_text:

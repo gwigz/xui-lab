@@ -337,15 +337,36 @@ public:
 
     bool handleRightMouseDown(LLWindow*, LLCoordGL position, MASK mask) override
     {
-        const LLCoordGL screen = screenPosition(position);
+        const LLCoordGL screen     = screenPosition(position);
+        const bool      menu_shown = gMenuHolder && gMenuHolder->hasVisibleMenu();
+        bool            handled;
         if (LLMouseHandler* capture = gFocusMgr.getMouseCapture())
         {
             S32 local_x = 0;
             S32 local_y = 0;
             capture->screenPointToLocal(screen.mX, screen.mY, &local_x, &local_y);
-            return capture->handleRightMouseDown(local_x, local_y, mask);
+            handled = capture->handleRightMouseDown(local_x, local_y, mask);
         }
-        return mRoot->handleRightMouseDown(screen.mX, screen.mY, mask);
+        else
+        {
+            handled = mRoot->handleRightMouseDown(screen.mX, screen.mY, mask);
+        }
+        if (!menu_shown)
+            publishContextMenuSpawnPos(screen);
+        return handled;
+    }
+
+    // showPopup stores the OS cursor as the spawn point. The lab never moves
+    // that cursor, so the matching right mouse up looks like a drag and commits
+    // or hides the menu. Write the injected click instead.
+    static void publishContextMenuSpawnPos(LLCoordGL screen)
+    {
+        if (!gMenuHolder || !gMenuHolder->hasVisibleMenu())
+            return;
+        S32 local_x = 0;
+        S32 local_y = 0;
+        gMenuHolder->screenPointToLocal(screen.mX, screen.mY, &local_x, &local_y);
+        LLMenuHolderGL::sContextMenuSpawnPos.set(local_x, local_y);
     }
 
     bool handleRightMouseUp(LLWindow*, LLCoordGL position, MASK mask) override

@@ -15,7 +15,12 @@ from xui_lab.contracts import (
     TreeCliCommand,
 )
 from xui_lab.domain import Capability, Viewport
-from xui_lab.errors import AssertionFailure, InputError, RuntimeFailure
+from xui_lab.errors import (
+    AssertionFailure,
+    CapabilityError,
+    InputError,
+    RuntimeFailure,
+)
 from xui_lab.interactive import (
     InteractiveConfig,
     InteractiveSession,
@@ -111,7 +116,29 @@ def fake_runtime(directory: Path, command_log: Path) -> Path:
                             ])
                     result = {{"control_id": "root", "path": "/root", "class": "LLPanel", "children": children}}
                 elif op == "query" and command["kind"] == "menus":
-                    result = {{"visible": True, "menus": [{{"label": "Open"}}]}}
+                    def entry(label, enabled, separator=False, line=7):
+                        return {{
+                            "label": label,
+                            "menu": "/menu_holder/Inventory Explorer",
+                            "path": f"/menu_holder/Inventory Explorer/{{label}}",
+                            "control_id": f"control-menu-{{line}}",
+                            "class": "LLMenuItemCallGL",
+                            "enabled": enabled,
+                            "enabled_chain": enabled,
+                            "visible": True,
+                            "separator": separator,
+                            "source_file": "menu_al_inventory_explorer.xml",
+                            "source_line": line,
+                        }}
+                    result = {{
+                        "visible": True,
+                        "menus": [{{"label": "Inventory Explorer", "itemCount": 3}}],
+                        "entries": [
+                            entry("Copy", True, line=7),
+                            entry("", True, separator=True, line=8),
+                            entry("Paste", False, line=9),
+                        ],
+                    }}
                 elif op == "input":
                     checked = True
                     result = {{
@@ -235,6 +262,52 @@ class PlaywrightApiTests(unittest.TestCase):
                 / "event-trace.json"
             ).is_file()
         )
+
+    def test_menu_entries_report_state_and_source_provenance(self) -> None:
+        with self.open() as window:
+            entries = window.menu_entries()
+            copy = window.expect_menu_entry("Copy", enabled=True)
+            paste = window.expect_menu_entry("Paste", enabled=False)
+
+        self.assertEqual(["Copy", "", "Paste"], [entry.label for entry in entries])
+        self.assertEqual([False, True, False], [entry.separator for entry in entries])
+        self.assertEqual("menu_al_inventory_explorer.xml", copy.source_file)
+        self.assertEqual(7, copy.source_line)
+        self.assertEqual("control-menu-9", paste.control_id)
+        self.assertEqual(
+            {"schemaVersion": 1, "kind": "controlId", "controlId": "control-menu-7"},
+            copy.selector.model_dump(mode="json", by_alias=True),
+        )
+
+    def test_expect_menu_entry_lists_the_visible_entries_when_missing(self) -> None:
+        with self.open() as window:
+            with self.assertRaises(AssertionFailure) as failure:
+                window.expect_menu_entry("Delete")
+
+        message = str(failure.exception)
+        self.assertIn("matched 0 entries", message)
+        self.assertIn("'Copy' (enabled, menu_al_inventory_explorer.xml:7)", message)
+        self.assertIn("'Paste' (disabled", message)
+
+    def test_expect_menu_entry_reports_the_wrong_enabled_state(self) -> None:
+        with self.open() as window:
+            with self.assertRaises(AssertionFailure) as failure:
+                window.expect_menu_entry("Paste", enabled=True)
+
+        self.assertIn(
+            "menu entry 'Paste' is disabled, expected enabled", str(failure.exception)
+        )
+
+    def test_menu_entries_require_the_menus_capability(self) -> None:
+        window = self.lab.open(
+            artifact_id="python_api_no_menus",
+            subject="test_widgets",
+            viewport=Viewport(320, 240, 1.0),
+            capabilities=frozenset({Capability("inspection")}),
+        )
+        with window:
+            with self.assertRaises(CapabilityError):
+                window.menu_entries()
 
     def test_completed_run_writes_a_valid_artifact_manifest(self) -> None:
         with self.open(request_id="req_manifest"):

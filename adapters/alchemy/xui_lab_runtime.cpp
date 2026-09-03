@@ -379,9 +379,17 @@ private:
         return LLSDMap("op", std::string(operation))("button", std::string(button))("x", gl_x)("y", gl_y);
     }
 
+    // Hit the visible portion. A scrolled row's full rectangle can sit under
+    // another control.
+    static LLRect inputRect(LLView* target)
+    {
+        const LLRect clipped = xui_lab::Inspection::clippedScreenRect(*target);
+        return clipped.getWidth() > 0 && clipped.getHeight() > 0 ? clipped : target->calcScreenRect();
+    }
+
     static LLSD pointerEvent(std::string_view operation, std::string_view button, LLView* target)
     {
-        const LLRect screen_rect = target->calcScreenRect();
+        const LLRect screen_rect = inputRect(target);
         return pointerEventAt(operation, button, screen_rect.getCenterX(), screen_rect.getCenterY());
     }
 
@@ -511,7 +519,7 @@ private:
     {
         if (command.has("x") && command.has("y"))
             return { command["x"].asInteger(), command["y"].asInteger() };
-        const LLRect rect = target->calcScreenRect();
+        const LLRect rect = inputRect(target);
         return { rect.getCenterX(), rect.getCenterY() };
     }
 

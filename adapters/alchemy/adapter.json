@@ -3,8 +3,21 @@
   "schemaVersion": 1,
   "fork": "alchemy",
   "productionTarget": "alchemy_newview_ui",
-  "capabilities": ["input", "inspection"],
+  "capabilities": [
+    "input",
+    "inspection",
+    "inventory_model",
+    "agent_identity",
+    "menus"
+  ],
   "subjects": {
-    "test_widgets": ["input", "inspection"]
+    "test_widgets": ["input", "inspection"],
+    "inventory_explorer": [
+      "input",
+      "inspection",
+      "inventory_model",
+      "agent_identity",
+      "menus"
+    ]
   }
 }

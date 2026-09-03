@@ -59,6 +59,74 @@ const std::string& requireControlId(const ControlIds& control_ids, LLView* view)
     return found->second;
 }
 
+// Open menus reparent out of the indexed subtree.
+std::string optionalControlId(const ControlIds& control_ids, LLView* view)
+{
+    const auto found = control_ids.find(view);
+    return found == control_ids.end() ? std::string() : found->second;
+}
+
+// Closed, filtered, and scrolled-away rows still exist in the panel.
+std::string unusableForInput(const LLFolderViewItem& item)
+{
+    if (!item.isInVisibleChain())
+        return "not in the visible chain";
+    const LLRect clipped = xui_lab::Inspection::clippedScreenRect(item);
+    if (clipped.getWidth() <= 0 || clipped.getHeight() <= 0)
+        return "clipped to an empty rectangle";
+    return {};
+}
+
+LLSD describeMenuEntry(LLMenuItemGL& item, const std::string& menu_path, const ControlIds& control_ids)
+{
+    const LLSD info        = item.getInfo();
+    LLSD       entry       = LLSD::emptyMap();
+    entry["label"]         = item.getLabel();
+    entry["menu"]          = menu_path;
+    entry["path"]          = info["path"];
+    entry["control_id"]    = optionalControlId(control_ids, &item);
+    entry["class"]         = info["class"];
+    entry["enabled"]       = item.getEnabled();
+    entry["enabled_chain"] = info["enabled_chain"];
+    entry["visible"]       = item.getVisible();
+    entry["separator"]     = dynamic_cast<LLMenuItemSeparatorGL*>(&item) != nullptr;
+    entry["source_file"]   = info["source_file"];
+    entry["source_line"]   = info["source_line"];
+    return entry;
+}
+
+void collectMenuEntries(LLMenuGL& menu, LLSD& entries, const ControlIds& control_ids)
+{
+    const std::string menu_path = menu.getPathname();
+    const S32         count     = static_cast<S32>(menu.getItemCount());
+    for (S32 index = 0; index < count; ++index)
+    {
+        LLMenuItemGL* item = menu.getItem(index);
+        if (!item || !item->getVisible())
+            continue;
+        entries.append(describeMenuEntry(*item, menu_path, control_ids));
+        auto*     branch  = dynamic_cast<LLMenuItemBranchGL*>(item);
+        LLMenuGL* submenu = branch ? branch->getBranch() : nullptr;
+        if (submenu && submenu->getVisible())
+            collectMenuEntries(*submenu, entries, control_ids);
+    }
+}
+
+LLSD describeMenu(LLMenuGL& menu, const ControlIds& control_ids)
+{
+    const LLSD info        = menu.getInfo();
+    LLSD       summary     = LLSD::emptyMap();
+    summary["label"]       = menu.getLabel();
+    summary["path"]        = info["path"];
+    summary["control_id"]  = optionalControlId(control_ids, &menu);
+    summary["class"]       = info["class"];
+    summary["visible"]     = menu.getVisible();
+    summary["itemCount"]   = static_cast<S32>(menu.getItemCount());
+    summary["source_file"] = info["source_file"];
+    summary["source_line"] = info["source_line"];
+    return summary;
+}
+
 LLSD buildFolderTree(LLFolderViewItem* item, const std::string& parent_path, const ControlIds& control_ids)
 {
     LLSD node          = item->getInfo();
@@ -213,27 +281,37 @@ Inspection::Inspection(LLPanel& root) noexcept : mRoot(root)
 {
 }
 
+LLRect Inspection::clippedScreenRect(const LLView& view)
+{
+    LLRect rect = view.calcScreenRect();
+    for (const LLView* ancestor = view.getParent(); ancestor; ancestor = ancestor->getParent())
+        rect.intersectWith(ancestor->calcScreenRect());
+    return rect;
+}
+
 LLSD Inspection::menus() const
 {
-    LLSD result = LLSDMap("visible", gMenuHolder && gMenuHolder->hasVisibleMenu());
-    LLSD menus  = LLSD::emptyArray();
+    rebuildControlIndex();
+    LLMenuGL* visible = gMenuHolder ? dynamic_cast<LLMenuGL*>(gMenuHolder->getVisibleMenu()) : nullptr;
+    LLSD      result  = LLSDMap("visible", visible != nullptr);
+    LLSD      menus   = LLSD::emptyArray();
     if (gMenuHolder)
     {
         for (LLView* child : *gMenuHolder->getChildList())
         {
-            if (!child)
-                continue;
-            if (dynamic_cast<LLMenuGL*>(child))
-                rebuildControlIndex();
-            menus.append(buildTree(child, mControlIdsByView));
+            if (auto* menu = dynamic_cast<LLMenuGL*>(child))
+                menus.append(describeMenu(*menu, mControlIdsByView));
         }
     }
     result["menus"] = menus;
-    if (gMenuHolder && gMenuHolder->getVisibleMenu())
+
+    LLSD entries = LLSD::emptyArray();
+    if (visible)
     {
-        rebuildControlIndex();
-        result["tree"] = buildTree(gMenuHolder->getVisibleMenu(), mControlIdsByView);
+        collectMenuEntries(*visible, entries, mControlIdsByView);
+        result["tree"] = buildTree(visible, mControlIdsByView);
     }
+    result["entries"] = entries;
     return result;
 }
 
@@ -337,20 +415,22 @@ std::string Inspection::controlId(LLView* view) const
 
 LLView* Inspection::resolveModelId(const LLUUID& id) const
 {
-    LLFolderViewItem* fallback = nullptr;
+    std::string rejected;
     for (const std::string_view panel_name : inventoryPanelNames())
     {
         LLInventoryPanel* panel = mRoot.findChild<LLInventoryPanel>(panel_name);
         LLFolderViewItem* item  = panel ? panel->getItemByID(id) : nullptr;
         if (!item)
             continue;
-        if (panel->isInVisibleChain())
+        const std::string reason = unusableForInput(*item);
+        if (reason.empty())
             return item;
-        if (!fallback)
-            fallback = item;
+        if (!rejected.empty())
+            rejected += "; ";
+        rejected += std::string(panel_name) + " " + reason;
     }
-    if (fallback)
-        return fallback;
+    if (!rejected.empty())
+        throw Error("model_id", "inventory view item is not usable for input: " + id.asString() + " (" + rejected + ")");
     throw Error("model_id", "inventory view item not found: " + id.asString());
 }
 } // namespace xui_lab

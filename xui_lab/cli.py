@@ -265,10 +265,13 @@ def cmd_preflight(command: PreflightCliCommand) -> int:
 
 
 def scenario_paths(values: Sequence[str]) -> list[Path]:
-    return (
-        [Path(value).expanduser().resolve() for value in values]
-        if values
-        else sorted((ROOT / "tests" / "scenarios").glob("*.py"))
+    if values:
+        return [Path(value).expanduser().resolve() for value in values]
+    # Discovery also skips these. Pass a path to run one anyway.
+    return sorted(
+        path
+        for path in (ROOT / "tests" / "scenarios").glob("*.py")
+        if not path.name.startswith("_")
     )
 
 

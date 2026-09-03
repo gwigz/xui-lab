@@ -1,5 +1,6 @@
 #pragma once
 
+#include "llrect.h"
 #include "llsd.h"
 #include "lluuid.h"
 
@@ -28,6 +29,9 @@ public:
     [[nodiscard]] LLView*     resolveControlId(std::string_view control_id) const;
     [[nodiscard]] LLView*     resolveModelId(const LLUUID& id) const;
     [[nodiscard]] std::string controlId(LLView* view) const;
+
+    // Screen rectangle clipped by every ancestor.
+    [[nodiscard]] static LLRect clippedScreenRect(const LLView& view);
 
 private:
     void rebuildControlIndex() const;

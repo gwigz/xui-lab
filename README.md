@@ -11,7 +11,7 @@ click it. The clicks go through normal LLUI.
 
 ![The inspector showing the production test floater in T3 Code](.github/assets/xui-lab-in-t3-code.png)
 
-Only `test_widgets` is declared usable today.
+`test_widgets` and `inventory_explorer` are declared.
 
 Agents should follow
 [`.agents/skills/xui-lab-ui/SKILL.md`](.agents/skills/xui-lab-ui/SKILL.md).
@@ -136,17 +136,21 @@ only if the production handler accepts it. Use `Locator.drag_by()` or
 
 The browser inspector is a React and TypeScript app in `inspector/`. Vite
 builds it into `xui_lab/_inspector/`. FastAPI serves that build and the
-`/api/v1` routes on a loopback port. Button, Input, Select, Tabs, and Toolbar
-come from the Coss UI registry. They use Base UI behavior and Coss neutral
-tokens. Tailwind CSS supplies the generated utilities.
+`/api/v1` routes on a random loopback port. The browser receives an HttpOnly
+session cookie. Unexpected `Host` and `Origin` headers are rejected. Captures
+resolve through the current session artifact directory. Button, Input, Select,
+Tabs, and Toolbar come from the Coss UI registry. They use Base UI behavior and
+Coss neutral tokens. Tailwind CSS supplies the generated utilities.
 
 ```sh
 npm ci --prefix inspector
+npm exec --prefix inspector -- playwright install chromium
 npm run check --prefix inspector
 ```
 
-For hot reload, start an inspector backend on port 8765, then
-`npm run dev --prefix inspector`. Layout work can skip the viewer:
+`npm run check --prefix inspector` covers generated types, schema validation,
+TypeScript, unit tests, the production build, and Playwright. Layout work can
+skip the viewer:
 
 ```sh
 python3 tests/integration/preview_inspector.py --capture /path/to/capture.png

@@ -145,9 +145,8 @@ visible result and use `expect_handled()` for routing bugs. Follow
 `tests/scenarios/test_floater.py` and `tests/scenarios/input_gestures.py`. A
 handled rejection is not an accepted drop.
 
-Keep Inventory Explorer undeclared until its own scenario proves the subject
-and capabilities. XUI reloads from the selected checkout. C++ changes need a
-rebuilt `xui-lab` and a new session.
+`inventory_explorer` is a declared subject. XUI reloads from the selected
+checkout. C++ changes need a rebuilt `xui-lab` and a new session.
 
 ## Work as a user
 

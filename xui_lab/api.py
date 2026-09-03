@@ -149,6 +149,54 @@ class ActionResult:
         return self
 
 
+@dataclass(frozen=True)
+class MenuEntry:
+    """One visible production menu entry from a menus query."""
+
+    label: str
+    menu: str
+    path: str
+    control_id: str
+    enabled: bool
+    separator: bool
+    source_file: str
+    source_line: int
+
+    @property
+    def selector(self) -> Selector:
+        if self.control_id:
+            return control_id_selector(self.control_id)
+        return path_selector(self.path)
+
+    def describe(self) -> str:
+        state = "enabled" if self.enabled else "disabled"
+        return f"{self.label!r} ({state}, {self.source_file}:{self.source_line})"
+
+
+def _source_line(value: Any) -> int:
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
+def _menu_entries(result: dict[str, Any]) -> tuple[MenuEntry, ...]:
+    entries = result.get("entries")
+    if not isinstance(entries, list):
+        raise AssertionFailure("menus query returned no entries list")
+    return tuple(
+        MenuEntry(
+            label=str(entry.get("label", "")),
+            menu=str(entry.get("menu", "")),
+            path=str(entry.get("path", "")),
+            control_id=str(entry.get("control_id", "")),
+            enabled=entry.get("enabled") is True,
+            separator=entry.get("separator") is True,
+            source_file=str(entry.get("source_file", "")),
+            source_line=_source_line(entry.get("source_line")),
+        )
+        for entry in entries
+        if isinstance(entry, dict)
+    )
+
+
 class Lab:
     def __init__(
         self,
@@ -532,6 +580,34 @@ class Window:
         result = self._request(QueryMenus().to_command())
         check_observation("menus", result, "/visible", Comparison.EQUALS, expected)
         return result
+
+    def menu_entries(self) -> tuple[MenuEntry, ...]:
+        self._require_capability("menus")
+        self.wait_for_stable()
+        return _menu_entries(self._request(QueryMenus().to_command()))
+
+    def expect_menu_entry(
+        self, label: str, *, enabled: bool | None = None
+    ) -> MenuEntry:
+        entries = self.menu_entries()
+        matches = [entry for entry in entries if entry.label == label]
+        if len(matches) != 1:
+            available = ", ".join(
+                entry.describe() for entry in entries if not entry.separator
+            )
+            raise AssertionFailure(
+                f"menu entry {label!r} matched {len(matches)} entries; "
+                f"visible entries: {available or 'none'}"
+            )
+        entry = matches[0]
+        if enabled is not None and entry.enabled is not enabled:
+            raise AssertionFailure(
+                f"menu entry {label!r} is "
+                f"{'enabled' if entry.enabled else 'disabled'}, expected "
+                f"{'enabled' if enabled else 'disabled'} "
+                f"({entry.source_file}:{entry.source_line})"
+            )
+        return entry
 
     def expect_recorded_effect(self, field: str, expected: Any) -> dict[str, Any]:
         self._require_capability("external_effects")

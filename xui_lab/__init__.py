@@ -1,6 +1,6 @@
 """Controller for fork-specific xui-lab runtimes."""
 
-from .api import ActionResult, Control, Lab, Locator, Window
+from .api import ActionResult, Control, Lab, Locator, MenuEntry, Window
 from .domain import Capability, Comparison, Viewport
 from .operations import WaitForStable
 from .scenarios import Scenario
@@ -12,6 +12,7 @@ __all__ = [
     "Control",
     "Lab",
     "Locator",
+    "MenuEntry",
     "Scenario",
     "Viewport",
     "WaitForStable",
