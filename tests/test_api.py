@@ -4,11 +4,8 @@ import json
 import os
 import tempfile
 import textwrap
-import threading
 import unittest
 from pathlib import Path
-from urllib.error import HTTPError
-from urllib.request import Request, urlopen
 
 from xui_lab.api import Lab
 from xui_lab.contracts import (
@@ -20,8 +17,6 @@ from xui_lab.contracts import (
 from xui_lab.domain import Capability, Viewport
 from xui_lab.errors import AssertionFailure, InputError, RuntimeFailure
 from xui_lab.interactive import (
-    InspectorHandler,
-    InspectorServer,
     InteractiveConfig,
     InteractiveSession,
     recorded_python,
@@ -560,6 +555,7 @@ class PlaywrightApiTests(unittest.TestCase):
 
         self.assertEqual(str(capture), result["path"])
         self.assertEqual(capture.resolve(), session.latest_capture)
+        self.assertEqual(capture.resolve(), session.capture_path(1))
         self.assertEqual(1, session._capture_version)
 
     def test_interactive_session_starts_with_a_browser_capture(self) -> None:
@@ -790,74 +786,6 @@ class PlaywrightApiTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeFailure, "outside the artifact directory"):
             session.action({"action": "capture"})
-
-    def test_inspector_serves_the_latest_capture_as_an_image(self) -> None:
-        capture = self.directory / "latest.png"
-        capture.write_bytes(b"png bytes")
-        server = InspectorServer(("127.0.0.1", 0), InspectorHandler)
-        server.session = type("SessionStub", (), {"latest_capture": capture})()
-        thread = threading.Thread(target=server.handle_request)
-        thread.start()
-        try:
-            host, port = server.server_address
-            with urlopen(f"http://{host}:{port}/api/capture", timeout=2) as response:
-                self.assertEqual("image/png", response.headers.get_content_type())
-                self.assertEqual(b"png bytes", response.read())
-        finally:
-            thread.join(timeout=2)
-            server.server_close()
-
-    def test_inspector_serves_the_built_react_client(self) -> None:
-        server = InspectorServer(("127.0.0.1", 0), InspectorHandler)
-        server.session = type("SessionStub", (), {})()
-        thread = threading.Thread(target=server.handle_request)
-        thread.start()
-        try:
-            host, port = server.server_address
-            with urlopen(f"http://{host}:{port}/", timeout=2) as response:
-                body = response.read().decode()
-                self.assertEqual("text/html", response.headers.get_content_type())
-                self.assertIn('<div id="root"></div>', body)
-                self.assertIn("/assets/app.js", body)
-        finally:
-            thread.join(timeout=2)
-            server.server_close()
-
-    def test_inspector_translates_validation_failures_to_error_records(self) -> None:
-        session = object.__new__(InteractiveSession)
-        server = InspectorServer(("127.0.0.1", 0), InspectorHandler)
-        server.session = session
-        thread = threading.Thread(target=server.handle_request)
-        thread.start()
-        try:
-            host, port = server.server_address
-            request = Request(
-                f"http://{host}:{port}/api/action",
-                data=json.dumps(
-                    {"action": "pick", "x": "not-an-integer", "y": 20}
-                ).encode(),
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            with self.assertRaises(HTTPError) as raised:
-                urlopen(request, timeout=2)
-            response = json.loads(raised.exception.read())
-        finally:
-            thread.join(timeout=2)
-            server.server_close()
-
-        self.assertEqual(
-            {
-                "schemaVersion": 1,
-                "type": "error",
-                "code": "invalid_interactive_action",
-                "message": "interactive action violates the XUI Lab contract",
-                "operation": "inspector.action",
-                "retryable": False,
-            },
-            response["error"],
-        )
-        self.assertNotIn("int_type", json.dumps(response))
 
     def test_python_scenario_runs_through_window_and_locator(self) -> None:
         scenario = load_scenario(ROOT, ROOT / "tests" / "scenarios" / "test_floater.py")

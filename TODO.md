@@ -11,41 +11,12 @@ failure, it keeps the frame, UI tree, event trace, diagnostics, and runtime log.
 The API must preserve LLUI semantics. It must not introduce a parallel widget
 model.
 
-## CLI control plane
-
-- [ ] Add `xui-lab record --output FILE` and `xui-lab replay FILE` using a
-  versioned, selector-stable command format suitable for review and editing.
-- [ ] Add shell-level contract tests with `pytest` for exit status, stdout
-  purity, stderr diagnostics, JSON Schema validation, request correlation,
-  timeouts, signals, stale sessions, and paths containing spaces or Unicode.
-  Run them under the existing `mypy` and branch-coverage checks.
-- [ ] Add Hypothesis state machines for session lifecycle, cancellation,
-  retries, stale cleanup, and record/replay once those stateful commands exist.
-  Preserve every minimized failure as a deterministic regression test.
-- [ ] Publish short copy-paste examples for discovery, one-shot inspection, a
-  persistent resize gesture, capture, scenario execution, and cleanup.
-
 ## Harden the web inspector and HTTP API
 
 The browser inspector is a human-facing adapter over the same command
 dispatcher as the CLI. Keep HTTP and React concerns out of scenario and runtime
 logic. Do not create a second operation model for the inspector.
 
-- [ ] Pin `fastapi` and `uvicorn` as runtime dependencies. Replace the
-  `ThreadingHTTPServer` implementation after parity tests cover asset serving,
-  API routes, security headers, shutdown, and the existing session lock.
-- [ ] Give each inspector session one worker that owns all viewer mutations.
-  Queue mutating actions in request order and bound the queue. Run blocking
-  viewer calls outside the ASGI event loop. Publish immutable read snapshots so
-  HTTP readers do not share mutable viewer state.
-- [ ] Put the inspector endpoints under `/api/v1`. Provide `GET /state`, `POST
-  /actions`, `GET /events`, and `GET /captures/{version}` beneath that prefix.
-  Route actions through the Pydantic command models used by the CLI and JSONL.
-- [ ] Set route-specific request limits, response limits, and timeouts. Preserve
-  the existing action-body limit. Reject oversized input before parsing it, and
-  return a stable error when an output exceeds its inline limit.
-- [ ] Generate and check in the OpenAPI document from the FastAPI routes and
-  Pydantic models. Make `./xui-lab check` fail when the document is stale.
 - [ ] Put the OpenAPI hash in both the server bootstrap response and the
   embedded client. Refuse actions when the hashes differ, and show the rebuild
   command in the inspector.
@@ -174,32 +145,3 @@ logic. Do not create a second operation model for the inspector.
   scenario cannot affect the next one.
 - [ ] Test that interactive mode and scenario mode dispatch identical typed
   operations through the same subject host.
-
-## Rebuild and verify
-
-- [ ] Select one Alchemy source and use it for checks, build, launch, and every
-  scenario. Do not reuse the stale `cd9c6bbd` binary or artifacts.
-- [ ] Build through the selected checkout's supported local workflow. Pass the
-  resulting executable to `xui-lab run --runtime`.
-- [ ] Run the repository checks and controller tests:
-
-  ```sh
-  ./xui-lab check
-  ./xui-lab \
-    --viewer-source alchemy=/absolute/path/to/alchemy \
-    check
-  python3 -m unittest discover -s tests -v
-  ```
-
-- [ ] Run every scenario against the fresh binary. Inspect every PNG, JSON
-  sidecar, event trace, diagnostic file, and runtime log.
-- [ ] Update [`README.md`](README.md),
-  [`tests/scenarios/README.md`](tests/scenarios/README.md), and
-  [`fixtures/README.md`](fixtures/README.md) to describe the implemented API,
-  commands, file formats, and interactive workflow. Remove specification-stage
-  claims.
-- [ ] Inspect the superproject, selected Alchemy checkout, and pinned submodule
-  status. Report the selected fork, exact commit, commands, observed behavior,
-  artifact paths, and remaining placeholders.
-- [ ] Decide the repository and viewer-code licensing terms before distributing
-  binaries or accepting contributions from other forks.

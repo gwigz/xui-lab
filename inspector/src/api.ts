@@ -24,13 +24,13 @@ async function responseValue(response: Response): Promise<unknown> {
 }
 
 export async function fetchInspectorState(signal?: AbortSignal): Promise<InspectorState> {
-  const response = await fetch("/api/state", { signal });
+  const response = await fetch("/api/v1/state", { signal });
 
   return parseInspectorState(await responseValue(response));
 }
 
 export async function performAction(action: InspectorAction): Promise<unknown> {
-  const response = await fetch("/api/action", {
+  const response = await fetch("/api/v1/actions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(action),

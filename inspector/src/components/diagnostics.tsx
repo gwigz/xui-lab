@@ -400,7 +400,7 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
         onPointerMove={updateHovered}
         onPointerUp={(event) => void finishGesture(event)}
         onWheel={wheel}
-        src={`/api/capture?v=${capture.version}`}
+        src={`/api/v1/captures/${capture.version}`}
         tabIndex={mode === "interact" && state?.inputOperations.includes("key") ? 0 : -1}
       />
     </div>

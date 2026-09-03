@@ -12,10 +12,17 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from xui_lab.contracts import schema_documents  # noqa: E402
+from xui_lab.inspector_http import inspector_openapi_document  # noqa: E402
 
 
 def rendered(document: dict[str, object]) -> str:
     return json.dumps(document, indent=2, sort_keys=True) + "\n"
+
+
+def documents() -> dict[str, dict[str, object]]:
+    generated = dict(schema_documents())
+    generated["inspector.openapi.json"] = inspector_openapi_document()
+    return generated
 
 
 def main() -> int:
@@ -23,7 +30,7 @@ def main() -> int:
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     stale: list[str] = []
-    for filename, document in schema_documents().items():
+    for filename, document in documents().items():
         path = ROOT / "schemas" / filename
         expected = rendered(document)
         if args.check:

@@ -5,11 +5,9 @@ description: Test and improve viewer LLFloater, LLPanel, and LLXUI changes with 
 
 # XUI Lab UI work
 
-Open a real registered floater, send normal LLUI input, and inspect the
-production tree. Do that with the JSON CLI. The headed inspector is for a
-person. Humans start from [`README.md`](../../../README.md). Repo checks live
-in `AGENTS.md`. JSON fields and exit statuses live in `docs/CLI_CONTRACT.md`.
-Machine-specific build paths live in `AGENTS.local.md` when that file exists.
+Drive a real registered floater through the JSON CLI. The headed inspector is
+for a person. Read [`README.md`](../../../README.md) for setup,
+`docs/CLI_CONTRACT.md` for JSON fields, and `AGENTS.local.md` for local paths.
 
 Stdout is JSON. Stderr is diagnostics. After a JSON command is accepted, a
 failure also writes an `ErrorRecord`. Branch on `code`. Use `--jq` for jq
@@ -86,10 +84,13 @@ One-shot commands need `--session`. They print one JSON document.
 `--fields` or `--jq` over dumping the whole tree. Captures return PNG paths,
 never image bytes.
 
-Selectors, one flag only: `--control-id`, `--model-id`, `--path`, `--role`,
-`--label`, `--placeholder`, `--text`. `--name` goes with `--role`. `--path` is
-provenance. Prefer a visible name or a model id. Conflicting flags fail at
-parse time.
+Use one selector flag: `--role`, `--label`, `--placeholder`, `--text`,
+`--model-id`, `--control-id`, or `--path`. Pair `--name` with `--role`.
+Prefer role and accessible name, then label, placeholder, visible text, and
+model ID. Use a control ID only when no user-visible selector is unique. A
+path records XUI provenance and is the last fallback. `get` returns the shared
+versioned selector at `.data.locator.selector`. Python, the CLI, the inspector,
+Recorded Python, and replay use that contract.
 
 For a stream of commands without restarting the viewer:
 
@@ -104,10 +105,9 @@ jq -nc --arg s "$SESSION" '{schemaVersion:1,command:"tree",session:$s}' \
 ## Drive the production UI
 
 Find the `LLFloaterReg` registration, controller, XUI, callbacks, and model.
-Send input through the CLI or through `Window` and `Locator` so LLUI picks the
-handler. Locate by `control_id` after reading `tree` or `get`. Treat an XUI
-path as provenance, not identity. Use a model UUID when layout can move the
-row.
+Send input through the CLI or through `Window` and `Locator`. Start with the
+ranked selector from `get`. Use a model UUID for generated rows. Use control
+IDs and paths only as the fallbacks described above.
 
 Map the request before clicking:
 
@@ -118,10 +118,9 @@ Map the request before clicking:
   semantic drag-and-drop and drops only if the production handler accepts.
 - `fill` replaces text. `press` sends a key.
 
-When you write Python, call `window.wait_for_stable()` instead of sleeping.
-Assert the visible result. `expect_handled()` when the bug is routing. A setup
-API does not prove event routing. Follow `tests/scenarios/test_floater.py`.
-For wheel or drag-and-drop, follow `tests/scenarios/input_gestures.py`. A
+In Python, call `window.wait_for_stable()` instead of sleeping. Assert the
+visible result and use `expect_handled()` for routing bugs. Follow
+`tests/scenarios/test_floater.py` and `tests/scenarios/input_gestures.py`. A
 handled rejection is not an accepted drop.
 
 Keep Inventory Explorer undeclared until its own scenario proves the subject
@@ -130,10 +129,9 @@ rebuilt `xui-lab` and a new session.
 
 ## Work as a user
 
-Name the task the floater helps a user finish. Exercise that task from its
-initial state to the visible result. Read local, screen, and clipping
-rectangles plus visibility and enabled chains before moving controls. When
-text clips, find the parent that clips it.
+Exercise the user's task from its initial state to the visible result. Inspect
+rectangles and visibility or enabled chains before moving controls. When text
+clips, find the parent that clips it.
 
 Cover the states the change affects, the default size, a supported narrow
 size, a wider size, and the relevant UI scales. Copy spacing, control
@@ -157,8 +155,7 @@ or an unresolved product decision. Report that boundary.
 proves it. Fail with the capability name when the adapter cannot supply the
 state.
 
-Pixels, direct callback calls, fixed sleeps, screen-coordinate selectors, and
-fake viewer models are not proof. A green exit code is not proof either. Open
-the PNGs and read the JSON. A passing run writes `diagnostics.json`,
+Pixels, direct callbacks, fixed sleeps, coordinate selectors, and fake models
+are not proof. Open the PNGs and read the JSON. A passing run writes `diagnostics.json`,
 `event-trace.json`, captures, and sidecars. A failure also tries `frame.png`,
 `ui-tree.json`, and `diagnostics-runtime.json`.

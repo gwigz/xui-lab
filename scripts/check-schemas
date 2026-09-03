@@ -17,6 +17,7 @@ check-jsonschema --schemafile schemas/error.schema.json examples/errors/*.json
 check-jsonschema --schemafile schemas/tree-node.schema.json examples/tree-nodes/*.json
 check-jsonschema --schemafile schemas/subjects.schema.json examples/subjects/*.json
 check-jsonschema --schemafile schemas/preflight.schema.json examples/preflight/*.json
+check-jsonschema --schemafile schemas/recording.schema.json examples/recordings/*.json
 check-jsonschema \
   --schemafile schemas/artifact-manifest.schema.json \
   examples/artifact-manifests/*.json

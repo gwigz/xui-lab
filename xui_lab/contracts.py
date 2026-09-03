@@ -771,6 +771,18 @@ class DiagnosticsCliCommand(SessionBoundCliCommand):
     command: Literal["diagnostics"]
 
 
+class RecordCliCommand(CliCommandBase):
+    command: Literal["record"]
+    session: NonEmptyString
+    output: NonEmptyString
+
+
+class ReplayCliCommand(CliCommandBase):
+    command: Literal["replay"]
+    file: NonEmptyString
+    session: NonEmptyString
+
+
 class CppFormatCliCommand(CliCommandBase):
     command: Literal["cpp"]
     cpp_command: Literal["format"] = Field(alias="cppCommand")
@@ -809,6 +821,8 @@ CliCommand: TypeAlias = (
     | CaptureCliCommand
     | ReloadCliCommand
     | DiagnosticsCliCommand
+    | RecordCliCommand
+    | ReplayCliCommand
     | RunCliCommand
     | InteractiveCliCommand
     | CppCliCommand
@@ -1384,6 +1398,8 @@ def _schema(adapter: TypeAdapter[Any], filename: str, title: str) -> dict[str, A
 
 def schema_documents() -> dict[str, dict[str, Any]]:
     """Generate every checked-in external-contract schema."""
+    from .recording import RecordingAdapter
+
     return {
         "adapter.schema.json": _schema(
             TypeAdapter(AdapterContract),
@@ -1428,6 +1444,11 @@ def schema_documents() -> dict[str, dict[str, Any]]:
             TypeAdapter(PreflightContract),
             "preflight.schema.json",
             "xui-lab capability preflight report",
+        ),
+        "recording.schema.json": _schema(
+            RecordingAdapter,
+            "recording.schema.json",
+            "xui-lab selector-stable command recording",
         ),
         "selector.schema.json": _schema(
             SelectorContract, "selector.schema.json", "xui-lab selector"

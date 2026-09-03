@@ -12,12 +12,17 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from xui_lab.interactive import serve_inspector  # noqa: E402
+from xui_lab.inspector_http import serve_inspector  # noqa: E402
 
 
 class PreviewSession:
     def __init__(self, capture: Path | None):
         self.latest_capture = capture
+
+    def capture_path(self, version: int) -> Path | None:
+        if self.latest_capture is None or version != 1:
+            return None
+        return self.latest_capture
 
     def close(self) -> None:
         return

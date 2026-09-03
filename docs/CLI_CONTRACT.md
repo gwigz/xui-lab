@@ -85,10 +85,20 @@ An invalid expression fails with status `2` before the command runs.
 `--timeout` bounds session startup, socket waits, and runtime requests.
 Capture results return file paths, never image bytes.
 
+`record --session SESSION_ID --output FILE` reads the runtime's input history
+and current production tree. It ranks each transient control ID into the same
+selector contract used by one-shot commands, then writes a versioned recording
+that contains no session or request IDs. `replay FILE --session SESSION_ID`
+validates the complete file before sending its commands in order. Each replayed
+command receives the replay request ID plus a one-based sequence suffix. Replay
+stops at the first error and leaves earlier result records valid.
+
 ```sh
 ./xui-lab session start test_widgets --runtime /path/to/xui-lab --jq .sessionId
 ./xui-lab tree --session sess_abc --jq .data.tree.control_id
 ./xui-lab click --session sess_abc --control-id ok
+./xui-lab record --session sess_abc --output actions.json
+./xui-lab replay actions.json --session sess_fresh
 ./xui-lab session close sess_abc
 ```
 

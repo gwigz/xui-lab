@@ -1,0 +1,24 @@
+{
+  "commands": [
+    {
+      "command": "fill",
+      "selector": {
+        "kind": "role",
+        "name": "Input",
+        "role": "textbox",
+        "schemaVersion": 1
+      },
+      "value": "hello"
+    },
+    {
+      "command": "click",
+      "selector": {
+        "kind": "label",
+        "label": "OK",
+        "schemaVersion": 1
+      }
+    }
+  ],
+  "schemaVersion": 1,
+  "type": "recording"
+}

@@ -1,0 +1,280 @@
+"""HTTP contract tests for the FastAPI inspector."""
+
+from __future__ import annotations
+
+import json
+import tempfile
+import threading
+import time
+import unittest
+from pathlib import Path
+from typing import Any
+from unittest.mock import patch
+
+from fastapi.testclient import TestClient
+
+from xui_lab.inspector_http import (
+    MAX_ACTION_BYTES,
+    SECURITY_HEADERS,
+    InspectorBusyError,
+    InspectorWorker,
+    create_inspector_app,
+    format_sse_event,
+    inspector_openapi_document,
+)
+
+
+class SessionStub:
+    def __init__(self, capture: Path | None = None) -> None:
+        self.latest_capture = capture
+        self.closed = False
+        self.action_delay = 0.0
+        self.release = threading.Event()
+        self.release.set()
+        self.started = threading.Event()
+        self.calls: list[dict[str, Any]] = []
+        self.order: list[tuple[str, str]] = []
+        self.state_value: dict[str, Any] = {
+            "tree": {"control_id": "root", "path": "/root", "children": []},
+            "diagnostics": {"processId": 7},
+            "recording": [],
+            "locators": {},
+            "artifactDir": "/tmp/xui-lab-inspector",
+            "subjects": ["test_widgets"],
+            "fixtures": [],
+            "scenarios": ["test_floater"],
+            "inputOperations": ["click"],
+            "capture": {
+                "available": capture is not None,
+                "version": 1 if capture is not None else 0,
+            },
+        }
+
+    def capture_path(self, version: int) -> Path | None:
+        if self.latest_capture is None or version != 1:
+            return None
+        return self.latest_capture
+
+    def close(self) -> None:
+        self.closed = True
+
+    def action(self, request: dict[str, Any]) -> dict[str, Any]:
+        kind = str(request.get("action", ""))
+        self.order.append(("start", kind))
+        self.started.set()
+        self.release.wait(timeout=2)
+        if self.action_delay:
+            time.sleep(self.action_delay)
+        self.calls.append(request)
+        self.order.append(("end", kind))
+        return {"accepted": True, "action": kind}
+
+    def state(self) -> dict[str, Any]:
+        return self.state_value
+
+
+class InspectorHttpTests(unittest.TestCase):
+    def client(self, session: SessionStub) -> TestClient:
+        return TestClient(create_inspector_app(InspectorWorker(session)))
+
+    def test_serves_the_built_react_client_with_security_headers(self) -> None:
+        with self.client(SessionStub()) as client:
+            response = client.get("/")
+        self.assertEqual(200, response.status_code)
+        self.assertEqual("text/html; charset=utf-8", response.headers["content-type"])
+        self.assertIn('<div id="root"></div>', response.text)
+        self.assertIn("/assets/app.js", response.text)
+        for name, value in SECURITY_HEADERS.items():
+            self.assertEqual(value, response.headers[name.lower()])
+
+    def test_serves_fingerprint_stable_assets(self) -> None:
+        with self.client(SessionStub()) as client:
+            response = client.get("/assets/app.js")
+        self.assertEqual(200, response.status_code)
+        self.assertIn("javascript", response.headers["content-type"])
+
+    def test_disables_docs_cors_and_legacy_routes(self) -> None:
+        with self.client(SessionStub()) as client:
+            self.assertEqual(404, client.get("/docs").status_code)
+            self.assertEqual(404, client.get("/redoc").status_code)
+            self.assertEqual(404, client.get("/openapi.json").status_code)
+            self.assertEqual(404, client.get("/api/state").status_code)
+            options = client.options("/api/v1/state")
+        self.assertNotIn("access-control-allow-origin", options.headers)
+
+    def test_state_is_an_immutable_snapshot(self) -> None:
+        session = SessionStub()
+        with self.client(session) as client:
+            first = client.get("/api/v1/state")
+            body = first.json()
+            body["tree"]["injected"] = True
+            session.state_value["tree"]["live"] = True
+            second = client.get("/api/v1/state")
+        self.assertEqual(200, first.status_code)
+        self.assertEqual("root", first.json()["tree"]["control_id"])
+        self.assertNotIn("injected", second.json()["tree"])
+        self.assertTrue(second.json()["tree"]["live"])
+
+    def test_actions_use_the_interactive_pydantic_models(self) -> None:
+        session = SessionStub()
+        with self.client(session) as client:
+            response = client.post("/api/v1/actions", json={"action": "capture"})
+            failure = client.post(
+                "/api/v1/actions",
+                json={"action": "pick", "x": "not-an-integer", "y": 20},
+            )
+        self.assertEqual(200, response.status_code)
+        self.assertEqual(
+            {"ok": True, "result": {"accepted": True, "action": "capture"}},
+            response.json(),
+        )
+        self.assertEqual(
+            {"schemaVersion": 1, "action": "capture"},
+            session.calls[0],
+        )
+        self.assertEqual(400, failure.status_code)
+        self.assertEqual(
+            {
+                "schemaVersion": 1,
+                "type": "error",
+                "code": "invalid_interactive_action",
+                "message": "interactive action violates the XUI Lab contract",
+                "operation": "inspector.action",
+                "retryable": False,
+            },
+            failure.json()["error"],
+        )
+        self.assertNotIn("int_type", json.dumps(failure.json()))
+
+    def test_rejects_oversized_action_bodies_before_parsing(self) -> None:
+        with self.client(SessionStub()) as client:
+            response = client.post(
+                "/api/v1/actions",
+                content=b"{" + b"x" * (MAX_ACTION_BYTES + 1),
+                headers={"Content-Type": "application/json"},
+            )
+        self.assertEqual(413, response.status_code)
+        self.assertEqual("invalid_input", response.json()["error"]["code"])
+        self.assertTrue(response.json()["error"]["message"].endswith("bytes"))
+
+    def test_serves_versioned_captures(self) -> None:
+        directory = Path(tempfile.mkdtemp())
+        png = directory / "latest.png"
+        png.write_bytes(b"png bytes")
+        session = SessionStub(png)
+        with self.client(session) as client:
+            found = client.get("/api/v1/captures/1")
+            missing = client.get("/api/v1/captures/9")
+        self.assertEqual(200, found.status_code)
+        self.assertEqual("image/png", found.headers["content-type"])
+        self.assertEqual(b"png bytes", found.content)
+        self.assertEqual(404, missing.status_code)
+        self.assertEqual("not_found", missing.json()["error"]["code"])
+
+    def test_events_stream_invalidation_records(self) -> None:
+        session = SessionStub()
+        worker = InspectorWorker(session)
+        subscriber = None
+        worker.start()
+        try:
+            subscriber = worker.subscribe()
+            event = subscriber.get(timeout=1)
+        finally:
+            if subscriber is not None:
+                worker.unsubscribe(subscriber)
+            worker.close()
+        self.assertIsNotNone(event)
+        assert event is not None
+        payload = format_sse_event(event).decode()
+        self.assertIn("event: invalidate", payload)
+        data_line = next(
+            line for line in payload.splitlines() if line.startswith("data: ")
+        )
+        body = json.loads(data_line.removeprefix("data: "))
+        self.assertEqual(event.event_id, body["eventId"])
+        self.assertEqual(event.state_version, body["stateVersion"])
+
+    def test_worker_runs_mutating_actions_in_request_order(self) -> None:
+        session = SessionStub()
+        session.action_delay = 0.05
+        worker = InspectorWorker(session, max_queue=8)
+        worker.start()
+        try:
+            threads = [
+                threading.Thread(target=worker.action, args=({"action": name},))
+                for name in ("capture", "reload", "export")
+            ]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=2)
+        finally:
+            worker.close()
+        paired = list(zip(session.order[::2], session.order[1::2], strict=True))
+        self.assertEqual(3, len(paired))
+        for start, end in paired:
+            self.assertEqual("start", start[0])
+            self.assertEqual("end", end[0])
+            self.assertEqual(start[1], end[1])
+
+    def test_worker_rejects_a_full_queue(self) -> None:
+        session = SessionStub()
+        session.release.clear()
+        worker = InspectorWorker(session, max_queue=1)
+        worker.start()
+        holder = threading.Thread(target=worker.action, args=({"action": "capture"},))
+        queued = threading.Thread(target=worker.action, args=({"action": "reload"},))
+        try:
+            holder.start()
+            self.assertTrue(session.started.wait(timeout=1))
+            queued.start()
+            time.sleep(0.05)
+            with self.assertRaises(InspectorBusyError):
+                worker.action({"action": "export"})
+        finally:
+            session.release.set()
+            holder.join(timeout=2)
+            queued.join(timeout=2)
+            worker.close()
+
+    def test_lifespan_starts_and_stops_the_worker(self) -> None:
+        session = SessionStub()
+        worker = InspectorWorker(session)
+        app = create_inspector_app(worker)
+        with TestClient(app) as client:
+            self.assertEqual(200, client.get("/api/v1/state").status_code)
+            thread = worker._thread
+            self.assertIsNotNone(thread)
+        assert thread is not None
+        thread.join(timeout=2)
+        self.assertFalse(thread.is_alive())
+
+    def test_state_rejects_oversized_snapshots(self) -> None:
+        session = SessionStub()
+        with patch("xui_lab.inspector_http.MAX_STATE_BYTES", 32):
+            with self.client(session) as client:
+                response = client.get("/api/v1/state")
+        self.assertEqual(413, response.status_code)
+        self.assertEqual("response_too_large", response.json()["error"]["code"])
+
+    def test_openapi_document_covers_the_versioned_routes(self) -> None:
+        document = inspector_openapi_document()
+        paths = document["paths"]
+        self.assertIn("/api/v1/state", paths)
+        self.assertIn("get", paths["/api/v1/state"])
+        self.assertIn("/api/v1/actions", paths)
+        self.assertIn("post", paths["/api/v1/actions"])
+        self.assertIn("/api/v1/events", paths)
+        self.assertIn("/api/v1/captures/{version}", paths)
+        self.assertEqual(
+            {"$ref": "#/components/schemas/InteractiveAction"},
+            paths["/api/v1/actions"]["post"]["requestBody"]["content"][
+                "application/json"
+            ]["schema"],
+        )
+        self.assertIn("InteractiveAction", document["components"]["schemas"])
+        self.assertNotIn("/docs", paths)
+
+
+if __name__ == "__main__":
+    unittest.main()

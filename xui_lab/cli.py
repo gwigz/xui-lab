@@ -32,7 +32,9 @@ from .contracts import (
     PickCliCommand,
     PreflightCliCommand,
     PressCliCommand,
+    RecordCliCommand,
     ReloadCliCommand,
+    ReplayCliCommand,
     ResizeSubjectCliCommand,
     ResizeViewportCliCommand,
     RunCliCommand,
@@ -55,14 +57,15 @@ from .cpp_quality import format_cpp, tidy_cpp
 from .discovery import operations_contract, preflight_contract, subjects_contract
 from .domain import Capability, Fork, ForkId, Manifest, Viewport
 from .errors import InputError, XUILabError
+from .inspector_http import serve_inspector
 from .interactive import (
     InteractiveConfig,
     InteractiveSession,
     discover_fixtures,
-    serve_inspector,
 )
 from .io import parse_manifest, parse_source_overrides, read_json, resolved_source
 from .json_output import compile_jq, emit_json_document
+from .recording import record_session, replay_file
 from .repository import check_repository
 from .scenarios import discover_scenarios, load_scenario
 from .session_cli import (
@@ -96,6 +99,8 @@ JSON_COMMANDS = frozenset(
         "capture",
         "reload",
         "diagnostics",
+        "record",
+        "replay",
     }
 )
 
@@ -511,6 +516,14 @@ def parser() -> argparse.ArgumentParser:
     serve = session_commands.add_parser("serve")
     serve.add_argument("--session-id", required=True)
     _add_oneshot_commands(commands)
+    record = commands.add_parser("record", help="Save replayable session actions.")
+    record.add_argument("--session", required=True)
+    record.add_argument("--output", required=True)
+    _add_jq(record)
+    replay = commands.add_parser("replay", help="Replay a recorded command file.")
+    replay.add_argument("file")
+    replay.add_argument("--session", required=True)
+    _add_jq(replay)
     cpp = commands.add_parser("cpp", help="Format or lint the adapter-owned C++ files.")
     cpp_commands = cpp.add_subparsers(dest="cpp_command", required=True)
     format_command = cpp_commands.add_parser(
@@ -639,6 +652,10 @@ def dispatch(command: CliCommand) -> int:
         ),
     ):
         return cmd_session_bound(command)
+    if isinstance(command, RecordCliCommand):
+        return record_session(command)
+    if isinstance(command, ReplayCliCommand):
+        return replay_file(command)
     if isinstance(command, RunCliCommand):
         return cmd_run(command)
     if isinstance(command, InteractiveCliCommand):

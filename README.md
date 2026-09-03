@@ -1,16 +1,17 @@
 # `xui-lab`
 
 > [!CAUTION]
-> This project is unfinished and changes often.
+> This project is unfinished and changes often. It's designed to provide
+> me with a better workflow around UI development for Second Life, not intended
+> for any use past that.
 
-The lab opens a real Alchemy floater, with its production C++ controller, XUI,
-and models, without logging in or loading a world. You look at it. You click
-it. The clicks go through normal LLUI.
+This project uses real `LLFloater` code, with its production C++ controller,
+XUI, and models, without logging in or loading a world. You look at it. You
+click it. The clicks go through normal LLUI.
 
 ![The inspector showing the production test floater in T3 Code](.github/assets/xui-lab-in-t3-code.png)
 
-Only `test_widgets` is declared usable today. Inventory Explorer is still
-unfinished.
+Only `test_widgets` is declared usable today.
 
 Agents should follow
 [`.agents/skills/xui-lab-ui/SKILL.md`](.agents/skills/xui-lab-ui/SKILL.md).
@@ -74,6 +75,17 @@ SESSION=$(./xui-lab --viewer-source alchemy=/path/to/alchemy \
 ./xui-lab session close "$SESSION"
 ```
 
+Save the session's input history as selector-stable JSON, then replay it in a
+fresh session:
+
+```sh
+./xui-lab record --session "$SESSION" --output actions.json
+./xui-lab replay actions.json --session "$OTHER_SESSION"
+```
+
+The recording stores selectors and action arguments, not session IDs or
+request IDs. It is ordinary JSON intended for review and editing.
+
 `tree` and `get` return a short excerpt by default. The full tree lands in an
 artifact with path, size, and hash. `--include-tree` inlines the whole tree.
 `--fields` keeps a few keys. `--jq` runs a jq expression on the JSON
@@ -92,6 +104,8 @@ command, a failure also writes an `ErrorRecord`. Read `code`, not the stderr
 line. `session close`, `reload`, and `run` accept `--dry-run`. Clicks and
 other input gestures do not. Field lists and exit statuses live in
 [`docs/CLI_CONTRACT.md`](docs/CLI_CONTRACT.md).
+See [`docs/CLI_EXAMPLES.md`](docs/CLI_EXAMPLES.md) for complete discovery,
+inspection, resize, capture, scenario, and cleanup commands.
 
 ## Replay a scenario
 
@@ -121,7 +135,8 @@ only if the production handler accepts it. Use `Locator.drag_by()` or
 ## Inspector frontend
 
 The browser inspector is a React and TypeScript app in `inspector/`. Vite
-builds it into `xui_lab/_inspector/`. Button, Input, Select, Tabs, and Toolbar
+builds it into `xui_lab/_inspector/`. FastAPI serves that build and the
+`/api/v1` routes on a loopback port. Button, Input, Select, Tabs, and Toolbar
 come from the Coss UI registry. They use Base UI behavior and Coss neutral
 tokens. Tailwind CSS supplies the generated utilities.
 

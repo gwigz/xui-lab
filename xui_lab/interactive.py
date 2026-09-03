@@ -2,24 +2,14 @@
 
 from __future__ import annotations
 
-import json
-import threading
-import webbrowser
 from dataclasses import dataclass
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Protocol
-from urllib.parse import urlsplit
+from typing import Any
 
 from . import contracts
 from .api import Lab, Locator, Window
 from .domain import Capability, Viewport
-from .errors import InputError, RuntimeFailure, XUILabError
-from .inspector_assets import (
-    INSPECTOR_ASSETS,
-    inspector_assets_problem,
-    inspector_build_instruction,
-)
+from .errors import InputError, RuntimeFailure
 from .io import write_json
 from .scenarios import Scenario
 
@@ -145,6 +135,7 @@ class InteractiveSession:
         self._generation = 0
         self._latest_capture: Path | None = None
         self._capture_version = 0
+        self._captures: dict[int, Path] = {}
         self.window = self._open(config.subject, config.fixture)
         try:
             self._capture("initial")
@@ -292,11 +283,24 @@ class InteractiveSession:
     def latest_capture(self) -> Path | None:
         return self._latest_capture
 
+    def capture_path(self, version: int) -> Path | None:
+        captures = getattr(self, "_captures", None)
+        if not isinstance(captures, dict):
+            return None
+        path = captures.get(version)
+        return path if isinstance(path, Path) else None
+
     def _capture(self, reason: str) -> dict[str, Any]:
         name = f"interactive-{self._capture_version + 1:04d}-{reason}"
         result = self.window.capture(name)
-        self._latest_capture = self._capture_path(result)
+        path = self._capture_path(result)
+        self._latest_capture = path
         self._capture_version += 1
+        captures = getattr(self, "_captures", None)
+        if captures is None:
+            self._captures = {}
+            captures = self._captures
+        captures[self._capture_version] = path
         return result
 
     def _capture_path(self, result: dict[str, Any]) -> Path:
@@ -351,167 +355,3 @@ class InteractiveSession:
 
 def discover_fixtures(root: Path) -> dict[str, Path]:
     return {path.stem: path for path in sorted((root / "fixtures").glob("*.json"))}
-
-
-ASSET_CONTENT_TYPES = {
-    ".css": "text/css; charset=utf-8",
-    ".js": "text/javascript; charset=utf-8",
-    ".json": "application/json",
-    ".png": "image/png",
-    ".svg": "image/svg+xml",
-    ".woff2": "font/woff2",
-}
-MAX_ACTION_BYTES = 1024 * 1024
-
-
-class InspectorSession(Protocol):
-    @property
-    def latest_capture(self) -> Path | None: ...
-
-    def action(self, request: dict[str, Any]) -> dict[str, Any]: ...
-
-    def close(self) -> None: ...
-
-    def state(self) -> dict[str, Any]: ...
-
-
-class InspectorServer(ThreadingHTTPServer):
-    session: InspectorSession
-    assets = INSPECTOR_ASSETS
-    daemon_threads = True
-
-    def __init__(
-        self,
-        server_address: tuple[str, int],
-        handler: type[BaseHTTPRequestHandler],
-    ):
-        self.session_lock = threading.Lock()
-        super().__init__(server_address, handler)
-
-
-class InspectorHandler(BaseHTTPRequestHandler):
-    server: InspectorServer
-
-    def do_GET(self) -> None:  # noqa: N802
-        path = urlsplit(self.path).path
-        if path in {"/", "/index.html"}:
-            self._asset("index.html", "text/html; charset=utf-8")
-            return
-        if path.startswith("/assets/"):
-            self._asset(path.removeprefix("/"))
-            return
-        if path == "/api/state":
-            with self.server.session_lock:
-                state = self.server.session.state()
-            self._json(200, state)
-            return
-        if path == "/api/capture":
-            with self.server.session_lock:
-                capture = self.server.session.latest_capture
-            if capture is None:
-                self._json(404, {"error": "no screenshot has been captured"})
-                return
-            try:
-                body = capture.read_bytes()
-            except OSError:
-                self._json(404, {"error": "the latest screenshot is unavailable"})
-                return
-            self._write(200, body, "image/png")
-            return
-        self._json(404, {"error": "not found"})
-
-    def do_POST(self) -> None:  # noqa: N802
-        if urlsplit(self.path).path != "/api/action":
-            self._json(404, {"error": "not found"})
-            return
-        try:
-            length = int(self.headers.get("Content-Length", "0"))
-            if length < 1 or length > MAX_ACTION_BYTES:
-                raise InputError(
-                    f"request body must be between 1 and {MAX_ACTION_BYTES} bytes"
-                )
-            value = json.loads(self.rfile.read(length))
-            if not isinstance(value, dict):
-                raise InputError("request must be an object")
-            with self.server.session_lock:
-                result = self.server.session.action(value)
-            self._json(200, {"ok": True, "result": result})
-        except (ValueError, XUILabError) as error:
-            record = contracts.error_record(error, operation="inspector.action")
-            self._json(
-                400,
-                {
-                    "ok": False,
-                    "error": record.model_dump(
-                        mode="json", by_alias=True, exclude_none=True
-                    ),
-                },
-            )
-
-    def log_message(self, _format: str, *_args: object) -> None:
-        return
-
-    def _json(self, status: int, value: Any) -> None:
-        self._write(status, json.dumps(value).encode(), "application/json")
-
-    def _asset(self, relative_path: str, content_type: str | None = None) -> None:
-        root = self.server.assets.resolve()
-        path = root.joinpath(relative_path).resolve()
-        try:
-            path.relative_to(root)
-        except ValueError:
-            self._json(404, {"error": "not found"})
-            return
-        try:
-            body = path.read_bytes()
-        except OSError:
-            self._json(404, {"error": "inspector asset is unavailable"})
-            return
-        resolved_content_type = content_type or ASSET_CONTENT_TYPES.get(
-            path.suffix.lower(), "application/octet-stream"
-        )
-        self._write(200, body, resolved_content_type)
-
-    def _write(self, status: int, body: bytes, content_type: str) -> None:
-        self.send_response(status)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.send_header(
-            "Content-Security-Policy",
-            "default-src 'self'; img-src 'self'; script-src 'self'; "
-            "style-src 'self' 'unsafe-inline'; connect-src 'self'",
-        )
-        self.send_header("Referrer-Policy", "no-referrer")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.end_headers()
-        self.wfile.write(body)
-
-
-def serve_inspector(
-    session: InspectorSession,
-    *,
-    host: str = "127.0.0.1",
-    port: int = 0,
-    open_browser: bool = True,
-) -> int:
-    assets_problem = inspector_assets_problem()
-    if assets_problem is not None:
-        raise RuntimeFailure(f"{assets_problem}; {inspector_build_instruction()}")
-    server = InspectorServer((host, port), InspectorHandler)
-    server.session = session
-    bound_host = server.server_address[0]
-    if isinstance(bound_host, bytes):
-        bound_host = bound_host.decode()
-    url = f"http://{bound_host}:{server.server_address[1]}/"
-    print(f"xui-lab inspector: {url}", flush=True)
-    if open_browser:
-        threading.Timer(0.2, webbrowser.open, args=(url,)).start()
-    try:
-        server.serve_forever(poll_interval=0.1)
-    except KeyboardInterrupt:
-        return 0
-    finally:
-        server.server_close()
-        session.close()
-    return 0

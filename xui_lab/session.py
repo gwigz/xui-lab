@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import signal
@@ -63,7 +64,12 @@ def session_path(session_id: str) -> Path:
 
 
 def socket_path(session_id: str) -> Path:
-    return runtime_dir() / f"{session_id}.sock"
+    runtime_key = hashlib.sha256(str(runtime_dir().resolve()).encode()).hexdigest()[:12]
+    root = Path("/tmp") / f"xui-lab-{os.getuid()}" / runtime_key
+    root.mkdir(parents=True, exist_ok=True)
+    os.chmod(root.parent, 0o700)
+    os.chmod(root, 0o700)
+    return root / f"{session_id}.sock"
 
 
 def write_session(record: SessionFile) -> None:
@@ -129,6 +135,11 @@ def remove_session(session_id: str) -> None:
     sock = socket_path(session_id)
     path.unlink(missing_ok=True)
     sock.unlink(missing_ok=True)
+    for directory in (sock.parent, sock.parent.parent):
+        try:
+            directory.rmdir()
+        except OSError:
+            break
 
 
 def wait_until_ready(session_id: str, timeout: float) -> SessionFile:

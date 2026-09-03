@@ -1,0 +1,697 @@
+{
+  "$defs": {
+    "ControlIdSelectorContract": {
+      "additionalProperties": false,
+      "properties": {
+        "controlId": {
+          "minLength": 1,
+          "title": "Controlid",
+          "type": "string"
+        },
+        "kind": {
+          "const": "controlId",
+          "title": "Kind",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "controlId"
+      ],
+      "title": "ControlIdSelectorContract",
+      "type": "object"
+    },
+    "LabelSelectorContract": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "label",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "label"
+      ],
+      "title": "LabelSelectorContract",
+      "type": "object"
+    },
+    "ModelIdSelectorContract": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "modelId",
+          "title": "Kind",
+          "type": "string"
+        },
+        "modelId": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "title": "Modelid",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "modelId"
+      ],
+      "title": "ModelIdSelectorContract",
+      "type": "object"
+    },
+    "PathSelectorContract": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "path",
+          "title": "Kind",
+          "type": "string"
+        },
+        "path": {
+          "minLength": 1,
+          "pattern": "^/",
+          "title": "Path",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "path"
+      ],
+      "title": "PathSelectorContract",
+      "type": "object"
+    },
+    "PlaceholderSelectorContract": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "placeholder",
+          "title": "Kind",
+          "type": "string"
+        },
+        "placeholder": {
+          "minLength": 1,
+          "title": "Placeholder",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "placeholder"
+      ],
+      "title": "PlaceholderSelectorContract",
+      "type": "object"
+    },
+    "RecordedCapture": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "capture",
+          "title": "Command",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "title": "RecordedCapture",
+      "type": "object"
+    },
+    "RecordedClick": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "click",
+          "title": "Command",
+          "type": "string"
+        },
+        "selector": {
+          "discriminator": {
+            "mapping": {
+              "controlId": "#/$defs/ControlIdSelectorContract",
+              "label": "#/$defs/LabelSelectorContract",
+              "modelId": "#/$defs/ModelIdSelectorContract",
+              "path": "#/$defs/PathSelectorContract",
+              "placeholder": "#/$defs/PlaceholderSelectorContract",
+              "role": "#/$defs/RoleSelectorContract",
+              "text": "#/$defs/TextSelectorContract"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/PathSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/ModelIdSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/ControlIdSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/RoleSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/LabelSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/PlaceholderSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/TextSelectorContract"
+            }
+          ],
+          "title": "Selector"
+        }
+      },
+      "required": [
+        "selector",
+        "command"
+      ],
+      "title": "RecordedClick",
+      "type": "object"
+    },
+    "RecordedDragBy": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "drag-by",
+          "title": "Command",
+          "type": "string"
+        },
+        "dx": {
+          "title": "Dx",
+          "type": "integer"
+        },
+        "dy": {
+          "title": "Dy",
+          "type": "integer"
+        },
+        "selector": {
+          "discriminator": {
+            "mapping": {
+              "controlId": "#/$defs/ControlIdSelectorContract",
+              "label": "#/$defs/LabelSelectorContract",
+              "modelId": "#/$defs/ModelIdSelectorContract",
+              "path": "#/$defs/PathSelectorContract",
+              "placeholder": "#/$defs/PlaceholderSelectorContract",
+              "role": "#/$defs/RoleSelectorContract",
+              "text": "#/$defs/TextSelectorContract"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/PathSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/ModelIdSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/ControlIdSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/RoleSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/LabelSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/PlaceholderSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/TextSelectorContract"
+            }
+          ],
+          "title": "Selector"
+        }
+      },
+      "required": [
+        "selector",
+        "command",
+        "dx",
+        "dy"
+      ],
+      "title": "RecordedDragBy",
+      "type": "object"
+    },
+    "RecordedFill": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "fill",
+          "title": "Command",
+          "type": "string"
+        },
+        "selector": {
+          "discriminator": {
+            "mapping": {
+              "controlId": "#/$defs/ControlIdSelectorContract",
+              "label": "#/$defs/LabelSelectorContract",
+              "modelId": "#/$defs/ModelIdSelectorContract",
+              "path": "#/$defs/PathSelectorContract",
+              "placeholder": "#/$defs/PlaceholderSelectorContract",
+              "role": "#/$defs/RoleSelectorContract",
+              "text": "#/$defs/TextSelectorContract"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/PathSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/ModelIdSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/ControlIdSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/RoleSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/LabelSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/PlaceholderSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/TextSelectorContract"
+            }
+          ],
+          "title": "Selector"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "selector",
+        "command",
+        "value"
+      ],
+      "title": "RecordedFill",
+      "type": "object"
+    },
+    "RecordedPress": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "press",
+          "title": "Command",
+          "type": "string"
+        },
+        "key": {
+          "minLength": 1,
+          "title": "Key",
+          "type": "string"
+        },
+        "modifiers": {
+          "default": [],
+          "items": {
+            "enum": [
+              "shift",
+              "control",
+              "alt"
+            ],
+            "type": "string"
+          },
+          "title": "Modifiers",
+          "type": "array"
+        },
+        "selector": {
+          "discriminator": {
+            "mapping": {
+              "controlId": "#/$defs/ControlIdSelectorContract",
+              "label": "#/$defs/LabelSelectorContract",
+              "modelId": "#/$defs/ModelIdSelectorContract",
+              "path": "#/$defs/PathSelectorContract",
+              "placeholder": "#/$defs/PlaceholderSelectorContract",
+              "role": "#/$defs/RoleSelectorContract",
+              "text": "#/$defs/TextSelectorContract"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/PathSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/ModelIdSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/ControlIdSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/RoleSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/LabelSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/PlaceholderSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/TextSelectorContract"
+            }
+          ],
+          "title": "Selector"
+        }
+      },
+      "required": [
+        "selector",
+        "command",
+        "key"
+      ],
+      "title": "RecordedPress",
+      "type": "object"
+    },
+    "RecordedReload": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "reload",
+          "title": "Command",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "title": "RecordedReload",
+      "type": "object"
+    },
+    "RecordedResizeSubject": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "resize-subject",
+          "title": "Command",
+          "type": "string"
+        },
+        "height": {
+          "exclusiveMinimum": 0,
+          "title": "Height",
+          "type": "integer"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "title": "Width",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command",
+        "width",
+        "height"
+      ],
+      "title": "RecordedResizeSubject",
+      "type": "object"
+    },
+    "RecordedResizeViewport": {
+      "additionalProperties": false,
+      "properties": {
+        "command": {
+          "const": "resize-viewport",
+          "title": "Command",
+          "type": "string"
+        },
+        "height": {
+          "exclusiveMinimum": 0,
+          "title": "Height",
+          "type": "integer"
+        },
+        "uiScale": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uiscale"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "title": "Width",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command",
+        "width",
+        "height"
+      ],
+      "title": "RecordedResizeViewport",
+      "type": "object"
+    },
+    "RecordedScroll": {
+      "additionalProperties": false,
+      "properties": {
+        "clicks": {
+          "title": "Clicks",
+          "type": "integer"
+        },
+        "command": {
+          "const": "scroll",
+          "title": "Command",
+          "type": "string"
+        },
+        "selector": {
+          "discriminator": {
+            "mapping": {
+              "controlId": "#/$defs/ControlIdSelectorContract",
+              "label": "#/$defs/LabelSelectorContract",
+              "modelId": "#/$defs/ModelIdSelectorContract",
+              "path": "#/$defs/PathSelectorContract",
+              "placeholder": "#/$defs/PlaceholderSelectorContract",
+              "role": "#/$defs/RoleSelectorContract",
+              "text": "#/$defs/TextSelectorContract"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/PathSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/ModelIdSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/ControlIdSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/RoleSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/LabelSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/PlaceholderSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/TextSelectorContract"
+            }
+          ],
+          "title": "Selector"
+        }
+      },
+      "required": [
+        "selector",
+        "command",
+        "clicks"
+      ],
+      "title": "RecordedScroll",
+      "type": "object"
+    },
+    "RoleSelectorContract": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "role",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "role": {
+          "minLength": 1,
+          "title": "Role",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "role"
+      ],
+      "title": "RoleSelectorContract",
+      "type": "object"
+    },
+    "TextSelectorContract": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "text",
+          "title": "Kind",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        },
+        "text": {
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "text"
+      ],
+      "title": "TextSelectorContract",
+      "type": "object"
+    }
+  },
+  "$id": "https://xui-lab.local/schemas/recording.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "commands": {
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "capture": "#/$defs/RecordedCapture",
+            "click": "#/$defs/RecordedClick",
+            "drag-by": "#/$defs/RecordedDragBy",
+            "fill": "#/$defs/RecordedFill",
+            "press": "#/$defs/RecordedPress",
+            "reload": "#/$defs/RecordedReload",
+            "resize-subject": "#/$defs/RecordedResizeSubject",
+            "resize-viewport": "#/$defs/RecordedResizeViewport",
+            "scroll": "#/$defs/RecordedScroll"
+          },
+          "propertyName": "command"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/RecordedClick"
+          },
+          {
+            "$ref": "#/$defs/RecordedFill"
+          },
+          {
+            "$ref": "#/$defs/RecordedPress"
+          },
+          {
+            "$ref": "#/$defs/RecordedScroll"
+          },
+          {
+            "$ref": "#/$defs/RecordedDragBy"
+          },
+          {
+            "$ref": "#/$defs/RecordedResizeViewport"
+          },
+          {
+            "$ref": "#/$defs/RecordedResizeSubject"
+          },
+          {
+            "$ref": "#/$defs/RecordedCapture"
+          },
+          {
+            "$ref": "#/$defs/RecordedReload"
+          }
+        ]
+      },
+      "title": "Commands",
+      "type": "array"
+    },
+    "schemaVersion": {
+      "const": 1,
+      "title": "Schemaversion",
+      "type": "integer"
+    },
+    "type": {
+      "const": "recording",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "type",
+    "commands"
+  ],
+  "title": "xui-lab selector-stable command recording",
+  "type": "object"
+}

@@ -1,0 +1,1506 @@
+{
+  "components": {
+    "schemas": {
+      "ControlIdSelectorContract": {
+        "additionalProperties": false,
+        "properties": {
+          "controlId": {
+            "minLength": 1,
+            "title": "Controlid",
+            "type": "string"
+          },
+          "kind": {
+            "const": "controlId",
+            "title": "Kind",
+            "type": "string"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "kind",
+          "controlId"
+        ],
+        "title": "ControlIdSelectorContract",
+        "type": "object"
+      },
+      "CoordinateInteractiveAction": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "clickAt",
+              "doubleClickAt",
+              "rightClickAt"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          },
+          "x": {
+            "title": "X",
+            "type": "integer"
+          },
+          "y": {
+            "title": "Y",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "action",
+          "x",
+          "y"
+        ],
+        "title": "CoordinateInteractiveAction",
+        "type": "object"
+      },
+      "DragAndDropInteractiveAction": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "dragAndDrop",
+            "title": "Action",
+            "type": "string"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          },
+          "source": {
+            "discriminator": {
+              "mapping": {
+                "controlId": "#/components/schemas/ControlIdSelectorContract",
+                "label": "#/components/schemas/LabelSelectorContract",
+                "modelId": "#/components/schemas/ModelIdSelectorContract",
+                "path": "#/components/schemas/PathSelectorContract",
+                "placeholder": "#/components/schemas/PlaceholderSelectorContract",
+                "role": "#/components/schemas/RoleSelectorContract",
+                "text": "#/components/schemas/TextSelectorContract"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PathSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/ModelIdSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/ControlIdSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/RoleSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/LabelSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/PlaceholderSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/TextSelectorContract"
+              }
+            ],
+            "title": "Source"
+          },
+          "target": {
+            "discriminator": {
+              "mapping": {
+                "controlId": "#/components/schemas/ControlIdSelectorContract",
+                "label": "#/components/schemas/LabelSelectorContract",
+                "modelId": "#/components/schemas/ModelIdSelectorContract",
+                "path": "#/components/schemas/PathSelectorContract",
+                "placeholder": "#/components/schemas/PlaceholderSelectorContract",
+                "role": "#/components/schemas/RoleSelectorContract",
+                "text": "#/components/schemas/TextSelectorContract"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PathSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/ModelIdSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/ControlIdSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/RoleSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/LabelSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/PlaceholderSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/TextSelectorContract"
+              }
+            ],
+            "title": "Target"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "action",
+          "source",
+          "target"
+        ],
+        "title": "DragAndDropInteractiveAction",
+        "type": "object"
+      },
+      "DragInteractiveAction": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "drag",
+            "title": "Action",
+            "type": "string"
+          },
+          "endX": {
+            "title": "Endx",
+            "type": "integer"
+          },
+          "endY": {
+            "title": "Endy",
+            "type": "integer"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          },
+          "startX": {
+            "title": "Startx",
+            "type": "integer"
+          },
+          "startY": {
+            "title": "Starty",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "action",
+          "startX",
+          "startY",
+          "endX",
+          "endY"
+        ],
+        "title": "DragInteractiveAction",
+        "type": "object"
+      },
+      "ErrorRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "artifacts": {
+            "anyOf": [
+              {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifacts"
+          },
+          "capability": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capability"
+          },
+          "code": {
+            "minLength": 1,
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          },
+          "operation": {
+            "minLength": 1,
+            "title": "Operation",
+            "type": "string"
+          },
+          "requestId": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requestid"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          },
+          "selector": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "controlId": "#/components/schemas/ControlIdSelectorContract",
+                    "label": "#/components/schemas/LabelSelectorContract",
+                    "modelId": "#/components/schemas/ModelIdSelectorContract",
+                    "path": "#/components/schemas/PathSelectorContract",
+                    "placeholder": "#/components/schemas/PlaceholderSelectorContract",
+                    "role": "#/components/schemas/RoleSelectorContract",
+                    "text": "#/components/schemas/TextSelectorContract"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PathSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ModelIdSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ControlIdSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RoleSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LabelSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PlaceholderSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TextSelectorContract"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selector"
+          },
+          "type": {
+            "const": "error",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "type",
+          "code",
+          "message",
+          "operation",
+          "retryable"
+        ],
+        "title": "ErrorRecord",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HighlightInteractiveAction": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "highlight",
+            "title": "Action",
+            "type": "string"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          },
+          "selector": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "controlId": "#/components/schemas/ControlIdSelectorContract",
+                    "label": "#/components/schemas/LabelSelectorContract",
+                    "modelId": "#/components/schemas/ModelIdSelectorContract",
+                    "path": "#/components/schemas/PathSelectorContract",
+                    "placeholder": "#/components/schemas/PlaceholderSelectorContract",
+                    "role": "#/components/schemas/RoleSelectorContract",
+                    "text": "#/components/schemas/TextSelectorContract"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PathSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ModelIdSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ControlIdSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RoleSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LabelSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PlaceholderSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TextSelectorContract"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Selector"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "action"
+        ],
+        "title": "HighlightInteractiveAction",
+        "type": "object"
+      },
+      "InspectorActionAccepted": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "const": true,
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "result": {
+            "additionalProperties": true,
+            "title": "Result",
+            "type": "object"
+          }
+        },
+        "required": [
+          "ok",
+          "result"
+        ],
+        "title": "InspectorActionAccepted",
+        "type": "object"
+      },
+      "InspectorActionRejected": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorRecord"
+          },
+          "ok": {
+            "const": false,
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "error"
+        ],
+        "title": "InspectorActionRejected",
+        "type": "object"
+      },
+      "InspectorCaptureInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "version": {
+            "minimum": 0.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "available",
+          "version"
+        ],
+        "title": "InspectorCaptureInfo",
+        "type": "object"
+      },
+      "InspectorErrorBody": {
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorRecord"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "InspectorErrorBody",
+        "type": "object"
+      },
+      "InspectorStateDocument": {
+        "additionalProperties": false,
+        "properties": {
+          "artifactDir": {
+            "minLength": 1,
+            "title": "Artifactdir",
+            "type": "string"
+          },
+          "capture": {
+            "$ref": "#/components/schemas/InspectorCaptureInfo"
+          },
+          "diagnostics": {
+            "additionalProperties": true,
+            "title": "Diagnostics",
+            "type": "object"
+          },
+          "fixtures": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fixtures",
+            "type": "array"
+          },
+          "inputOperations": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Inputoperations",
+            "type": "array"
+          },
+          "locators": {
+            "additionalProperties": true,
+            "title": "Locators",
+            "type": "object"
+          },
+          "recording": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Recording",
+            "type": "array"
+          },
+          "scenarios": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scenarios",
+            "type": "array"
+          },
+          "subjects": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Subjects",
+            "type": "array"
+          },
+          "tree": {
+            "additionalProperties": true,
+            "title": "Tree",
+            "type": "object"
+          }
+        },
+        "required": [
+          "tree",
+          "diagnostics",
+          "recording",
+          "locators",
+          "artifactDir",
+          "subjects",
+          "fixtures",
+          "scenarios",
+          "inputOperations",
+          "capture"
+        ],
+        "title": "InspectorStateDocument",
+        "type": "object"
+      },
+      "InteractiveAction": {
+        "discriminator": {
+          "mapping": {
+            "capture": "#/components/schemas/SimpleInteractiveAction",
+            "click": "#/components/schemas/LocatorInteractiveAction",
+            "clickAt": "#/components/schemas/CoordinateInteractiveAction",
+            "doubleClickAt": "#/components/schemas/CoordinateInteractiveAction",
+            "drag": "#/components/schemas/DragInteractiveAction",
+            "dragAndDrop": "#/components/schemas/DragAndDropInteractiveAction",
+            "export": "#/components/schemas/SimpleInteractiveAction",
+            "fill": "#/components/schemas/TextInteractiveAction",
+            "highlight": "#/components/schemas/HighlightInteractiveAction",
+            "pick": "#/components/schemas/PickInteractiveAction",
+            "press": "#/components/schemas/PressInteractiveAction",
+            "reload": "#/components/schemas/SimpleInteractiveAction",
+            "replay": "#/components/schemas/ReplayInteractiveAction",
+            "resizeSubject": "#/components/schemas/ResizeSubjectInteractiveAction",
+            "resizeViewport": "#/components/schemas/ResizeViewportInteractiveAction",
+            "rightClickAt": "#/components/schemas/CoordinateInteractiveAction",
+            "scrollAt": "#/components/schemas/ScrollInteractiveAction",
+            "switch": "#/components/schemas/SwitchInteractiveAction",
+            "type": "#/components/schemas/TextInteractiveAction"
+          },
+          "propertyName": "action"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/SimpleInteractiveAction"
+          },
+          {
+            "$ref": "#/components/schemas/HighlightInteractiveAction"
+          },
+          {
+            "$ref": "#/components/schemas/PickInteractiveAction"
+          },
+          {
+            "$ref": "#/components/schemas/ResizeViewportInteractiveAction"
+          },
+          {
+            "$ref": "#/components/schemas/ResizeSubjectInteractiveAction"
+          },
+          {
+            "$ref": "#/components/schemas/LocatorInteractiveAction"
+          },
+          {
+            "$ref": "#/components/schemas/CoordinateInteractiveAction"
+          },
+          {
+            "$ref": "#/components/schemas/DragInteractiveAction"
+          },
+          {
+            "$ref": "#/components/schemas/ScrollInteractiveAction"
+          },
+          {
+            "$ref": "#/components/schemas/DragAndDropInteractiveAction"
+          },
+          {
+            "$ref": "#/components/schemas/TextInteractiveAction"
+          },
+          {
+            "$ref": "#/components/schemas/PressInteractiveAction"
+          },
+          {
+            "$ref": "#/components/schemas/ReplayInteractiveAction"
+          },
+          {
+            "$ref": "#/components/schemas/SwitchInteractiveAction"
+          }
+        ]
+      },
+      "LabelSelectorContract": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "label",
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "kind",
+          "label"
+        ],
+        "title": "LabelSelectorContract",
+        "type": "object"
+      },
+      "LocatorInteractiveAction": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "click",
+            "title": "Action",
+            "type": "string"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          },
+          "selector": {
+            "discriminator": {
+              "mapping": {
+                "controlId": "#/components/schemas/ControlIdSelectorContract",
+                "label": "#/components/schemas/LabelSelectorContract",
+                "modelId": "#/components/schemas/ModelIdSelectorContract",
+                "path": "#/components/schemas/PathSelectorContract",
+                "placeholder": "#/components/schemas/PlaceholderSelectorContract",
+                "role": "#/components/schemas/RoleSelectorContract",
+                "text": "#/components/schemas/TextSelectorContract"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PathSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/ModelIdSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/ControlIdSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/RoleSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/LabelSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/PlaceholderSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/TextSelectorContract"
+              }
+            ],
+            "title": "Selector"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "selector",
+          "action"
+        ],
+        "title": "LocatorInteractiveAction",
+        "type": "object"
+      },
+      "ModelIdSelectorContract": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "modelId",
+            "title": "Kind",
+            "type": "string"
+          },
+          "modelId": {
+            "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            "title": "Modelid",
+            "type": "string"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "kind",
+          "modelId"
+        ],
+        "title": "ModelIdSelectorContract",
+        "type": "object"
+      },
+      "PathSelectorContract": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "path",
+            "title": "Kind",
+            "type": "string"
+          },
+          "path": {
+            "minLength": 1,
+            "pattern": "^/",
+            "title": "Path",
+            "type": "string"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "kind",
+          "path"
+        ],
+        "title": "PathSelectorContract",
+        "type": "object"
+      },
+      "PickInteractiveAction": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "pick",
+            "title": "Action",
+            "type": "string"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          },
+          "x": {
+            "title": "X",
+            "type": "integer"
+          },
+          "y": {
+            "title": "Y",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "action",
+          "x",
+          "y"
+        ],
+        "title": "PickInteractiveAction",
+        "type": "object"
+      },
+      "PlaceholderSelectorContract": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "placeholder",
+            "title": "Kind",
+            "type": "string"
+          },
+          "placeholder": {
+            "minLength": 1,
+            "title": "Placeholder",
+            "type": "string"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "kind",
+          "placeholder"
+        ],
+        "title": "PlaceholderSelectorContract",
+        "type": "object"
+      },
+      "PressInteractiveAction": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "press",
+            "title": "Action",
+            "type": "string"
+          },
+          "key": {
+            "minLength": 1,
+            "title": "Key",
+            "type": "string"
+          },
+          "modifiers": {
+            "default": [],
+            "items": {
+              "enum": [
+                "shift",
+                "control",
+                "alt"
+              ],
+              "type": "string"
+            },
+            "title": "Modifiers",
+            "type": "array"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          },
+          "selector": {
+            "discriminator": {
+              "mapping": {
+                "controlId": "#/components/schemas/ControlIdSelectorContract",
+                "label": "#/components/schemas/LabelSelectorContract",
+                "modelId": "#/components/schemas/ModelIdSelectorContract",
+                "path": "#/components/schemas/PathSelectorContract",
+                "placeholder": "#/components/schemas/PlaceholderSelectorContract",
+                "role": "#/components/schemas/RoleSelectorContract",
+                "text": "#/components/schemas/TextSelectorContract"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PathSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/ModelIdSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/ControlIdSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/RoleSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/LabelSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/PlaceholderSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/TextSelectorContract"
+              }
+            ],
+            "title": "Selector"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "selector",
+          "action",
+          "key"
+        ],
+        "title": "PressInteractiveAction",
+        "type": "object"
+      },
+      "ReplayInteractiveAction": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "replay",
+            "title": "Action",
+            "type": "string"
+          },
+          "scenario": {
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_-]*$",
+            "title": "Scenario",
+            "type": "string"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "action",
+          "scenario"
+        ],
+        "title": "ReplayInteractiveAction",
+        "type": "object"
+      },
+      "ResizeSubjectInteractiveAction": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "resizeSubject",
+            "title": "Action",
+            "type": "string"
+          },
+          "height": {
+            "exclusiveMinimum": 0,
+            "title": "Height",
+            "type": "integer"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          },
+          "width": {
+            "exclusiveMinimum": 0,
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "action",
+          "width",
+          "height"
+        ],
+        "title": "ResizeSubjectInteractiveAction",
+        "type": "object"
+      },
+      "ResizeViewportInteractiveAction": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "resizeViewport",
+            "title": "Action",
+            "type": "string"
+          },
+          "height": {
+            "exclusiveMinimum": 0,
+            "title": "Height",
+            "type": "integer"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          },
+          "uiScale": {
+            "exclusiveMinimum": 0,
+            "title": "Uiscale",
+            "type": "number"
+          },
+          "width": {
+            "exclusiveMinimum": 0,
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "action",
+          "width",
+          "height",
+          "uiScale"
+        ],
+        "title": "ResizeViewportInteractiveAction",
+        "type": "object"
+      },
+      "RoleSelectorContract": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "role",
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "role": {
+            "minLength": 1,
+            "title": "Role",
+            "type": "string"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "kind",
+          "role"
+        ],
+        "title": "RoleSelectorContract",
+        "type": "object"
+      },
+      "ScrollInteractiveAction": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "scrollAt",
+            "title": "Action",
+            "type": "string"
+          },
+          "clicks": {
+            "title": "Clicks",
+            "type": "integer"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          },
+          "x": {
+            "title": "X",
+            "type": "integer"
+          },
+          "y": {
+            "title": "Y",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "action",
+          "x",
+          "y",
+          "clicks"
+        ],
+        "title": "ScrollInteractiveAction",
+        "type": "object"
+      },
+      "SimpleInteractiveAction": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "reload",
+              "capture",
+              "export"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "action"
+        ],
+        "title": "SimpleInteractiveAction",
+        "type": "object"
+      },
+      "SwitchInteractiveAction": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "const": "switch",
+            "title": "Action",
+            "type": "string"
+          },
+          "fixture": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Fixture"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          },
+          "subject": {
+            "minLength": 1,
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "action",
+          "subject"
+        ],
+        "title": "SwitchInteractiveAction",
+        "type": "object"
+      },
+      "TextInteractiveAction": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "fill",
+              "type"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          },
+          "selector": {
+            "discriminator": {
+              "mapping": {
+                "controlId": "#/components/schemas/ControlIdSelectorContract",
+                "label": "#/components/schemas/LabelSelectorContract",
+                "modelId": "#/components/schemas/ModelIdSelectorContract",
+                "path": "#/components/schemas/PathSelectorContract",
+                "placeholder": "#/components/schemas/PlaceholderSelectorContract",
+                "role": "#/components/schemas/RoleSelectorContract",
+                "text": "#/components/schemas/TextSelectorContract"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PathSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/ModelIdSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/ControlIdSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/RoleSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/LabelSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/PlaceholderSelectorContract"
+              },
+              {
+                "$ref": "#/components/schemas/TextSelectorContract"
+              }
+            ],
+            "title": "Selector"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "selector",
+          "action",
+          "text"
+        ],
+        "title": "TextInteractiveAction",
+        "type": "object"
+      },
+      "TextSelectorContract": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "text",
+            "title": "Kind",
+            "type": "string"
+          },
+          "schemaVersion": {
+            "const": 1,
+            "title": "Schemaversion",
+            "type": "integer"
+          },
+          "text": {
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "schemaVersion",
+          "kind",
+          "text"
+        ],
+        "title": "TextSelectorContract",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "XUI Lab Inspector",
+    "version": "1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/v1/actions": {
+      "post": {
+        "operationId": "post_actions_api_v1_actions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InteractiveAction"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectorActionAccepted"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectorActionRejected"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectorActionRejected"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectorActionRejected"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          }
+        },
+        "summary": "Post Actions"
+      }
+    },
+    "/api/v1/captures/{version}": {
+      "get": {
+        "operationId": "get_capture_api_v1_captures__version__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "title": "Version",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "image/png": {}
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectorErrorBody"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectorErrorBody"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Capture"
+      }
+    },
+    "/api/v1/events": {
+      "get": {
+        "operationId": "get_events_api_v1_events_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              },
+              "text/event-stream": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "captureVersion": {
+                      "anyOf": [
+                        {
+                          "minimum": 0.0,
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Captureversion"
+                    },
+                    "eventId": {
+                      "minimum": 0.0,
+                      "title": "Eventid",
+                      "type": "integer"
+                    },
+                    "requestId": {
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "title": "Requestid"
+                    },
+                    "stateVersion": {
+                      "minimum": 0.0,
+                      "title": "Stateversion",
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "eventId",
+                    "stateVersion"
+                  ],
+                  "title": "InspectorSessionEvent",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Events"
+      }
+    },
+    "/api/v1/state": {
+      "get": {
+        "operationId": "get_state_api_v1_state_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectorStateDocument"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectorErrorBody"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          }
+        },
+        "summary": "Get State"
+      }
+    }
+  }
+}
