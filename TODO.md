@@ -111,11 +111,21 @@ logic. Do not create a second operation model for the inspector.
 - [ ] Pin `fastapi` and `uvicorn` as runtime dependencies. Replace the
   `ThreadingHTTPServer` implementation after parity tests cover asset serving,
   API routes, security headers, shutdown, and the existing session lock.
+- [ ] Give each inspector session one worker that owns all viewer mutations.
+  Queue mutating actions in request order and bound the queue. Run blocking
+  viewer calls outside the ASGI event loop. Publish immutable read snapshots so
+  HTTP readers do not share mutable viewer state.
 - [ ] Put the inspector endpoints under `/api/v1`. Provide `GET /state`, `POST
   /actions`, `GET /events`, and `GET /captures/{version}` beneath that prefix.
   Route actions through the Pydantic command models used by the CLI and JSONL.
+- [ ] Set route-specific request limits, response limits, and timeouts. Preserve
+  the existing action-body limit. Reject oversized input before parsing it, and
+  return a stable error when an output exceeds its inline limit.
 - [ ] Generate and check in the OpenAPI document from the FastAPI routes and
   Pydantic models. Make `./xui-lab check` fail when the document is stale.
+- [ ] Put the OpenAPI hash in both the server bootstrap response and the
+  embedded client. Refuse actions when the hashes differ, and show the rebuild
+  command in the inspector.
 - [ ] Pin `openapi-typescript` as a frontend development dependency. Generate
   the route, request, response, event, and error types from the checked-in
   OpenAPI document. Delete the handwritten wire types that the generated types
@@ -133,11 +143,18 @@ logic. Do not create a second operation model for the inspector.
 - [ ] Keep the inspector on a random loopback port. Issue a random session token
   at startup and require it on every API request. Reject unexpected `Host` and
   `Origin` headers, and keep the token out of logs and artifacts.
+- [ ] Resolve captures and artifacts through the current session manifest.
+  Serve only files contained by that session's artifact directory. Never accept
+  an arbitrary filesystem path from an HTTP request.
 - [ ] Replace the 700 ms state polling loop with
   [Server-Sent Events](https://fastapi.tiangolo.com/tutorial/server-sent-events/).
   Send small events with event ID, request ID, state version, and artifact
   references. Refetch state after an invalidation event instead of streaming
   the complete tree. Keep actions as HTTP requests.
+- [ ] Give SSE events monotonic IDs, heartbeats, and a bounded replay window.
+  Resume from `Last-Event-ID`. If the requested event has expired or a client
+  falls behind, require a full state refresh. Never let a slow client block the
+  session worker or grow an unbounded buffer.
 - [ ] Add `@tanstack/react-query` when the versioned API lands. Make it own
   server-state fetches, action invalidation, cancellation, and retry policy.
   Feed state-version events from SSE into query invalidation.
@@ -145,6 +162,9 @@ logic. Do not create a second operation model for the inspector.
   with `pytest` without opening a port. Cover validation, authentication,
   Problem Details, content types, security headers, SSE disconnects, and clean
   shutdown.
+- [ ] Keep CORS disabled and disable FastAPI's Swagger UI and ReDoc routes in
+  the shipped inspector. Test that logs omit session tokens and that shutdown
+  closes every active request and SSE stream.
 - [ ] Pin `@playwright/test` before the timeline and filmstrip work. Run it
   against the deterministic preview backend. Cover initial load, actions,
   reconnects, error display, capture changes, keyboard use, and failure traces.
