@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { fetchInspectorState, performAction } from "./api";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { fetchInspectorState, performAction, subscribeInspectorEvents } from "./api";
 import { Diagnostics } from "./components/diagnostics";
 import { InspectorToolbar } from "./components/inspector-toolbar";
 import { Sidebar } from "./components/sidebar";
@@ -42,57 +42,77 @@ export function App() {
   });
   const [selectedControlId, setSelectedControlId] = useState("");
   const [tab, setTab] = useState<InspectorTab>("snapshot");
+  const stateVersion = useRef(0);
 
   const updateState = useCallback(async (signal?: AbortSignal, announce = false) => {
     try {
       const next = await fetchInspectorState(signal);
+
+      if (next.stateVersion < stateVersion.current) {
+        return;
+      }
+
+      stateVersion.current = next.stateVersion;
       setState(next);
+
       if (announce) {
         const processId = next.diagnostics.processId;
         const pid = typeof processId === "number" ? `PID ${processId} · ` : "";
+
         setStatus({ kind: "ready", message: `${pid}${next.artifactDir}` });
       }
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         return;
       }
+
       setStatus({ kind: "error", message: errorMessage(error) });
     }
   }, []);
 
   useEffect(() => {
     const controller = new AbortController();
-    let active = true;
-    let timeout = 0;
-    let firstPoll = true;
-    async function poll() {
-      await updateState(controller.signal, firstPoll);
-      firstPoll = false;
-      if (active) {
-        timeout = window.setTimeout(poll, 700);
-      }
-    }
-    void poll();
+
+    void updateState(controller.signal, true);
+
+    const unsubscribe = subscribeInspectorEvents(
+      (event) => {
+        if (event.stateVersion > stateVersion.current) {
+          void updateState(controller.signal);
+        }
+      },
+      (source) => {
+        if (source.readyState === EventSource.CLOSED) {
+          setStatus({ kind: "error", message: "inspector event stream closed" });
+        }
+      },
+    );
+
     return () => {
-      active = false;
       controller.abort();
-      window.clearTimeout(timeout);
+      unsubscribe();
     };
   }, [updateState]);
 
   const runAction = useCallback(
     async (action: InspectorAction, nextTab?: InspectorTab): Promise<unknown> => {
       setStatus({ kind: "busy", message: `${action.action}…` });
+
       try {
         const result = await performAction(action);
+
         await updateState();
+
         setStatus({ kind: "ready", message: `${action.action} completed` });
+
         if (nextTab !== undefined) {
           setTab(nextTab);
         }
+
         return result;
       } catch (error) {
         setStatus({ kind: "error", message: errorMessage(error) });
+
         return undefined;
       }
     },
@@ -101,7 +121,9 @@ export function App() {
 
   async function selectControl(controlId: string) {
     setSelectedControlId(controlId);
+
     const selector = state?.locators[controlId]?.selector;
+
     if (selector !== undefined) {
       await runAction({ action: "highlight", selector }, "selected");
     }

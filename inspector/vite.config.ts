@@ -53,7 +53,11 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      "/api": process.env.VITE_INSPECTOR_API ?? "http://127.0.0.1:8765",
+      "/api": {
+        target: process.env.VITE_INSPECTOR_API ?? "http://127.0.0.1:8765",
+        timeout: 0,
+        proxyTimeout: 0,
+      },
     },
   },
   build: {

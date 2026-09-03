@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import queue
 import tempfile
 import threading
 import time
@@ -67,6 +68,9 @@ class SessionStub:
             time.sleep(self.action_delay)
         self.calls.append(request)
         self.order.append(("end", kind))
+        recording = self.state_value.get("recording")
+        if isinstance(recording, list):
+            self.state_value["recording"] = [*recording, kind]
         return {"accepted": True, "action": kind}
 
     def state(self) -> dict[str, Any]:
@@ -112,8 +116,18 @@ class InspectorHttpTests(unittest.TestCase):
             second = client.get("/api/v1/state")
         self.assertEqual(200, first.status_code)
         self.assertEqual("root", first.json()["tree"]["control_id"])
+        self.assertEqual(1, first.json()["stateVersion"])
         self.assertNotIn("injected", second.json()["tree"])
         self.assertTrue(second.json()["tree"]["live"])
+        self.assertEqual(2, second.json()["stateVersion"])
+
+    def test_unchanged_state_keeps_the_same_version(self) -> None:
+        session = SessionStub()
+        with self.client(session) as client:
+            first = client.get("/api/v1/state")
+            second = client.get("/api/v1/state")
+        self.assertEqual(1, first.json()["stateVersion"])
+        self.assertEqual(1, second.json()["stateVersion"])
 
     def test_actions_use_the_interactive_pydantic_models(self) -> None:
         session = SessionStub()
@@ -194,6 +208,62 @@ class InspectorHttpTests(unittest.TestCase):
         self.assertEqual(event.event_id, body["eventId"])
         self.assertEqual(event.state_version, body["stateVersion"])
 
+    def test_state_refetch_does_not_publish_an_unchanged_snapshot(self) -> None:
+        session = SessionStub()
+        worker = InspectorWorker(session)
+        worker.start()
+        subscriber = worker.subscribe()
+        try:
+            first = subscriber.get(timeout=1)
+            document = worker.state()
+            again = worker.state()
+            with self.assertRaises(queue.Empty):
+                subscriber.get(timeout=0.2)
+        finally:
+            worker.unsubscribe(subscriber)
+            worker.close()
+        assert first is not None
+        self.assertEqual(1, first.state_version)
+        self.assertEqual(1, document["stateVersion"])
+        self.assertEqual(1, again["stateVersion"])
+
+    def test_actions_publish_a_new_invalidation(self) -> None:
+        session = SessionStub()
+        worker = InspectorWorker(session)
+        worker.start()
+        subscriber = worker.subscribe()
+        try:
+            first = subscriber.get(timeout=1)
+            worker.action({"schemaVersion": 1, "action": "capture"})
+            second = subscriber.get(timeout=1)
+        finally:
+            worker.unsubscribe(subscriber)
+            worker.close()
+        assert first is not None
+        assert second is not None
+        self.assertEqual(1, first.state_version)
+        self.assertEqual(2, second.state_version)
+
+    def test_watch_publishes_headed_window_changes(self) -> None:
+        session = SessionStub()
+        worker = InspectorWorker(session)
+        with patch("xui_lab.inspector_http.WATCH_INTERVAL_SECONDS", 0.05):
+            worker.start()
+            subscriber = worker.subscribe()
+            try:
+                first = subscriber.get(timeout=1)
+                session.state_value["recording"] = ["window.click()"]
+                second = subscriber.get(timeout=1)
+            finally:
+                worker.unsubscribe(subscriber)
+                worker.close()
+        self.assertIsNotNone(first)
+        self.assertIsNotNone(second)
+        assert first is not None
+        assert second is not None
+        self.assertEqual(1, first.state_version)
+        self.assertEqual(2, second.state_version)
+
     def test_worker_runs_mutating_actions_in_request_order(self) -> None:
         session = SessionStub()
         session.action_delay = 0.05
@@ -273,6 +343,10 @@ class InspectorHttpTests(unittest.TestCase):
             ]["schema"],
         )
         self.assertIn("InteractiveAction", document["components"]["schemas"])
+        self.assertIn(
+            "stateVersion",
+            document["components"]["schemas"]["InspectorStateDocument"]["required"],
+        )
         self.assertNotIn("/docs", paths)
 
 

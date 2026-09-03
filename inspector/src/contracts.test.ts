@@ -4,6 +4,7 @@ import {
   findTreeNodeAtPoint,
   findTreeNodeByControlId,
   parseActionResponse,
+  parseInspectorSessionEvent,
   parseInspectorState,
   reviewableLocatorPython,
   treeNodeVisibleRect,
@@ -42,6 +43,7 @@ const validState = {
   scenarios: ["test_floater"],
   inputOperations: ["click", "drag", "fill"],
   capture: { available: true, version: 2 },
+  stateVersion: 4,
 };
 
 describe("parseInspectorState", () => {
@@ -49,6 +51,7 @@ describe("parseInspectorState", () => {
     const state = parseInspectorState(validState);
 
     expect(state.capture).toEqual({ kind: "available", version: 2 });
+    expect(state.stateVersion).toBe(4);
     expect(state.inputOperations).toEqual(["click", "drag", "fill"]);
     expect(state.locators["save-button"]?.signals).toEqual(["role", "name"]);
     expect(findTreeNodeByControlId(state.tree, "save-button")?.title).toBe("Save · LLButton");
@@ -98,6 +101,30 @@ describe("parseInspectorState", () => {
 
     expect(findTreeNodeByControlId(state.tree, "top-left")?.controlId).toBe("top-left");
     expect(findTreeNodeByControlId(state.tree, "bottom-right")?.controlId).toBe("bottom-right");
+  });
+});
+
+describe("parseInspectorSessionEvent", () => {
+  it("reads the invalidation envelope", () => {
+    expect(
+      parseInspectorSessionEvent({
+        eventId: 8,
+        stateVersion: 4,
+        requestId: "req_click",
+        captureVersion: 2,
+      }),
+    ).toEqual({
+      eventId: 8,
+      stateVersion: 4,
+      requestId: "req_click",
+      captureVersion: 2,
+    });
+  });
+
+  it("rejects a negative state version", () => {
+    expect(() => parseInspectorSessionEvent({ eventId: 1, stateVersion: -1 })).toThrow(
+      "must be a non-negative integer",
+    );
   });
 });
 

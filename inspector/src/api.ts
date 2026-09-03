@@ -1,7 +1,9 @@
 import {
   type InspectorAction,
+  type InspectorSessionEvent,
   type InspectorState,
   parseActionResponse,
+  parseInspectorSessionEvent,
   parseInspectorState,
 } from "./contracts";
 
@@ -37,4 +39,35 @@ export async function performAction(action: InspectorAction): Promise<unknown> {
   });
 
   return parseActionResponse(await responseValue(response));
+}
+
+export function subscribeInspectorEvents(
+  onEvent: (event: InspectorSessionEvent) => void,
+  onError?: (source: EventSource) => void,
+): () => void {
+  const source = new EventSource("/api/v1/events");
+  let closed = false;
+
+  source.addEventListener("invalidate", (message: Event) => {
+    if (!(message instanceof MessageEvent) || typeof message.data !== "string") {
+      return;
+    }
+
+    try {
+      onEvent(parseInspectorSessionEvent(JSON.parse(message.data) as unknown));
+    } catch {
+      return;
+    }
+  });
+
+  source.onerror = () => {
+    if (!closed) {
+      onError?.(source);
+    }
+  };
+
+  return () => {
+    closed = true;
+    source.close();
+  };
 }

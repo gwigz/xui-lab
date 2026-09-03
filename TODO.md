@@ -40,11 +40,6 @@ logic. Do not create a second operation model for the inspector.
 - [ ] Resolve captures and artifacts through the current session manifest.
   Serve only files contained by that session's artifact directory. Never accept
   an arbitrary filesystem path from an HTTP request.
-- [ ] Replace the 700 ms state polling loop with
-  [Server-Sent Events](https://fastapi.tiangolo.com/tutorial/server-sent-events/).
-  Send small events with event ID, request ID, state version, and artifact
-  references. Refetch state after an invalidation event instead of streaming
-  the complete tree. Keep actions as HTTP requests.
 - [ ] Give SSE events monotonic IDs, heartbeats, and a bounded replay window.
   Resume from `Last-Event-ID`. If the requested event has expired or a client
   falls behind, require a full state refresh. Never let a slow client block the

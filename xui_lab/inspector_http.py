@@ -52,6 +52,8 @@ EVENT_QUEUE_SIZE = 16
 STATE_TIMEOUT_SECONDS = 30.0
 ACTION_TIMEOUT_SECONDS = 120.0
 EVENT_HEARTBEAT_SECONDS = 15.0
+EVENT_POLL_SECONDS = 0.25
+WATCH_INTERVAL_SECONDS = 0.7
 QUEUE_FULL_MESSAGE = "inspector session is busy"
 SECURITY_HEADERS = {
     "Cache-Control": "no-store",
@@ -98,6 +100,7 @@ class InspectorStateDocument(ContractModel):
     scenarios: list[str]
     input_operations: list[str] = Field(alias="inputOperations")
     capture: InspectorCaptureInfo
+    state_version: NonNegativeInt = Field(alias="stateVersion")
 
 
 class InspectorActionAccepted(ContractModel):
@@ -302,8 +305,9 @@ class InspectorWorker:
             pass
         while not self._shutdown.is_set():
             try:
-                job = self._jobs.get(timeout=0.1)
+                job = self._jobs.get(timeout=WATCH_INTERVAL_SECONDS)
             except queue.Empty:
+                self._watch()
                 continue
             if job is None:
                 break
@@ -324,15 +328,28 @@ class InspectorWorker:
                 job.future.set_result(result)
                 return
             snapshot = self._publish_state(request_id=None)
-            job.future.set_result(snapshot)
+            job.future.set_result(self._state_document(snapshot))
         except Exception as error:
             if not job.future.done():
                 job.future.set_exception(error)
+
+    def _watch(self) -> None:
+        if self._shutdown.is_set():
+            return
+        try:
+            self._publish_state(request_id=None)
+        except Exception:
+            pass
+
+    def _state_document(self, snapshot: dict[str, Any]) -> dict[str, Any]:
+        return {**snapshot, "stateVersion": self._state_version}
 
     def _publish_state(self, *, request_id: str | None) -> dict[str, Any]:
         snapshot = require_object(
             freeze_json(self._session.state()), what="inspector state"
         )
+        if snapshot == self._snapshot and self._latest_event is not None:
+            return snapshot
         self._snapshot = snapshot
         self._state_version += 1
         capture = snapshot.get("capture")
@@ -597,22 +614,26 @@ def create_inspector_app(worker: InspectorWorker | None = None) -> FastAPI:
         async def publish() -> AsyncIterator[bytes]:
             last_heartbeat = asyncio.get_running_loop().time()
             try:
+                yield b": connected\n\n"
                 while True:
-                    if await request.is_disconnected():
-                        break
                     try:
-                        event = subscriber.get_nowait()
+                        event = await asyncio.to_thread(
+                            subscriber.get, True, EVENT_POLL_SECONDS
+                        )
                     except queue.Empty:
+                        if await request.is_disconnected():
+                            break
                         now = asyncio.get_running_loop().time()
                         if now - last_heartbeat >= EVENT_HEARTBEAT_SECONDS:
                             yield b": ping\n\n"
                             last_heartbeat = now
-                        await asyncio.sleep(0.05)
                         continue
                     if event is None:
                         break
                     yield format_sse_event(event)
                     last_heartbeat = asyncio.get_running_loop().time()
+                    if await request.is_disconnected():
+                        break
             finally:
                 current.unsubscribe(subscriber)
 

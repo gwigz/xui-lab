@@ -56,6 +56,14 @@ export type InspectorState = Readonly<{
   scenarios: readonly string[];
   inputOperations: readonly string[];
   capture: CaptureState;
+  stateVersion: number;
+}>;
+
+export type InspectorSessionEvent = Readonly<{
+  eventId: number;
+  stateVersion: number;
+  requestId?: string;
+  captureVersion?: number;
 }>;
 
 export type InspectorAction =
@@ -130,6 +138,14 @@ function numberValue(value: unknown, context: string): number {
   return value;
 }
 
+function nonNegativeIntValue(value: unknown, context: string): number {
+  const parsed = numberValue(value, context);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error(`${context} must be a non-negative integer`);
+  }
+  return parsed;
+}
+
 function booleanValue(value: unknown, context: string): boolean {
   if (typeof value !== "boolean") {
     throw new Error(`${context} must be a boolean`);
@@ -155,9 +171,11 @@ function optionalString(record: Record<string, unknown>, key: string): string | 
 function parseRankedLocator(value: unknown, context: string): RankedLocator {
   const record = objectValue(value, context);
   const fallbackReason = record.fallbackReason;
+
   if (fallbackReason !== null && typeof fallbackReason !== "string") {
     throw new Error(`${context}.fallbackReason must be a string or null`);
   }
+
   return {
     selector: parseSelector(record.selector, `${context}.selector`),
     python: stringValue(record.python, `${context}.python`),
@@ -170,15 +188,20 @@ function parseRankedLocator(value: unknown, context: string): RankedLocator {
 
 function parseSelector(value: unknown, context: string): Selector {
   const record = objectValue(value, context);
+
   if (record.schemaVersion !== 1) {
     throw new Error(`${context}.schemaVersion must be 1`);
   }
+
   const kind = stringValue(record.kind, `${context}.kind`);
+
   if (kind === "role") {
     const name = record.name;
+
     if (name !== undefined && typeof name !== "string") {
       throw new Error(`${context}.name must be a string`);
     }
+
     return {
       schemaVersion: 1,
       kind,
@@ -186,6 +209,7 @@ function parseSelector(value: unknown, context: string): Selector {
       name: name === undefined ? undefined : nonEmptyStringValue(name, `${context}.name`),
     };
   }
+
   if (kind === "label") {
     return {
       schemaVersion: 1,
@@ -193,6 +217,7 @@ function parseSelector(value: unknown, context: string): Selector {
       label: nonEmptyStringValue(record.label, `${context}.label`),
     };
   }
+
   if (kind === "placeholder") {
     return {
       schemaVersion: 1,
@@ -200,6 +225,7 @@ function parseSelector(value: unknown, context: string): Selector {
       placeholder: nonEmptyStringValue(record.placeholder, `${context}.placeholder`),
     };
   }
+
   if (kind === "text") {
     return {
       schemaVersion: 1,
@@ -207,13 +233,17 @@ function parseSelector(value: unknown, context: string): Selector {
       text: nonEmptyStringValue(record.text, `${context}.text`),
     };
   }
+
   if (kind === "modelId") {
     const modelId = nonEmptyStringValue(record.modelId, `${context}.modelId`);
+
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(modelId)) {
       throw new Error(`${context}.modelId must be a UUID string`);
     }
+
     return { schemaVersion: 1, kind, modelId };
   }
+
   if (kind === "controlId") {
     return {
       schemaVersion: 1,
@@ -221,18 +251,23 @@ function parseSelector(value: unknown, context: string): Selector {
       controlId: nonEmptyStringValue(record.controlId, `${context}.controlId`),
     };
   }
+
   if (kind === "path") {
     const path = nonEmptyStringValue(record.path, `${context}.path`);
+
     if (!path.startsWith("/")) {
       throw new Error(`${context}.path must be an absolute XUI path`);
     }
+
     return { schemaVersion: 1, kind, path };
   }
+
   throw new Error(`${context}.kind is not supported`);
 }
 
 function parseRankedLocators(value: unknown): Readonly<Record<string, RankedLocator>> {
   const record = objectValue(value, "state.locators");
+
   return Object.fromEntries(
     Object.entries(record).map(([controlId, locator]) => [
       controlId,
@@ -253,6 +288,7 @@ function parseTreeNode(value: unknown, context = "state.tree"): TreeNode {
 
   const runtimeClass = optionalString(record, "class")?.replace(/^\d+/, "");
   const semantic = optionalString(record, "label") ?? optionalString(record, "name");
+
   const title =
     semantic !== undefined && runtimeClass !== undefined && semantic !== runtimeClass
       ? `${semantic} · ${runtimeClass}`
@@ -286,6 +322,23 @@ export function parseInspectorState(value: unknown): InspectorState {
     scenarios: stringArray(record.scenarios, "state.scenarios"),
     inputOperations: stringArray(record.inputOperations, "state.inputOperations"),
     capture: available ? { kind: "available", version } : { kind: "empty", version },
+    stateVersion: nonNegativeIntValue(record.stateVersion, "state.stateVersion"),
+  };
+}
+
+export function parseInspectorSessionEvent(value: unknown): InspectorSessionEvent {
+  const record = objectValue(value, "session event");
+  const requestId = optionalString(record, "requestId");
+  const captureVersion = record.captureVersion;
+
+  return {
+    eventId: nonNegativeIntValue(record.eventId, "session event.eventId"),
+    stateVersion: nonNegativeIntValue(record.stateVersion, "session event.stateVersion"),
+    requestId,
+    captureVersion:
+      captureVersion === undefined || captureVersion === null
+        ? undefined
+        : nonNegativeIntValue(captureVersion, "session event.captureVersion"),
   };
 }
 
@@ -297,6 +350,7 @@ export function parseActionResponse(value: unknown): unknown {
     const error = objectValue(record.error, "action response.error");
     const code = stringValue(error.code, "action response.error.code");
     const message = stringValue(error.message, "action response.error.message");
+
     throw new Error(`${code}: ${message}`);
   }
 
@@ -306,6 +360,7 @@ export function parseActionResponse(value: unknown): unknown {
 export function reviewableLocatorPython(locator: RankedLocator): string {
   const fallback = locator.fallbackReason ?? "none";
   const explanation = `# locator: signals=${locator.signals.join(", ")}; matches=${locator.matchCount}; fallback=${fallback}`;
+
   return `${explanation}\n${locator.python}`;
 }
 
@@ -374,11 +429,13 @@ export function treeNodeVisibleRect(node: TreeNode): FrameRect | undefined {
   }
 
   const screen = frameRect(node.raw.screen_rect);
+
   if (screen === undefined) {
     return undefined;
   }
 
   const clipping = frameRect(node.raw.clipping_rect) ?? screen;
+
   const visible = {
     left: Math.max(screen.left, clipping.left),
     right: Math.min(screen.right, clipping.right),
@@ -402,6 +459,7 @@ function findTreeNodeAtPointWhere(
     }
 
     const rect = treeNodeVisibleRect(candidate);
+
     if (
       rect !== undefined &&
       point.x >= rect.left &&
@@ -410,6 +468,7 @@ function findTreeNodeAtPointWhere(
       point.y <= rect.top
     ) {
       const area = (rect.right - rect.left) * (rect.top - rect.bottom);
+
       if (
         accepts(candidate) &&
         (best === undefined || area < best.area || (area === best.area && depth > best.depth))

@@ -533,6 +533,11 @@
             "title": "Scenarios",
             "type": "array"
           },
+          "stateVersion": {
+            "minimum": 0.0,
+            "title": "Stateversion",
+            "type": "integer"
+          },
           "subjects": {
             "items": {
               "type": "string"
@@ -556,7 +561,8 @@
           "fixtures",
           "scenarios",
           "inputOperations",
-          "capture"
+          "capture",
+          "stateVersion"
         ],
         "title": "InspectorStateDocument",
         "type": "object"
