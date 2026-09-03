@@ -63,6 +63,25 @@ if (NOT XUI_LAB_FORK_COMMIT_LENGTH EQUAL 40 OR NOT XUI_LAB_FORK_COMMIT MATCHES "
   message(FATAL_ERROR "XUI_LAB_FORK_COMMIT must be the selected viewer commit")
 endif ()
 
+# xui_lab_fork_commit.txt. Ninja rebuilds xui-lab when this file changes.
+set(xui_lab_fork_stamp "${CMAKE_BINARY_DIR}/xui_lab_fork_commit.txt")
+set(xui_lab_fork_identity_cpp "${CMAKE_BINARY_DIR}/xui_lab_fork_identity.cpp")
+if (NOT EXISTS "${xui_lab_fork_stamp}")
+  file(WRITE "${xui_lab_fork_stamp}" "${XUI_LAB_FORK_COMMIT}\n")
+endif ()
+add_custom_command(
+  OUTPUT "${xui_lab_fork_identity_cpp}"
+  COMMAND "${CMAKE_COMMAND}"
+    "-DCOMMIT_FILE=${xui_lab_fork_stamp}"
+    "-DOUTPUT_FILE=${xui_lab_fork_identity_cpp}"
+    -P "${alchemy_xui_adapter_source_dir}/GenerateForkIdentity.cmake"
+  DEPENDS
+    "${xui_lab_fork_stamp}"
+    "${alchemy_xui_adapter_source_dir}/GenerateForkIdentity.cmake"
+    "${alchemy_xui_adapter_source_dir}/xui_lab_fork_identity.cpp.in"
+  VERBATIM
+  )
+
 set(alchemy_xui_adapter_sources
   xui_lab_event_api.cpp
   xui_lab_inspection.cpp
@@ -73,13 +92,10 @@ set(alchemy_xui_adapter_sources
   )
 list(TRANSFORM alchemy_xui_adapter_sources PREPEND "${alchemy_xui_adapter_source_dir}/")
 
-add_executable(xui-lab ${alchemy_xui_adapter_sources})
+add_executable(xui-lab ${alchemy_xui_adapter_sources} "${xui_lab_fork_identity_cpp}")
 target_compile_features(xui-lab PRIVATE cxx_std_20)
-target_compile_definitions(xui-lab PRIVATE
-  XUI_LAB_FORK="alchemy"
-  XUI_LAB_FORK_COMMIT="${XUI_LAB_FORK_COMMIT}"
-  )
 target_include_directories(xui-lab PRIVATE
+  "${alchemy_xui_adapter_source_dir}"
   "${alchemy_newview_source_dir}"
   "${alchemy_newview_binary_dir}"
   )

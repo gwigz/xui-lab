@@ -7,7 +7,7 @@ import textwrap
 import unittest
 from pathlib import Path
 
-from xui_lab.api import Lab
+from xui_lab.api import Lab, default_artifact_root
 from xui_lab.contracts import (
     ArtifactManifest,
     ClickCliCommand,
@@ -240,6 +240,7 @@ class PlaywrightApiTests(unittest.TestCase):
             checkbox.expect_value(True)
             window.expect_menu_visible()
             window.expect_recorded_effect("kind", "url")
+            window.expect_no_recorded_effect("kind", "network")
             self.assertEqual(
                 True, window.raw({"op": "diagnostics"})["effects"][0]["kind"] == "url"
             )
@@ -262,6 +263,13 @@ class PlaywrightApiTests(unittest.TestCase):
                 / "event-trace.json"
             ).is_file()
         )
+
+    def test_expectation_failure_includes_a_tree_excerpt(self) -> None:
+        with self.open() as window:
+            with self.assertRaises(AssertionFailure) as raised:
+                window.get_by_path(CHECKBOX_PATH).expect_value("nope")
+        self.assertIsInstance(raised.exception.tree_excerpt, dict)
+        self.assertEqual(CHECKBOX_PATH, raised.exception.tree_excerpt.get("path"))
 
     def test_menu_entries_report_state_and_source_provenance(self) -> None:
         with self.open() as window:
@@ -324,6 +332,13 @@ class PlaywrightApiTests(unittest.TestCase):
         self.assertEqual("alchemy", manifest.fork)
         self.assertEqual("req_manifest", manifest.request_id)
         self.assertIn("eventTrace", {entry.kind for entry in manifest.artifacts})
+
+    def test_default_artifact_root_stays_outside_the_checkout(self) -> None:
+        root = default_artifact_root()
+        self.assertNotEqual((ROOT / "artifacts").resolve(), root)
+        self.assertFalse(
+            str(root.resolve()).startswith(str((ROOT / "artifacts").resolve()) + os.sep)
+        )
 
     def test_oneshot_tree_returns_an_excerpt_and_artifact(self) -> None:
         with self.open() as window:
@@ -521,6 +536,11 @@ class PlaywrightApiTests(unittest.TestCase):
                 "public-api", highlight=window.get_by_path(CHECKBOX_PATH)
             )
             self.assertEqual("public-api.png", capture["path"])
+            metadata = capture.get("metadata")
+            self.assertIsInstance(metadata, dict)
+            self.assertEqual("public-api", metadata["scenarioStep"])
+            self.assertEqual(1, metadata["sequence"])
+            self.assertEqual("public-api", metadata["action"])
 
         capture_command = next(
             command for command in self.commands() if command["op"] == "capture"

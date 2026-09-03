@@ -213,7 +213,9 @@ def require_unique(
         descriptions.append(f"{path} ({runtime_class}, {source_file}:{source_line})")
     detail = "; ".join(descriptions) if descriptions else "none"
     raise AssertionFailure(
-        f"locator for {selector.describe()} resolved to {len(matches)} controls; matches: {detail}"
+        f"locator for {selector.describe()} resolved to {len(matches)} controls; matches: {detail}",
+        tree_excerpt=relevant_excerpt(tree, selector, matches),
+        selector=selector,
     )
 
 
@@ -321,6 +323,27 @@ def excerpt_node(node: dict[str, Any], *, children: bool = True) -> dict[str, An
                 for child in raw_children
                 if isinstance(child, dict)
             ]
+    return excerpt
+
+
+def relevant_excerpt(
+    tree: Any, selector: Selector, matches: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Return the smallest tree slice that explains a locator or expectation miss."""
+    excerpt: dict[str, Any] = {
+        "matchCount": len(matches),
+        "selector": selector.model_dump(mode="json", by_alias=True),
+    }
+    if len(matches) == 1:
+        excerpt["control"] = excerpt_node(matches[0], children=True)
+        return excerpt
+    if matches:
+        excerpt["matches"] = [
+            excerpt_node(match, children=False) for match in matches[:8]
+        ]
+        return excerpt
+    if isinstance(tree, dict):
+        excerpt["root"] = excerpt_node(tree, children=True)
     return excerpt
 
 

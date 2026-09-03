@@ -6,6 +6,7 @@
   "capabilities": [
     "input",
     "inspection",
+    "external_effects",
     "inventory_model",
     "agent_identity",
     "menus"

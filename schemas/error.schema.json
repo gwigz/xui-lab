@@ -320,6 +320,19 @@
       "default": null,
       "title": "Selector"
     },
+    "treeExcerpt": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Treeexcerpt"
+    },
     "type": {
       "const": "error",
       "title": "Type",

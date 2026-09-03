@@ -20,6 +20,26 @@ export type CaptureState =
   | Readonly<{ kind: "empty"; version: number }>
   | Readonly<{ kind: "available"; version: number }>;
 
+export type FilmstripEntry = Readonly<{
+  version: number;
+  sequence: number;
+  action?: string;
+  selector?: Selector;
+  name: string;
+}>;
+
+export type CaptureSnapshot = Readonly<{
+  version: number;
+  sequence: number;
+  action?: string;
+  selector?: Selector;
+  name: string;
+  tree: TreeNode;
+  diagnostics: Readonly<Record<string, unknown>>;
+  recording: readonly string[];
+  locators: Readonly<Record<string, RankedLocator>>;
+}>;
+
 export type RankedLocator = Readonly<{
   selector: Selector;
   python: string;
@@ -53,6 +73,7 @@ export type InspectorState = Readonly<{
   scenarios: readonly string[];
   inputOperations: readonly string[];
   capture: CaptureState;
+  captures: readonly FilmstripEntry[];
   stateVersion: number;
   openapiHash: string;
 }>;
@@ -294,8 +315,53 @@ export function parseInspectorState(value: unknown): InspectorState {
     scenarios: stringArray(record.scenarios, "state.scenarios"),
     inputOperations: stringArray(record.inputOperations, "state.inputOperations"),
     capture: available ? { kind: "available", version } : { kind: "empty", version },
+    captures: parseFilmstrip(record.captures),
     stateVersion: nonNegativeIntValue(record.stateVersion, "state.stateVersion"),
     openapiHash,
+  };
+}
+
+function parseFilmstrip(value: unknown): readonly FilmstripEntry[] {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw new Error("state.captures must be an array");
+  }
+  return value.map((entry, index) => parseFilmstripEntry(entry, `state.captures[${index}]`));
+}
+
+function parseFilmstripEntry(value: unknown, context: string): FilmstripEntry {
+  const record = objectValue(value, context);
+  const action = optionalString(record, "action");
+  const selectorValue = record.selector;
+  return {
+    version: nonNegativeIntValue(record.version, `${context}.version`),
+    sequence: nonNegativeIntValue(record.sequence, `${context}.sequence`),
+    name: nonEmptyStringValue(record.name, `${context}.name`),
+    ...(action === undefined ? {} : { action }),
+    ...(selectorValue === undefined || selectorValue === null
+      ? {}
+      : { selector: parseSelector(selectorValue, `${context}.selector`) }),
+  };
+}
+
+export function parseCaptureSnapshot(value: unknown): CaptureSnapshot {
+  const record = objectValue(value, "capture snapshot");
+  const action = optionalString(record, "action");
+  const selectorValue = record.selector;
+  return {
+    version: nonNegativeIntValue(record.version, "capture snapshot.version"),
+    sequence: nonNegativeIntValue(record.sequence, "capture snapshot.sequence"),
+    name: nonEmptyStringValue(record.name, "capture snapshot.name"),
+    tree: parseTreeNode(record.tree, "capture snapshot.tree"),
+    diagnostics: objectValue(record.diagnostics, "capture snapshot.diagnostics"),
+    recording: stringArray(record.recording, "capture snapshot.recording"),
+    locators: parseRankedLocators(record.locators),
+    ...(action === undefined ? {} : { action }),
+    ...(selectorValue === undefined || selectorValue === null
+      ? {}
+      : { selector: parseSelector(selectorValue, "capture snapshot.selector") }),
   };
 }
 

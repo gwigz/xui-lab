@@ -1,0 +1,6 @@
+#include "xui_lab_fork_identity.h"
+
+namespace xui_lab
+{
+const std::string_view kForkCommit{"@_commit@"};
+} // namespace xui_lab

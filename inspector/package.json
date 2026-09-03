@@ -15,13 +15,13 @@
   "dependencies": {
     "@base-ui/react": "1.7.0",
     "@tanstack/react-query": "5.102.8",
-    "ajv": "8.20.0",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "lucide-react": "1.39.0",
     "openapi-fetch": "0.17.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "react-resizable-panels": "4.12.3",
     "tailwind-merge": "3.6.0"
   },
   "devDependencies": {
@@ -32,6 +32,7 @@
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.5",
     "@vitejs/plugin-react": "6.1.1",
+    "ajv": "8.20.0",
     "openapi-typescript": "7.13.0",
     "tailwindcss": "4.3.3",
     "typescript": "5.9.3",

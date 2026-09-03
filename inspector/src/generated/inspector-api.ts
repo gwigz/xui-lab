@@ -38,6 +38,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/captures/{version}/snapshot": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Capture Snapshot */
+    get: operations["get_capture_snapshot_api_v1_captures__version__snapshot_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/events": {
     parameters: {
       query?: never;
@@ -227,6 +244,66 @@ export interface components {
       /** Version */
       version: number;
     };
+    /** InspectorCaptureSnapshot */
+    InspectorCaptureSnapshot: {
+      /** Action */
+      action?: string | null;
+      /** Diagnostics */
+      diagnostics: {
+        [key: string]: unknown;
+      };
+      /** Locators */
+      locators: {
+        [key: string]: unknown;
+      };
+      /** Name */
+      name: string;
+      /** Recording */
+      recording: string[];
+      /** Selector */
+      selector?:
+        | (
+            | components["schemas"]["PathSelectorContract"]
+            | components["schemas"]["ModelIdSelectorContract"]
+            | components["schemas"]["ControlIdSelectorContract"]
+            | components["schemas"]["RoleSelectorContract"]
+            | components["schemas"]["LabelSelectorContract"]
+            | components["schemas"]["PlaceholderSelectorContract"]
+            | components["schemas"]["TextSelectorContract"]
+          )
+        | null;
+      /** Sequence */
+      sequence: number;
+      /** Tree */
+      tree: {
+        [key: string]: unknown;
+      };
+      /** Version */
+      version: number;
+    };
+    /** InspectorFilmstripEntry */
+    InspectorFilmstripEntry: {
+      /** Action */
+      action?: string | null;
+      /** Name */
+      name: string;
+      /** Selector */
+      selector?:
+        | (
+            | components["schemas"]["PathSelectorContract"]
+            | components["schemas"]["ModelIdSelectorContract"]
+            | components["schemas"]["ControlIdSelectorContract"]
+            | components["schemas"]["RoleSelectorContract"]
+            | components["schemas"]["LabelSelectorContract"]
+            | components["schemas"]["PlaceholderSelectorContract"]
+            | components["schemas"]["TextSelectorContract"]
+          )
+        | null;
+      /** Sequence */
+      sequence: number;
+      /** Version */
+      version: number;
+    };
     /** InspectorProblemDetails */
     InspectorProblemDetails: {
       /** Artifacts */
@@ -261,6 +338,10 @@ export interface components {
       status: number;
       /** Title */
       title: string;
+      /** Treeexcerpt */
+      treeExcerpt?: {
+        [key: string]: unknown;
+      } | null;
       /** Type */
       type: string;
     };
@@ -269,6 +350,8 @@ export interface components {
       /** Artifactdir */
       artifactDir: string;
       capture: components["schemas"]["InspectorCaptureInfo"];
+      /** Captures */
+      captures?: components["schemas"]["InspectorFilmstripEntry"][];
       /** Diagnostics */
       diagnostics: {
         [key: string]: unknown;
@@ -770,6 +853,55 @@ export interface operations {
       };
       /** @description Request Entity Too Large */
       413: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["InspectorProblemDetails"];
+        };
+      };
+    };
+  };
+  get_capture_snapshot_api_v1_captures__version__snapshot_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        version: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["InspectorCaptureSnapshot"];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["InspectorProblemDetails"];
+        };
+      };
+      /** @description Unauthorized */
+      401: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/problem+json": components["schemas"]["InspectorProblemDetails"];
+        };
+      };
+      /** @description Not Found */
+      404: {
         headers: {
           [name: string]: unknown;
         };

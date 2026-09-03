@@ -6,6 +6,7 @@
 #include "xui_lab_event_api.h"
 #include "xui_lab_inspection.h"
 #include "xui_lab_inventory_fixture.h"
+#include "xui_lab_fork_identity.h"
 #include "xui_lab_types.h"
 #include "xui_lab_ui_host.h"
 
@@ -37,8 +38,8 @@
 
 namespace
 {
-constexpr std::string_view kFork       = XUI_LAB_FORK;
-constexpr std::string_view kForkCommit = XUI_LAB_FORK_COMMIT;
+using xui_lab::kFork;
+using xui_lab::kForkCommit;
 
 using LabError = xui_lab::Error;
 using xui_lab::callEventApi;
@@ -184,6 +185,7 @@ private:
         LLSD capabilities = LLSD::emptyArray();
         capabilities.append("input");
         capabilities.append("inspection");
+        capabilities.append("external_effects");
         if (mSubject == Subject::InventoryExplorer)
         {
             capabilities.append("inventory_model");
@@ -300,6 +302,8 @@ private:
         result["subject"]["fixture"] = fixtureId();
         result["eventApis"]          = exposedEventApiMetadata();
         result["processId"]          = LLApp::getPid();
+        if (mInspection)
+            result["layout"] = mInspection->layoutDiagnostics();
         return result;
     }
 

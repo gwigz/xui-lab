@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import shutil
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 from typing import Any
@@ -67,7 +69,26 @@ from .operations import (
     text_selector,
 )
 from .protocol import RuntimeProcess
-from .selectors import require_unique, wire_selector
+from .selectors import excerpt_node, require_unique, wire_selector
+
+
+@dataclass(frozen=True)
+class _CaptureRecord:
+    path: Path
+    action: str | None
+    selector: Selector | None
+    sequence: int
+
+
+ENV_ARTIFACTS_DIR = "XUI_LAB_ARTIFACTS_DIR"
+
+
+def default_artifact_root() -> Path:
+    """Return the artifact root used when a command omits --artifacts."""
+    override = os.environ.get(ENV_ARTIFACTS_DIR)
+    if override:
+        return Path(override).expanduser().resolve()
+    return Path(tempfile.gettempdir()) / f"xui-lab-{os.getuid()}" / "artifacts"
 
 
 def artifact_directory(root: Path, artifact_id: str) -> Path:
@@ -332,6 +353,8 @@ class Window:
         self._fixture = fixture
         self._request_id = request_id
         self._finished = False
+        self._capture_sequence = 0
+        self._capture_records: list[_CaptureRecord] = []
 
     def _install(
         self,
@@ -491,7 +514,15 @@ class Window:
     def diagnostics(self) -> dict[str, Any]:
         return self._request(Diagnostics().to_command())
 
-    def capture(self, name: str, *, highlight: Locator | None = None) -> dict[str, Any]:
+    def capture(
+        self,
+        name: str,
+        *,
+        highlight: Locator | None = None,
+        step: str | None = None,
+        action: str | None = None,
+        selector: Selector | None = None,
+    ) -> dict[str, Any]:
         if (
             not isinstance(name, str)
             or not name
@@ -501,12 +532,33 @@ class Window:
             or "\\" in name
         ):
             raise InputError("capture name must not create subdirectories")
-        return self._request(
+        self._capture_sequence += 1
+        sequence = self._capture_sequence
+        capture_step = step or name
+        capture_action = action or name
+        capture_selector = (
+            selector
+            if selector is not None
+            else highlight.selector
+            if highlight
+            else None
+        )
+        result = self._request(
             Capture(
                 name=name,
                 include_overlay=highlight is not None,
                 highlight=highlight.selector if highlight is not None else None,
+                step=capture_step,
+                sequence=sequence,
+                action=capture_action,
             ).to_command()
+        )
+        return self._record_capture(
+            result,
+            action=capture_action,
+            selector=capture_selector,
+            sequence=sequence,
+            step=capture_step,
         )
 
     def pick(self, x: int, y: int) -> Control:
@@ -514,7 +566,13 @@ class Window:
         result = self._request(Pick(x, y).to_command())
         path = result.get("path")
         if not isinstance(path, str) or not path:
-            raise AssertionFailure(f"no visible control at screen position ({x}, {y})")
+            tree = self.query_tree()
+            raise AssertionFailure(
+                f"no visible control at screen position ({x}, {y})",
+                tree_excerpt=excerpt_node(tree, children=True)
+                if isinstance(tree, dict)
+                else None,
+            )
         control_id = result.get("control_id")
         selector = (
             control_id_selector(control_id)
@@ -629,6 +687,25 @@ class Window:
             )
         return matches[0]
 
+    def expect_no_recorded_effect(self, field: str, unexpected: Any) -> None:
+        self._require_capability("external_effects")
+        self.wait_for_stable()
+        result = self._request(Diagnostics().to_command())
+        effects = result.get("effects")
+        matches = (
+            [
+                effect
+                for effect in effects
+                if isinstance(effect, dict) and effect.get(field) == unexpected
+            ]
+            if isinstance(effects, list)
+            else []
+        )
+        if matches:
+            raise AssertionFailure(
+                f"recorded effects unexpectedly contain {field}={unexpected!r}"
+            )
+
     def _collect_failure(self, failure: BaseException) -> None:
         diagnostics: dict[str, Any] = {"passed": False, "error": str(failure)}
         write_json(
@@ -685,6 +762,52 @@ class Window:
     def close(self) -> None:
         self._finish(None)
 
+    def _record_capture(
+        self,
+        result: dict[str, Any],
+        *,
+        action: str,
+        selector: Selector | None,
+        sequence: int,
+        step: str,
+    ) -> dict[str, Any]:
+        raw_path = result.get("path")
+        if not isinstance(raw_path, str) or not raw_path:
+            return result
+        path = Path(raw_path)
+        if not path.is_absolute():
+            path = self.artifact_dir / path
+        resolved = path.resolve()
+        try:
+            resolved.relative_to(self.artifact_dir.resolve())
+        except ValueError:
+            return result
+        metadata = result.get("metadata")
+        if not isinstance(metadata, dict):
+            metadata = {}
+            sidecar = Path(str(resolved) + ".json")
+            if sidecar.is_file():
+                loaded = read_json(sidecar)
+                if isinstance(loaded, dict):
+                    metadata = loaded
+        metadata["scenarioStep"] = step
+        metadata["action"] = action
+        metadata["sequence"] = sequence
+        if selector is not None:
+            metadata["selector"] = selector.model_dump(mode="json", by_alias=True)
+        sidecar_path = Path(str(resolved) + ".json")
+        sidecar_path.parent.mkdir(parents=True, exist_ok=True)
+        write_json(sidecar_path, metadata)
+        self._capture_records.append(
+            _CaptureRecord(
+                path=resolved,
+                action=action,
+                selector=selector,
+                sequence=sequence,
+            )
+        )
+        return {**result, "metadata": metadata}
+
     @staticmethod
     def _artifact_kind(path: Path) -> ArtifactKind:
         if path.suffix == ".png":
@@ -708,12 +831,26 @@ class Window:
             if not path.is_file() or path.name == "artifact-manifest.json":
                 continue
             data = path.read_bytes()
+            kind = self._artifact_kind(path)
+            record = next(
+                (item for item in self._capture_records if item.path == path.resolve()),
+                None,
+            )
             entries.append(
                 ArtifactEntry(
-                    kind=self._artifact_kind(path),
+                    kind=kind,
                     path=str(path.resolve()),
                     size=len(data),
                     sha256=hashlib.sha256(data).hexdigest(),
+                    action=record.action
+                    if record is not None and kind == "frame"
+                    else None,
+                    selector=record.selector
+                    if record is not None and kind == "frame"
+                    else None,
+                    sequence=record.sequence
+                    if record is not None and kind == "frame"
+                    else None,
                 )
             )
         manifest = ArtifactManifest(
@@ -852,9 +989,20 @@ class Locator:
     ) -> Control:
         self.window.wait_for_stable()
         control = self.resolve()
-        check_observation(
-            self.selector.describe(), control.info, f"/{field}", comparison, expected
-        )
+        try:
+            check_observation(
+                self.selector.describe(),
+                control.info,
+                f"/{field}",
+                comparison,
+                expected,
+            )
+        except AssertionFailure as error:
+            if error.tree_excerpt is None:
+                error.tree_excerpt = excerpt_node(control.info, children=True)
+            if error.selector is None:
+                error.selector = self.selector
+            raise
         return control
 
     def expect_visible(self, expected: bool = True) -> Control:

@@ -1,9 +1,9 @@
 # `xui-lab`
 
 > [!CAUTION]
-> This project is unfinished and changes often. It's designed to provide
-> me with a better workflow around UI development for Second Life, not intended
-> for any use past that.
+> This project exists to improve my workflow for developing Second Life UIs. It
+> isn't intended for anything beyond that, but it's public purely in case
+> others find parts of it useful or inspiring.
 
 This project uses real `LLFloater` code, with its production C++ controller,
 XUI, and models, without logging in or loading a world. You look at it. You
@@ -139,8 +139,10 @@ builds it into `xui_lab/_inspector/`. FastAPI serves that build and the
 `/api/v1` routes on a random loopback port. The browser receives an HttpOnly
 session cookie. Unexpected `Host` and `Origin` headers are rejected. Captures
 resolve through the current session artifact directory. Button, Input, Select,
-Tabs, and Toolbar come from the Coss UI registry. They use Base UI behavior and
-Coss neutral tokens. Tailwind CSS supplies the generated utilities.
+Tabs, Toolbar, Toast, and Popover come from the Coss UI registry. They use
+Base UI behavior and Coss neutral tokens. The resizable sidebar uses the
+shadcn Base UI Resizable wrapper around react-resizable-panels. Tailwind CSS
+supplies the generated utilities.
 
 ```sh
 npm ci --prefix inspector

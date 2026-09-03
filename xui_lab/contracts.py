@@ -497,6 +497,9 @@ class CaptureCommand(RuntimeCommandBase):
     path: NonEmptyString | None = None
     include_overlay: bool = Field(alias="includeOverlay")
     highlight: WireSelector | None = None
+    step: NonEmptyString | None = None
+    sequence: NonNegativeInt | None = None
+    action: NonEmptyString | None = None
 
 
 class ShutdownCommand(RuntimeCommandBase):
@@ -1217,6 +1220,7 @@ class ErrorRecord(VersionedContract):
     selector: Selector | None = None
     capability: NonEmptyString | None = None
     artifacts: FrozenTuple[NonEmptyString] | None = None
+    tree_excerpt: dict[str, Any] | None = Field(default=None, alias="treeExcerpt")
 
 
 ArtifactKind: TypeAlias = Literal[
@@ -1236,6 +1240,9 @@ class ArtifactEntry(ContractModel):
     path: NonEmptyString
     size: NonNegativeInt
     sha256: Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
+    action: NonEmptyString | None = None
+    selector: Selector | None = None
+    sequence: NonNegativeInt | None = None
 
 
 class ArtifactManifest(VersionedContract):
@@ -1356,6 +1363,7 @@ def error_record(
     selector: Selector | None = None,
     capability: str | None = None,
     artifacts: tuple[str, ...] | None = None,
+    tree_excerpt: dict[str, Any] | None = None,
 ) -> ErrorRecord:
     """Convert a public exception to a stable machine-readable record."""
     if isinstance(error, ContractViolation):
@@ -1374,6 +1382,22 @@ def error_record(
         code = "invalid_input"
     else:
         code = "scenario_failure"
+    if selector is None:
+        attached_selector = getattr(error, "selector", None)
+        if attached_selector is not None:
+            try:
+                payload = (
+                    attached_selector.model_dump(mode="json", by_alias=True)
+                    if hasattr(attached_selector, "model_dump")
+                    else attached_selector
+                )
+                selector = SelectorContract.validate_python(payload)
+            except (ValidationError, TypeError, ValueError, AttributeError):
+                selector = None
+    if tree_excerpt is None:
+        attached_excerpt = getattr(error, "tree_excerpt", None)
+        if isinstance(attached_excerpt, dict):
+            tree_excerpt = attached_excerpt
     return ErrorRecord(
         schemaVersion=SCHEMA_VERSION,
         type="error",
@@ -1385,6 +1409,7 @@ def error_record(
         selector=selector,
         capability=capability,
         artifacts=artifacts,
+        treeExcerpt=tree_excerpt,
     )
 
 

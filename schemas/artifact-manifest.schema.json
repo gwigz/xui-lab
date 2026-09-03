@@ -3,6 +3,19 @@
     "ArtifactEntry": {
       "additionalProperties": false,
       "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Action"
+        },
         "kind": {
           "enum": [
             "frame",
@@ -22,6 +35,65 @@
           "title": "Path",
           "type": "string"
         },
+        "selector": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "controlId": "#/$defs/ControlIdSelectorContract",
+                  "label": "#/$defs/LabelSelectorContract",
+                  "modelId": "#/$defs/ModelIdSelectorContract",
+                  "path": "#/$defs/PathSelectorContract",
+                  "placeholder": "#/$defs/PlaceholderSelectorContract",
+                  "role": "#/$defs/RoleSelectorContract",
+                  "text": "#/$defs/TextSelectorContract"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/PathSelectorContract"
+                },
+                {
+                  "$ref": "#/$defs/ModelIdSelectorContract"
+                },
+                {
+                  "$ref": "#/$defs/ControlIdSelectorContract"
+                },
+                {
+                  "$ref": "#/$defs/RoleSelectorContract"
+                },
+                {
+                  "$ref": "#/$defs/LabelSelectorContract"
+                },
+                {
+                  "$ref": "#/$defs/PlaceholderSelectorContract"
+                },
+                {
+                  "$ref": "#/$defs/TextSelectorContract"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Selector"
+        },
+        "sequence": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sequence"
+        },
         "sha256": {
           "pattern": "^[0-9a-f]{64}$",
           "title": "Sha256",
@@ -40,6 +112,209 @@
         "sha256"
       ],
       "title": "ArtifactEntry",
+      "type": "object"
+    },
+    "ControlIdSelectorContract": {
+      "additionalProperties": false,
+      "properties": {
+        "controlId": {
+          "minLength": 1,
+          "title": "Controlid",
+          "type": "string"
+        },
+        "kind": {
+          "const": "controlId",
+          "title": "Kind",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "controlId"
+      ],
+      "title": "ControlIdSelectorContract",
+      "type": "object"
+    },
+    "LabelSelectorContract": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "label",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "label"
+      ],
+      "title": "LabelSelectorContract",
+      "type": "object"
+    },
+    "ModelIdSelectorContract": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "modelId",
+          "title": "Kind",
+          "type": "string"
+        },
+        "modelId": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "title": "Modelid",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "modelId"
+      ],
+      "title": "ModelIdSelectorContract",
+      "type": "object"
+    },
+    "PathSelectorContract": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "path",
+          "title": "Kind",
+          "type": "string"
+        },
+        "path": {
+          "minLength": 1,
+          "pattern": "^/",
+          "title": "Path",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "path"
+      ],
+      "title": "PathSelectorContract",
+      "type": "object"
+    },
+    "PlaceholderSelectorContract": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "placeholder",
+          "title": "Kind",
+          "type": "string"
+        },
+        "placeholder": {
+          "minLength": 1,
+          "title": "Placeholder",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "placeholder"
+      ],
+      "title": "PlaceholderSelectorContract",
+      "type": "object"
+    },
+    "RoleSelectorContract": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "role",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "role": {
+          "minLength": 1,
+          "title": "Role",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "role"
+      ],
+      "title": "RoleSelectorContract",
+      "type": "object"
+    },
+    "TextSelectorContract": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "text",
+          "title": "Kind",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        },
+        "text": {
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "text"
+      ],
+      "title": "TextSelectorContract",
       "type": "object"
     }
   },

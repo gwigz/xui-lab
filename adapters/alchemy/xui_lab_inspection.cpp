@@ -10,13 +10,17 @@
 #include "llinventorymodel.h"
 #include "llinventorypanel.h"
 #include "lldraghandle.h"
+#include "lllayoutstack.h"
 #include "llmenugl.h"
 #include "llpanel.h"
 #include "llresizebar.h"
 #include "llresizehandle.h"
+#include "llscrollbar.h"
+#include "lltextbox.h"
 #include "llui.h"
 #include "lluictrl.h"
 #include "llview.h"
+#include "llviewborder.h"
 #include "llviewermenu.h"
 
 #include <array>
@@ -24,6 +28,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <vector>
 
 namespace
 {
@@ -253,6 +258,102 @@ void indexView(LLView* view, const std::string& control_id, std::unordered_map<s
         index_child(child);
 }
 
+bool overlapIgnorable(const LLView& view)
+{
+    return dynamic_cast<const LLDragHandle*>(&view) || dynamic_cast<const LLViewBorder*>(&view) ||
+           dynamic_cast<const LLResizeBar*>(&view) || dynamic_cast<const LLResizeHandle*>(&view) || dynamic_cast<const LLScrollbar*>(&view);
+}
+
+bool containerType(const LLView& view)
+{ return dynamic_cast<const LLPanel*>(&view) || dynamic_cast<const LLLayoutStack*>(&view); }
+
+bool elementOverlap(const LLView& left, const LLView& right)
+{
+    constexpr S32 tolerance = 2;
+    const LLRect  a         = left.getRect();
+    const LLRect  b         = right.getRect();
+    return a.mLeft <= b.mRight - tolerance && b.mLeft <= a.mRight - tolerance && a.mBottom <= b.mTop - tolerance &&
+           b.mBottom <= a.mTop - tolerance;
+}
+
+LLSD rectLLSD(const LLRect& rect)
+{ return LLSDMap("left", rect.mLeft)("right", rect.mRight)("top", rect.mTop)("bottom", rect.mBottom); }
+
+void collectOverlaps(LLView* parent, LLSD& overlaps, const ControlIds& control_ids)
+{
+    if (!parent || !parent->isInVisibleChain() || !containerType(*parent) || !parent->getChildList())
+        return;
+
+    std::vector<LLView*> visible;
+    for (LLView* child : *parent->getChildList())
+    {
+        if (child && child->isInVisibleChain() && !overlapIgnorable(*child))
+            visible.push_back(child);
+    }
+    for (std::size_t index = 0; index < visible.size(); ++index)
+    {
+        for (std::size_t other = index + 1; other < visible.size(); ++other)
+        {
+            LLView* left  = visible[index];
+            LLView* right = visible[other];
+            if (!elementOverlap(*left, *right))
+                continue;
+            const std::string left_id  = optionalControlId(control_ids, left);
+            const std::string right_id = optionalControlId(control_ids, right);
+            if (left_id.empty() || right_id.empty())
+                continue;
+            LLRect intersection = left->getRect();
+            intersection.intersectWith(right->getRect());
+            overlaps.append(LLSDMap("controlId", left_id)("path", left->getPathname())("otherControlId", right_id)(
+                "otherPath",
+                right->getPathname())("rect", rectLLSD(intersection)));
+        }
+    }
+    for (LLView* child : *parent->getChildList())
+    {
+        if (child)
+            collectOverlaps(child, overlaps, control_ids);
+    }
+}
+
+void collectTextClipping(LLView* view, LLSD& issues, const ControlIds& control_ids)
+{
+    if (!view)
+        return;
+    if (view->isInVisibleChain())
+    {
+        if (auto* text = dynamic_cast<LLTextBox*>(view))
+        {
+            const std::string control_id  = optionalControlId(control_ids, view);
+            const S32         text_width  = text->getTextPixelWidth();
+            const S32         text_height = text->getTextPixelHeight();
+            if (!control_id.empty() && text_width > 0 && text_height > 0)
+            {
+                const LLRect clipped = xui_lab::Inspection::clippedScreenRect(*view);
+                if (text_width > clipped.getWidth() || text_height > clipped.getHeight())
+                {
+                    issues.append(LLSDMap("controlId", control_id)("path", view->getPathname())("class", view->getInfo()["class"])(
+                        "textWidth",
+                        text_width)("textHeight", text_height)("clippingRect",
+                                                               rectLLSD(clipped))("reason", "text extends beyond the clipping rectangle"));
+                }
+            }
+        }
+    }
+    if (auto* folder = dynamic_cast<LLFolderViewFolder*>(view))
+    {
+        for (auto iterator = folder->getFoldersBegin(); iterator != folder->getFoldersEnd(); ++iterator)
+            collectTextClipping(*iterator, issues, control_ids);
+        for (auto iterator = folder->getItemsBegin(); iterator != folder->getItemsEnd(); ++iterator)
+            collectTextClipping(*iterator, issues, control_ids);
+        return;
+    }
+    if (!view->getChildList())
+        return;
+    for (LLView* child : *view->getChildList())
+        collectTextClipping(child, issues, control_ids);
+}
+
 LLSD describePick(LLView* target, const std::vector<LLView*>& hits, S32 x, S32 y, const ControlIds& control_ids)
 {
     LLSD result = target ? target->getInfo() : LLSD::emptyMap();
@@ -355,6 +456,16 @@ LLSD Inspection::tree(const LLSD& command) const
     rebuildControlIndex();
     LLView* root = command.has("path") ? resolvePath(command["path"].asString()) : &mRoot;
     return buildTree(root, mControlIdsByView);
+}
+
+LLSD Inspection::layoutDiagnostics() const
+{
+    rebuildControlIndex();
+    LLSD overlaps      = LLSD::emptyArray();
+    LLSD text_clipping = LLSD::emptyArray();
+    collectOverlaps(&mRoot, overlaps, mControlIdsByView);
+    collectTextClipping(&mRoot, text_clipping, mControlIdsByView);
+    return LLSDMap("overlaps", overlaps)("textClipping", text_clipping);
 }
 
 LLView* Inspection::pickView(S32 x, S32 y) const

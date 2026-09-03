@@ -6,16 +6,34 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from . import contracts
 from .api import Lab, Locator, Window
+from .contracts import Selector, SelectorContract
 from .domain import Capability, Viewport
 from .errors import InputError, RuntimeFailure
-from .io import write_json
+from .io import read_json, write_json
 from .scenarios import Scenario
+from .selectors import rank_locator, ranked_locator_record, tree_nodes
 
 _ACTIONS_WITHOUT_AUTOMATIC_CAPTURE = frozenset(
     {"capture", "export", "highlight", "pick"}
 )
+
+
+def _selector(value: object) -> Selector | None:
+    if value is None:
+        return None
+    try:
+        payload = (
+            value.model_dump(mode="json", by_alias=True)
+            if hasattr(value, "model_dump")
+            else value
+        )
+        return SelectorContract.validate_python(payload)
+    except (TypeError, ValueError, AttributeError, ValidationError):
+        return None
 
 
 def recorded_python(
@@ -136,6 +154,7 @@ class InteractiveSession:
         self._latest_capture: Path | None = None
         self._capture_version = 0
         self._captures: dict[int, Path] = {}
+        self._filmstrip: list[dict[str, Any]] = []
         self.window = self._open(config.subject, config.fixture)
         try:
             self._capture("initial")
@@ -168,8 +187,6 @@ class InteractiveSession:
         return self.window.artifact_dir
 
     def state(self) -> dict[str, Any]:
-        from .selectors import rank_locator, ranked_locator_record, tree_nodes
-
         tree = self.window.query_tree()
         diagnostics = self.window.diagnostics()
         actions = (
@@ -196,13 +213,14 @@ class InteractiveSession:
                 "available": self._latest_capture is not None,
                 "version": self._capture_version,
             },
+            "captures": list(getattr(self, "_filmstrip", [])),
         }
 
     def action(self, request: dict[str, Any]) -> dict[str, Any]:
         action = contracts.parse_interactive_action({"schemaVersion": 1, **request})
         result = self._perform_action(action)
         if action.action not in _ACTIONS_WITHOUT_AUTOMATIC_CAPTURE:
-            self._capture(action.action)
+            self._capture(action.action, selector=getattr(action, "selector", None))
         return result
 
     def _perform_action(self, request: contracts.InteractiveAction) -> dict[str, Any]:
@@ -293,9 +311,25 @@ class InteractiveSession:
         path = captures.get(version)
         return path if isinstance(path, Path) else None
 
-    def _capture(self, reason: str) -> dict[str, Any]:
+    def capture_snapshot(self, version: int) -> dict[str, Any] | None:
+        path = self.capture_path(version)
+        if path is None:
+            return None
+        snapshot_path = path.with_name(f"{path.stem}.snapshot.json")
+        if not snapshot_path.is_file():
+            return None
+        payload = read_json(snapshot_path)
+        return payload if isinstance(payload, dict) else None
+
+    def _capture(self, reason: str, selector: object | None = None) -> dict[str, Any]:
         name = f"interactive-{self._capture_version + 1:04d}-{reason}"
-        result = self.window.capture(name)
+        capture_selector = _selector(selector)
+        try:
+            result = self.window.capture(
+                name, action=reason, selector=capture_selector, step=reason
+            )
+        except TypeError:
+            result = self.window.capture(name)
         path = self._capture_path(result)
         self._latest_capture = path
         self._capture_version += 1
@@ -304,7 +338,56 @@ class InteractiveSession:
             self._captures = {}
             captures = self._captures
         captures[self._capture_version] = path
+        filmstrip = getattr(self, "_filmstrip", None)
+        if filmstrip is None:
+            self._filmstrip = []
+            filmstrip = self._filmstrip
+        entry = {
+            "version": self._capture_version,
+            "sequence": self._capture_version,
+            "action": reason,
+            "name": name,
+            "selector": (
+                capture_selector.model_dump(mode="json", by_alias=True)
+                if capture_selector is not None
+                else None
+            ),
+        }
+        filmstrip.append(entry)
+        self._write_capture_snapshot(path, entry)
         return result
+
+    def _write_capture_snapshot(self, path: Path, entry: dict[str, Any]) -> None:
+        query_tree = getattr(self.window, "query_tree", None)
+        diagnostics_fn = getattr(self.window, "diagnostics", None)
+        if not callable(query_tree) or not callable(diagnostics_fn):
+            return
+        tree = query_tree()
+        diagnostics = diagnostics_fn()
+        actions = (
+            diagnostics.get("recording", []) if isinstance(diagnostics, dict) else []
+        )
+        recording = recorded_python(actions if isinstance(actions, list) else [], tree)
+        locators = {
+            control_id: ranked_locator_record(rank_locator(node, tree))
+            for node in tree_nodes(tree)
+            if isinstance((control_id := node.get("control_id")), str) and control_id
+        }
+        write_json(
+            path.with_name(f"{path.stem}.snapshot.json"),
+            {
+                "schemaVersion": 1,
+                "version": entry["version"],
+                "sequence": entry["sequence"],
+                "action": entry["action"],
+                "name": entry["name"],
+                "selector": entry["selector"],
+                "tree": tree,
+                "diagnostics": diagnostics,
+                "recording": recording,
+                "locators": locators,
+            },
+        )
 
     def _capture_path(self, result: dict[str, Any]) -> Path:
         value = result.get("path")

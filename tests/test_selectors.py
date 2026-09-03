@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import unittest
 
+from xui_lab.contracts import error_record
 from xui_lab.errors import AssertionFailure
 from xui_lab.operations import label_selector, role_selector
 from xui_lab.selectors import (
     explain_ranked_locator,
     match_nodes,
     rank_locator,
+    relevant_excerpt,
     require_unique,
 )
 
@@ -123,8 +125,14 @@ class SelectorTests(unittest.TestCase):
             ],
         }
         self.assertEqual([], match_nodes(tree, label_selector("OK")))
-        with self.assertRaises(AssertionFailure):
+        with self.assertRaises(AssertionFailure) as raised:
             require_unique(tree, role_selector("button", "OK"))
+        excerpt = raised.exception.tree_excerpt
+        self.assertIsInstance(excerpt, dict)
+        self.assertEqual(0, excerpt["matchCount"])
+        self.assertEqual("root", excerpt["root"]["control_id"])
+        record = error_record(raised.exception, operation="get")
+        self.assertEqual(excerpt, record.tree_excerpt)
 
     def test_model_id_is_used_when_generated_siblings_share_a_path(self) -> None:
         model_id = "11111111-1111-1111-1111-111111111111"
@@ -146,6 +154,21 @@ class SelectorTests(unittest.TestCase):
         ranked = rank_locator(tree["children"][0], tree)
         self.assertEqual("role", ranked.kind)
         self.assertIn("Known Notecard", ranked.python)
+
+    def test_relevant_excerpt_keeps_the_failed_control(self) -> None:
+        control = node(
+            path="/root/ok",
+            control_id="ok",
+            runtime_class="LLButton",
+            label="OK",
+        )
+        excerpt = relevant_excerpt(
+            {"path": "/root", "control_id": "root", "children": [control]},
+            role_selector("button", "OK"),
+            [control],
+        )
+        self.assertEqual(1, excerpt["matchCount"])
+        self.assertEqual("ok", excerpt["control"]["control_id"])
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 #include "llviewerprecompiledheaders.h"
 
 #include "xui_lab_runtime.h"
+#include "xui_lab_fork_identity.h"
 
 #include "llcommon.h"
 #include "llerrorcontrol.h"
@@ -13,8 +14,8 @@
 
 namespace
 {
-constexpr std::string_view kFork       = XUI_LAB_FORK;
-constexpr std::string_view kForkCommit = XUI_LAB_FORK_COMMIT;
+using xui_lab::kFork;
+using xui_lab::kForkCommit;
 
 class CommonRuntime final
 {

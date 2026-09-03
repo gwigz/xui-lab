@@ -41,6 +41,8 @@ from .contracts import (
     InteractiveAction,
     NonEmptyString,
     NonNegativeInt,
+    PositiveInt,
+    Selector,
     parse_interactive_action,
 )
 from .errors import InputError, RuntimeFailure, XUILabError
@@ -67,6 +69,8 @@ SESSION_COOKIE = "xui_lab_session"
 LOOPBACK_HOSTNAMES = frozenset({"127.0.0.1", "localhost", "::1"})
 SECURITY_HEADERS = {
     "Cache-Control": "no-store",
+    # script-src must not include 'unsafe-eval'. The inspector precompiles JSON
+    # Schema validators; ajv.compile() at runtime is a hard load failure.
     "Content-Security-Policy": (
         "default-src 'self'; img-src 'self'; script-src 'self'; "
         "style-src 'self' 'unsafe-inline'; connect-src 'self'"
@@ -91,6 +95,8 @@ class InspectorSession(Protocol):
     def artifact_directory(self) -> Path: ...
 
     def capture_path(self, version: int) -> Path | None: ...
+
+    def capture_snapshot(self, version: int) -> dict[str, Any] | None: ...
 
     def close(self) -> None: ...
 
@@ -208,6 +214,26 @@ class InspectorCaptureInfo(ContractModel):
     version: NonNegativeInt
 
 
+class InspectorFilmstripEntry(ContractModel):
+    version: PositiveInt
+    sequence: NonNegativeInt
+    action: NonEmptyString | None = None
+    selector: Selector | None = None
+    name: NonEmptyString
+
+
+class InspectorCaptureSnapshot(ContractModel):
+    version: PositiveInt
+    sequence: NonNegativeInt
+    action: NonEmptyString | None = None
+    selector: Selector | None = None
+    name: NonEmptyString
+    tree: dict[str, Any]
+    diagnostics: dict[str, Any]
+    recording: list[str]
+    locators: dict[str, Any]
+
+
 class InspectorStateDocument(ContractModel):
     tree: dict[str, Any]
     diagnostics: dict[str, Any]
@@ -219,6 +245,7 @@ class InspectorStateDocument(ContractModel):
     scenarios: list[str]
     input_operations: list[str] = Field(alias="inputOperations")
     capture: InspectorCaptureInfo
+    captures: list[InspectorFilmstripEntry] = Field(default_factory=list)
     state_version: NonNegativeInt = Field(alias="stateVersion")
     openapi_hash: NonEmptyString = Field(alias="openapiHash")
 
@@ -241,6 +268,7 @@ class InspectorProblemDetails(ContractModel):
     selector: contracts.Selector | None = None
     capability: NonEmptyString | None = None
     artifacts: tuple[NonEmptyString, ...] | None = None
+    tree_excerpt: dict[str, Any] | None = Field(default=None, alias="treeExcerpt")
 
 
 class InspectorSessionEvent(ContractModel):
@@ -335,6 +363,7 @@ def error_json(
         selector=record.selector,
         capability=record.capability,
         artifacts=record.artifacts,
+        treeExcerpt=record.tree_excerpt,
     ).model_dump(mode="json", by_alias=True, exclude_none=True)
     return JSONResponse(body, status_code=status, media_type="application/problem+json")
 
@@ -413,6 +442,13 @@ class InspectorWorker:
         if path is None:
             return None
         return contained_session_file(path, self._session.artifact_directory())
+
+    def capture_snapshot(self, version: int) -> dict[str, Any] | None:
+        getter = getattr(self._session, "capture_snapshot", None)
+        if not callable(getter):
+            return None
+        snapshot = getter(version)
+        return snapshot if isinstance(snapshot, dict) else None
 
     def subscribe(
         self, *, last_event_id: int | None = None
@@ -919,6 +955,53 @@ def create_inspector_app(
                 status=413,
             )
         return Response(body, media_type="image/png")
+
+    @app.get(
+        "/api/v1/captures/{version}/snapshot",
+        response_model=InspectorCaptureSnapshot,
+        responses={
+            400: {"model": InspectorProblemDetails},
+            404: {"model": InspectorProblemDetails},
+        },
+    )
+    def get_capture_snapshot(version: int, request: Request) -> Response:
+        if version < 1:
+            return error_json(
+                http_error_record(
+                    "capture version must be a positive integer",
+                    code="invalid_input",
+                    operation="inspector.capture",
+                ),
+                status=400,
+            )
+        current = _worker(request)
+        snapshot = current.capture_snapshot(version)
+        if snapshot is None:
+            return error_json(
+                http_error_record(
+                    "no snapshot has been stored for that capture",
+                    code="not_found",
+                    operation="inspector.capture",
+                ),
+                status=404,
+            )
+        try:
+            document = InspectorCaptureSnapshot.model_validate(snapshot)
+        except ValueError:
+            return error_json(
+                http_error_record(
+                    "stored capture snapshot is invalid",
+                    code="not_found",
+                    operation="inspector.capture",
+                ),
+                status=404,
+            )
+        return Response(
+            encoded_json(
+                document.model_dump(mode="json", by_alias=True, exclude_none=True)
+            ),
+            media_type="application/json",
+        )
 
     assets = INSPECTOR_ASSETS / "assets"
     if assets.is_dir():

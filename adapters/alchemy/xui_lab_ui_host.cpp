@@ -4,6 +4,7 @@
 
 #include "xui_lab_error.h"
 #include "xui_lab_event_api.h"
+#include "xui_lab_fork_identity.h"
 
 #include "altextureslot.h"
 #include "llaccordionctrl.h"
@@ -41,6 +42,7 @@
 #include "lltrans.h"
 #include "lltransutil.h"
 #include "llui.h"
+#include "llurlaction.h"
 #include "lluictrlfactory.h"
 #include "lluicolortable.h"
 #include "lluiimage.h"
@@ -74,8 +76,8 @@
 
 namespace
 {
-constexpr std::string_view kFork       = XUI_LAB_FORK;
-constexpr std::string_view kForkCommit = XUI_LAB_FORK_COMMIT;
+using xui_lab::kFork;
+using xui_lab::kForkCommit;
 
 void ignoreUISound(const LLUUID&)
 {
@@ -702,7 +704,33 @@ public:
         gMenuHolder = LLUICtrlFactory::create<LLViewerMenuHolderGL>(menu_holder_params);
         mRoot->addChild(gMenuHolder);
         LLMenuGL::sMenuContainer = gMenuHolder;
+
+        gSavedSettings.setBOOL("LocalFileSystemBrowsingEnabled", false);
+        gSavedSettings.setBOOL("DisableExternalBrowser", true);
+        installExternalEffectIntercepts();
     }
+
+    void installExternalEffectIntercepts()
+    {
+        const auto record_url = [this](std::string_view channel, const std::string& url)
+        {
+            recordExternalEffect(LLSDMap("kind", "url")("channel", std::string(channel))("url", url)("result", "recorded"));
+        };
+        LLUrlAction::setOpenURLCallback([record_url](const std::string& url) { record_url("open", url); });
+        LLUrlAction::setOpenURLInternalCallback([record_url](const std::string& url) { record_url("internal", url); });
+        LLUrlAction::setOpenURLExternalCallback([record_url](const std::string& url) { record_url("external", url); });
+        LLUrlAction::setExecuteSLURLCallback(
+            [this](const std::string& url, bool trusted)
+            {
+                // HTTP(S) falls through to the open-URL callback.
+                if (url.starts_with("http://") || url.starts_with("https://"))
+                    return false;
+                recordExternalEffect(LLSDMap("kind", "url")("channel", "slurl")("url", url)("trusted", trusted)("result", "recorded"));
+                return true;
+            });
+    }
+
+    void recordExternalEffect(LLSD effect) { mExternalEffects.append(std::move(effect)); }
 
     void renderFrame(bool swap, bool include_live_overlay = true)
     {
@@ -851,7 +879,7 @@ public:
                             "windowWidth", screen_size.mX)("windowHeight", screen_size.mY)("screenMeasured", measured_screen)(
                             "lluiWidth", llui_rect.getWidth())("lluiHeight", llui_rect.getHeight())("uiScale", mUIScale)(
                             "systemUIScale", mSystemUIScale)("effectiveUIScale", displayScale()))("graphics", graphics)("overlay", overlay)(
-            "recording", mRecordedActions);
+            "recording", mRecordedActions)("effects", mExternalEffects)("httpService", false);
     }
 
     LLRect drawHighlight(LLView* target)
@@ -942,11 +970,19 @@ public:
             LLSDMap("included", highlighted != nullptr)("highlightedPath", highlighted_path)("interactiveState", live_overlay);
         if (highlighted_rect)
             overlay_metadata["framebufferRect"] = rectToLLSD(*highlighted_rect);
-        const LLSD metadata = LLSDMap("fork", std::string(kFork))("forkCommit", std::string(kForkCommit))(
+        LLSD graphics;
+        gGLManager.asLLSD(graphics);
+        LLSD metadata = LLSDMap("fork", std::string(kFork))("forkCommit", std::string(kForkCommit))(
             "subject", std::string(subjectName(current_subject)))("fixture", std::string(fixture_id))(
             "viewport", LLSDMap("width", mWidth)("height", mHeight)("uiScale", mUIScale)("systemUIScale", mSystemUIScale)(
                             "effectiveUIScale", displayScale())("windowWidth", screen_size.mX)("windowHeight", screen_size.mY)(
-                            "screenMeasured", measured_screen))("overlay", overlay_metadata);
+                            "screenMeasured", measured_screen))("overlay", overlay_metadata)("graphics", graphics);
+        if (command.has("step") && command["step"].isString() && !command["step"].asString().empty())
+            metadata["scenarioStep"] = command["step"].asString();
+        if (command.has("action") && command["action"].isString() && !command["action"].asString().empty())
+            metadata["action"] = command["action"].asString();
+        if (command.has("sequence") && command["sequence"].isInteger())
+            metadata["sequence"] = command["sequence"].asInteger();
         std::ofstream sidecar(path.string() + ".json");
         sidecar << LlsdToJson(metadata) << '\n';
         return LLSDMap("path", path.string())("metadata", metadata)("highlightedPath", highlighted_path);
@@ -1062,6 +1098,8 @@ public:
 
     [[nodiscard]] const LLSD& recordedActions() const noexcept { return mRecordedActions; }
 
+    [[nodiscard]] LLSD externalEffects() const { return mExternalEffects; }
+
     std::unique_ptr<LabWindow>        mWindow;
     std::unique_ptr<LLWindowListener> mWindowListener;
     std::unique_ptr<LabShaderMgr>     mShaderMgr;
@@ -1080,6 +1118,7 @@ public:
     std::optional<Subject>            mSubject;
     LLView*                           mHighlight       = nullptr;
     LLSD                              mRecordedActions = LLSD::emptyArray();
+    LLSD                              mExternalEffects = LLSD::emptyArray();
 };
 
 UIHost::UIHost(const UIHostConfig& config) : mImpl(std::make_unique<Impl>(config))
@@ -1125,6 +1164,8 @@ void UIHost::recordAction(LLSD action)
 { mImpl->recordAction(std::move(action)); }
 const LLSD& UIHost::recordedActions() const noexcept
 { return mImpl->recordedActions(); }
+LLSD UIHost::externalEffects() const
+{ return mImpl->externalEffects(); }
 LLPanel* UIHost::root() const noexcept
 { return mImpl->mRoot; }
 LLFloater* UIHost::floater() const noexcept

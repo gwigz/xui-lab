@@ -1,50 +1,57 @@
-import Ajv, { type ValidateFunction } from "ajv";
 import createClient from "openapi-fetch";
-import openapiDocument from "../../schemas/inspector.openapi.json";
 import {
+  type CaptureSnapshot,
   type InspectorAction,
   type InspectorSessionEvent,
   type InspectorState,
   parseActionResponse,
+  parseCaptureSnapshot,
   parseInspectorSessionEvent,
   parseInspectorState,
 } from "./contracts";
 import type { components, paths } from "./generated/inspector-api";
+import {
+  type OpenApiValidator,
+  validateActionResponse,
+  validateEvent,
+  validateProblem,
+  validateSnapshot,
+  validateState,
+} from "./generated/validators";
 
 type WireState = components["schemas"]["InspectorStateDocument"];
 type WireActionResponse = components["schemas"]["InspectorActionAccepted"];
+type WireSnapshot = components["schemas"]["InspectorCaptureSnapshot"];
 type ProblemDetails = components["schemas"]["InspectorProblemDetails"];
 
-const ajv = new Ajv({ allErrors: true, strict: false });
-const schemaRoot = { components: openapiDocument.components };
-const validateState = ajv.compile<WireState>({
-  ...schemaRoot,
-  $ref: "#/components/schemas/InspectorStateDocument",
-});
-const validateActionResponse = ajv.compile<WireActionResponse>({
-  ...schemaRoot,
-  $ref: "#/components/schemas/InspectorActionAccepted",
-});
-const validateProblem = ajv.compile<ProblemDetails>({
-  ...schemaRoot,
-  $ref: "#/components/schemas/InspectorProblemDetails",
-});
-const validateEvent = ajv.compile<InspectorSessionEvent>(
-  openapiDocument.paths["/api/v1/events"].get.responses["200"].content["text/event-stream"].schema,
-);
 const client = createClient<paths>({ baseUrl: "" });
 const STATE_TIMEOUT_MS = 30_000;
 const ACTION_TIMEOUT_MS = 120_000;
 
-function requireValid<T>(validator: ValidateFunction<T>, value: unknown, context: string): T {
-  if (!validator(value)) {
-    throw new Error(`${context} violates the OpenAPI schema: ${ajv.errorsText(validator.errors)}`);
+function schemaErrorsText(errors: OpenApiValidator["errors"]): string {
+  if (errors == null || errors.length === 0) {
+    return "unknown error";
   }
-  return value;
+  return errors
+    .map((error) => {
+      const path =
+        error.instancePath === undefined || error.instancePath === "" ? "/" : error.instancePath;
+      return `${path} ${error.message ?? "is invalid"}`;
+    })
+    .join(", ");
+}
+
+function requireValid<T>(validator: OpenApiValidator, value: unknown, context: string): T {
+  if (!validator(value)) {
+    throw new Error(
+      `${context} violates the OpenAPI schema: ${schemaErrorsText(validator.errors)}`,
+    );
+  }
+  return value as T;
 }
 
 function problemError(value: unknown, response: Response): Error {
-  const problem = requireValid(validateProblem, value, "API error");
+  const problem = requireValid<ProblemDetails>(validateProblem, value, "API error");
   return new Error(`${problem.code}: ${problem.detail} (${response.status})`);
 }
 
@@ -57,7 +64,20 @@ export async function fetchInspectorState(signal?: AbortSignal): Promise<Inspect
   if (error !== undefined) {
     throw problemError(error, response);
   }
-  return parseInspectorState(requireValid(validateState, data, "Inspector state"));
+  return parseInspectorState(requireValid<WireState>(validateState, data, "Inspector state"));
+}
+
+export async function fetchCaptureSnapshot(version: number): Promise<CaptureSnapshot> {
+  const { data, error, response } = await client.GET("/api/v1/captures/{version}/snapshot", {
+    params: { path: { version } },
+    signal: AbortSignal.timeout(STATE_TIMEOUT_MS),
+  });
+  if (error !== undefined) {
+    throw problemError(error, response);
+  }
+  return parseCaptureSnapshot(
+    requireValid<WireSnapshot>(validateSnapshot, data, "Capture snapshot"),
+  );
 }
 
 export async function performAction(action: InspectorAction): Promise<unknown> {
@@ -72,7 +92,9 @@ export async function performAction(action: InspectorAction): Promise<unknown> {
   if (error !== undefined) {
     throw problemError(error, response);
   }
-  return parseActionResponse(requireValid(validateActionResponse, data, "Action response"));
+  return parseActionResponse(
+    requireValid<WireActionResponse>(validateActionResponse, data, "Action response"),
+  );
 }
 
 export function subscribeInspectorEvents(
@@ -90,7 +112,9 @@ export function subscribeInspectorEvents(
     try {
       const value: unknown = JSON.parse(message.data);
       onEvent(
-        parseInspectorSessionEvent(requireValid(validateEvent, value, "Session event")),
+        parseInspectorSessionEvent(
+          requireValid<InspectorSessionEvent>(validateEvent, value, "Session event"),
+        ),
         reset,
       );
     } catch {

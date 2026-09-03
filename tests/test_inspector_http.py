@@ -66,6 +66,7 @@ class SessionStub:
                 "available": capture is not None,
                 "version": 1 if capture is not None else 0,
             },
+            "captures": [],
         }
 
     def artifact_directory(self) -> Path:
@@ -75,6 +76,20 @@ class SessionStub:
         if self.latest_capture is None or version != 1:
             return None
         return self.latest_capture
+
+    def capture_snapshot(self, version: int) -> dict[str, Any] | None:
+        if self.latest_capture is None or version != 1:
+            return None
+        return {
+            "version": 1,
+            "sequence": 1,
+            "action": "initial",
+            "name": "interactive-0001-initial",
+            "tree": self.state_value["tree"],
+            "diagnostics": self.state_value["diagnostics"],
+            "recording": self.state_value["recording"],
+            "locators": self.state_value["locators"],
+        }
 
     def close(self) -> None:
         self.closed = True
@@ -263,6 +278,21 @@ class InspectorHttpTests(unittest.TestCase):
         self.assertEqual(b"png bytes", ignored_path.content)
         self.assertEqual(404, missing.status_code)
         self.assertEqual("not_found", missing.json()["code"])
+
+    def test_serves_a_historical_capture_snapshot(self) -> None:
+        directory = Path(tempfile.mkdtemp())
+        png = directory / "latest.png"
+        png.write_bytes(b"png bytes")
+        session = SessionStub(png, artifact_dir=directory)
+        with self.client(session) as client:
+            found = client.get("/api/v1/captures/1/snapshot")
+            missing = client.get("/api/v1/captures/9/snapshot")
+        self.assertEqual(200, found.status_code)
+        payload = found.json()
+        self.assertEqual(1, payload["version"])
+        self.assertEqual("initial", payload["action"])
+        self.assertEqual("root", payload["tree"]["control_id"])
+        self.assertEqual(404, missing.status_code)
 
     def test_events_stream_invalidation_records(self) -> None:
         session = SessionStub()
@@ -466,6 +496,7 @@ class InspectorHttpTests(unittest.TestCase):
         self.assertIn("post", paths["/api/v1/actions"])
         self.assertIn("/api/v1/events", paths)
         self.assertIn("/api/v1/captures/{version}", paths)
+        self.assertIn("/api/v1/captures/{version}/snapshot", paths)
         self.assertEqual(
             {"$ref": "#/components/schemas/InteractiveAction"},
             paths["/api/v1/actions"]["post"]["requestBody"]["content"][
@@ -488,6 +519,12 @@ class InspectorHttpTests(unittest.TestCase):
         self.assertIsNotNone(match)
         assert match is not None
         self.assertEqual(inspector_openapi_hash(), match.group(1))
+
+    def test_built_client_does_not_compile_javascript_at_runtime(self) -> None:
+        source = Path("xui_lab/_inspector/assets/app.js").read_text(encoding="utf-8")
+        self.assertNotIn("Error compiling schema", source)
+        self.assertNotIn("Function(", source)
+        self.assertNotIn("unsafe-eval", SECURITY_HEADERS["Content-Security-Policy"])
 
     def test_rejects_non_loopback_bind_addresses(self) -> None:
         with self.assertRaisesRegex(InputError, "loopback"):

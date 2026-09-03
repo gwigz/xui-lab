@@ -54,6 +54,7 @@ public:
     [[nodiscard]] LLSD                               inputText(std::string_view text, bool replace);
     void                                             recordAction(LLSD action);
     [[nodiscard]] const LLSD&                        recordedActions() const noexcept;
+    [[nodiscard]] LLSD                               externalEffects() const;
 
     [[nodiscard]] LLPanel*   root() const noexcept;
     [[nodiscard]] LLFloater* floater() const noexcept;

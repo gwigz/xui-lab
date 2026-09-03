@@ -1,7 +1,14 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.11/schema.json",
   "files": {
-    "includes": ["**", "!!node_modules", "!!test-results", "!!playwright-report", "!!blob-report"]
+    "includes": [
+      "**",
+      "!!node_modules",
+      "!!test-results",
+      "!!playwright-report",
+      "!!blob-report",
+      "!!src/generated/validators.js"
+    ]
   },
   "formatter": {
     "enabled": true,

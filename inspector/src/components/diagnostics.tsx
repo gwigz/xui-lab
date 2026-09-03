@@ -1,4 +1,4 @@
-import { Maximize2, Minimize2 } from "lucide-react";
+import { Crosshair, Maximize2, Minimize2 } from "lucide-react";
 import {
   type MouseEvent,
   type PointerEvent,
@@ -10,6 +10,7 @@ import {
 } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
   findModelTreeNodeAtPoint,
@@ -29,6 +30,8 @@ import {
   wheelClicks,
 } from "../frame-interaction";
 import type { InspectorTab, RunInspectorAction } from "../model";
+import { DisplaySettings } from "./display-settings";
+import { Filmstrip, type FilmstripVersion } from "./filmstrip";
 
 const tabs = [
   { id: "snapshot", label: "Snapshot" },
@@ -50,11 +53,22 @@ type SnapshotProps = Readonly<{
   selectedControlId: string;
   runAction: RunInspectorAction;
   onSelectedControlId: (controlId: string) => void;
+  filmstripVersion: FilmstripVersion;
+  onFilmstripVersion: (version: FilmstripVersion) => void;
+  historical: boolean;
 }>;
 
-function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: SnapshotProps) {
+function Snapshot({
+  state,
+  selectedControlId,
+  runAction,
+  onSelectedControlId,
+  filmstripVersion,
+  onFilmstripVersion,
+  historical,
+}: SnapshotProps) {
   const [expanded, setExpanded] = useState(false);
-  const [mode, setMode] = useState<"inspect" | "interact">("inspect");
+  const [inspecting, setInspecting] = useState(false);
   const [hovered, setHovered] = useState<
     Readonly<{ controlId: string; outline: FrameOutline }> | undefined
   >();
@@ -69,28 +83,53 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
   const inputQueue = useRef<Promise<void>>(Promise.resolve());
   const selectedControlIdRef = useRef(selectedControlId);
   const capture = state?.capture;
+  const captureVersion =
+    filmstripVersion === "live"
+      ? capture?.kind === "available"
+        ? capture.version
+        : 0
+      : filmstripVersion;
   const viewport = recordValue(state?.diagnostics.viewport);
   const lluiWidth = typeof viewport?.lluiWidth === "number" ? viewport.lluiWidth : 0;
   const lluiHeight = typeof viewport?.lluiHeight === "number" ? viewport.lluiHeight : 0;
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
+      if (event.key !== "Escape") {
+        return;
+      }
+      if (inspecting) {
+        setInspecting(false);
+        setHovered(undefined);
+        return;
+      }
+      if (expanded) {
         setExpanded(false);
+        return;
+      }
+      if (historical) {
+        onFilmstripVersion("live");
       }
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [expanded, historical, inspecting, onFilmstripVersion]);
 
   useEffect(() => {
     selectedControlIdRef.current = selectedControlId;
   }, [selectedControlId]);
 
+  useEffect(() => {
+    if (historical) {
+      setInspecting(false);
+      setHovered(undefined);
+    }
+  }, [historical]);
+
   if (capture?.kind !== "available") {
     return (
       <div className="grid h-full min-h-44 place-items-center rounded-xl border border-dashed border-white/10 bg-black/20 px-6 text-center text-[13px] text-neutral-600">
-        Take a screenshot to preview it here.
+        Interact with the viewer to capture frames.
       </div>
     );
   }
@@ -107,7 +146,7 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
   }
 
   function updateHovered(event: PointerEvent<HTMLImageElement>) {
-    if (mode !== "inspect" || state === null || container.current === null) {
+    if (!inspecting || state === null || container.current === null) {
       return;
     }
     const targetPoint = point(event);
@@ -134,7 +173,7 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
   }
 
   function pressKey(event: ReactKeyboardEvent<HTMLImageElement>) {
-    if (mode !== "interact" || !state?.inputOperations.includes("key")) {
+    if (inspecting || historical || !state?.inputOperations.includes("key")) {
       return;
     }
     const input = browserFrameInput({
@@ -217,13 +256,26 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
       return;
     }
 
-    if (mode === "inspect") {
+    if (inspecting) {
+      setInspecting(false);
+      setHovered(undefined);
+      if (historical) {
+        const target = state === null ? undefined : findTreeNodeAtPoint(state.tree, end);
+        if (target !== undefined) {
+          onSelectedControlId(target.controlId);
+        }
+        return;
+      }
       const result = recordValue(
         await runAction({ schemaVersion: 1, action: "pick", x: end.x, y: end.y }, "selected"),
       );
       if (typeof result?.control_id === "string") {
         onSelectedControlId(result.control_id);
       }
+      return;
+    }
+
+    if (historical) {
       return;
     }
 
@@ -248,7 +300,7 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
   }
 
   function wheel(event: WheelEvent<HTMLImageElement>) {
-    if (mode !== "interact" || !state?.inputOperations.includes("scroll")) {
+    if (inspecting || historical || !state?.inputOperations.includes("scroll")) {
       return;
     }
     const target = point(event);
@@ -269,7 +321,7 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
   }
 
   function clicked(event: MouseEvent<HTMLImageElement>) {
-    if (mode !== "interact") {
+    if (inspecting || historical) {
       return;
     }
     if (suppressClick.current) {
@@ -284,7 +336,7 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
   }
 
   function doubleClicked(event: MouseEvent<HTMLImageElement>) {
-    if (mode !== "interact") {
+    if (inspecting || historical) {
       return;
     }
     event.preventDefault();
@@ -295,7 +347,7 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
   }
 
   function rightClick(event: MouseEvent<HTMLImageElement>) {
-    if (mode !== "interact") {
+    if (inspecting || historical) {
       return;
     }
     event.preventDefault();
@@ -315,103 +367,104 @@ function Snapshot({ state, selectedControlId, runAction, onSelectedControlId }: 
   return (
     <div
       className={cn(
-        "grid min-h-0 place-items-center overflow-hidden bg-black",
+        "flex min-h-0 min-w-0 flex-col overflow-hidden bg-black",
         expanded
-          ? "fixed inset-0 z-50 h-dvh w-dvw p-4 pt-14"
-          : "relative h-full min-h-44 rounded-xl border border-white/8 p-3 pt-12",
+          ? "fixed inset-0 z-50 h-dvh w-dvw"
+          : "relative min-h-0 flex-1 rounded-xl border border-white/8",
       )}
       data-expanded={expanded}
-      ref={container}
     >
-      <Button
-        aria-pressed={expanded}
-        className="absolute end-3 top-3 z-10"
-        onClick={() => setExpanded((value) => !value)}
-        size="xs"
-        variant="outline"
-      >
-        {expanded ? <Minimize2 aria-hidden size={14} /> : <Maximize2 aria-hidden size={14} />}
-        {expanded ? "Exit Fullscreen" : "Fullscreen"}
-      </Button>
-      <div className="absolute start-3 top-3 z-10 flex gap-1">
+      <div className="relative z-10 flex shrink-0 items-center justify-between gap-2 px-3 py-2">
         <Button
-          aria-pressed={mode === "inspect"}
+          aria-label="Inspect"
+          aria-pressed={inspecting}
           onClick={() => {
             setHovered(undefined);
-            setMode("inspect");
+            setInspecting((value) => !value);
           }}
-          size="xs"
-          variant={mode === "inspect" ? "default" : "outline"}
+          size="icon-xs"
+          variant={inspecting ? "default" : "outline"}
         >
-          Inspect
+          <Crosshair aria-hidden size={14} />
         </Button>
-        <Button
-          aria-pressed={mode === "interact"}
-          disabled={!state?.inputOperations.includes("click")}
-          onClick={() => {
-            setHovered(undefined);
-            setMode("interact");
-          }}
-          size="xs"
-          variant={mode === "interact" ? "default" : "outline"}
-        >
-          Interact
-        </Button>
+        <div className="flex gap-1">
+          <DisplaySettings runAction={runAction} state={state} />
+          <Button
+            aria-pressed={expanded}
+            onClick={() => setExpanded((value) => !value)}
+            size="xs"
+            variant="outline"
+          >
+            {expanded ? <Minimize2 aria-hidden size={14} /> : <Maximize2 aria-hidden size={14} />}
+            {expanded ? "Exit Fullscreen" : "Fullscreen"}
+          </Button>
+        </div>
       </div>
-      {hovered === undefined ? null : (
-        <div
-          aria-hidden
-          className="pointer-events-none absolute z-[5] border-2 border-sky-400 bg-sky-400/10 shadow-[0_0_0_1px_rgba(2,6,23,0.85)]"
-          data-hovered-control-id={hovered.controlId}
-          style={hovered.outline}
-        />
-      )}
-      <img
-        alt="Latest xui-lab screenshot"
-        className={cn(
-          "block max-h-full max-w-full touch-none select-none object-contain outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-black",
-          mode === "inspect" ? "cursor-crosshair" : "cursor-default",
+      <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden" ref={container}>
+        {hovered === undefined ? null : (
+          <div
+            aria-hidden
+            className="pointer-events-none absolute z-[5] border-2 border-sky-400 bg-sky-400/10 shadow-[0_0_0_1px_rgba(2,6,23,0.85)]"
+            data-hovered-control-id={hovered.controlId}
+            style={hovered.outline}
+          />
         )}
-        draggable={false}
-        onClick={clicked}
-        onContextMenu={rightClick}
-        onDoubleClick={doubleClicked}
-        onKeyDown={pressKey}
-        onLoad={() => setHovered(undefined)}
-        onPointerCancel={() => {
-          pointerStart.current = null;
-        }}
-        onPointerDown={(event) => {
-          if (mode === "interact") {
-            event.currentTarget.focus();
-          }
-          if (event.button !== 0) {
-            return;
-          }
-          const start = point(event);
-          if (start !== undefined) {
-            const sourceNode =
-              state === null
-                ? undefined
-                : (findModelTreeNodeAtPoint(state.tree, start) ??
-                  findTreeNodeAtPoint(state.tree, start));
-            const modelId = sourceNode?.raw.model_id;
-            event.currentTarget.setPointerCapture(event.pointerId);
-            pointerStart.current = {
-              pointerId: event.pointerId,
-              point: start,
-              sourceControlId: sourceNode?.controlId,
-              sourceModelId: typeof modelId === "string" ? modelId : undefined,
-            };
-          }
-        }}
-        onPointerLeave={() => setHovered(undefined)}
-        onPointerMove={updateHovered}
-        onPointerUp={(event) => void finishGesture(event)}
-        onWheel={wheel}
-        src={`/api/v1/captures/${capture.version}`}
-        tabIndex={mode === "interact" && state?.inputOperations.includes("key") ? 0 : -1}
-      />
+        <img
+          alt="xui-lab screenshot"
+          className={cn(
+            "absolute inset-0 m-auto max-h-full max-w-full touch-none select-none object-contain outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-black",
+            inspecting ? "cursor-crosshair" : "cursor-default",
+          )}
+          draggable={false}
+          onClick={clicked}
+          onContextMenu={rightClick}
+          onDoubleClick={doubleClicked}
+          onKeyDown={pressKey}
+          onLoad={() => setHovered(undefined)}
+          onPointerCancel={() => {
+            pointerStart.current = null;
+          }}
+          onPointerDown={(event) => {
+            if (!inspecting && !historical) {
+              event.currentTarget.focus();
+            }
+            if (event.button !== 0) {
+              return;
+            }
+            const start = point(event);
+            if (start !== undefined) {
+              const sourceNode =
+                state === null
+                  ? undefined
+                  : (findModelTreeNodeAtPoint(state.tree, start) ??
+                    findTreeNodeAtPoint(state.tree, start));
+              const modelId = sourceNode?.raw.model_id;
+              event.currentTarget.setPointerCapture(event.pointerId);
+              pointerStart.current = {
+                pointerId: event.pointerId,
+                point: start,
+                sourceControlId: sourceNode?.controlId,
+                sourceModelId: typeof modelId === "string" ? modelId : undefined,
+              };
+            }
+          }}
+          onPointerLeave={() => setHovered(undefined)}
+          onPointerMove={updateHovered}
+          onPointerUp={(event) => void finishGesture(event)}
+          onWheel={wheel}
+          src={`/api/v1/captures/${String(captureVersion)}`}
+          tabIndex={!historical && !inspecting && state?.inputOperations.includes("key") ? 0 : -1}
+        />
+      </div>
+      <div className="min-w-0 shrink-0">
+        <Filmstrip
+          captures={state?.captures ?? []}
+          frameHeight={lluiHeight}
+          frameWidth={lluiWidth}
+          onVersion={onFilmstripVersion}
+          version={filmstripVersion}
+        />
+      </div>
     </div>
   );
 }
@@ -442,10 +495,9 @@ function SelectedControl({ value }: Readonly<{ value: Readonly<Record<string, un
             : `${String(rect.left)},${String(rect.bottom)} → ${String(rect.right)},${String(rect.top)}`}
         </dd>
       </dl>
-      <details className="mt-4 border-border border-t pt-3">
-        <summary className="cursor-pointer text-muted-foreground">Raw runtime data</summary>
-        <pre className="mt-2 overflow-auto font-mono text-[11px] leading-5">{json(value)}</pre>
-      </details>
+      <pre className="mt-4 overflow-auto border-border border-t pt-3 font-mono text-[11px] leading-5">
+        {json(value)}
+      </pre>
     </div>
   );
 }
@@ -457,6 +509,9 @@ type DiagnosticsProps = Readonly<{
   onSelectedControlId: (controlId: string) => void;
   tab: InspectorTab;
   onTab: (tab: InspectorTab) => void;
+  filmstripVersion: FilmstripVersion;
+  onFilmstripVersion: (version: FilmstripVersion) => void;
+  historical: boolean;
 }>;
 
 export function Diagnostics({
@@ -466,6 +521,9 @@ export function Diagnostics({
   onSelectedControlId,
   tab,
   onTab,
+  filmstripVersion,
+  onFilmstripVersion,
+  historical,
 }: DiagnosticsProps) {
   const selected =
     state === null ? {} : (findTreeNodeByControlId(state.tree, selectedControlId)?.raw ?? {});
@@ -479,7 +537,7 @@ export function Diagnostics({
 
   return (
     <Tabs
-      className="mt-2 min-h-0 flex-1 gap-2"
+      className="mt-2 min-h-0 min-w-0 flex-1 gap-2 overflow-hidden"
       onValueChange={(value) => {
         if (isInspectorTab(value)) {
           onTab(value);
@@ -499,24 +557,31 @@ export function Diagnostics({
         ))}
       </TabsList>
 
-      <TabsPanel className="min-h-0" id="snapshotPanel" value="snapshot">
+      <TabsPanel
+        className="flex min-h-0 min-w-0 flex-col overflow-hidden"
+        id="snapshotPanel"
+        value="snapshot"
+      >
         <Snapshot
+          filmstripVersion={filmstripVersion}
+          historical={historical}
+          onFilmstripVersion={onFilmstripVersion}
           onSelectedControlId={onSelectedControlId}
           runAction={runAction}
           selectedControlId={selectedControlId}
           state={state}
         />
       </TabsPanel>
-      <TabsPanel className="min-h-0" id="selectedPanel" value="selected">
+      <TabsPanel className="min-h-0 min-w-0 overflow-hidden" id="selectedPanel" value="selected">
         <SelectedControl value={selected} />
       </TabsPanel>
-      <TabsPanel className="min-h-0" id="focusPanel" value="focus">
+      <TabsPanel className="min-h-0 min-w-0 overflow-hidden" id="focusPanel" value="focus">
         <JsonPanel value={focus} />
       </TabsPanel>
-      <TabsPanel className="min-h-0" id="recordingPanel" value="recording">
-        <textarea
+      <TabsPanel className="min-h-0 min-w-0 overflow-hidden" id="recordingPanel" value="recording">
+        <Textarea
           aria-label="Recorded Python"
-          className="h-full min-h-0 w-full resize-none overflow-auto rounded-xl border border-border bg-card p-3 font-mono text-[12px] text-foreground leading-5 outline-none focus:border-ring focus:ring-3 focus:ring-ring/24"
+          className="h-full min-h-0 rounded-xl [&>textarea]:h-full [&>textarea]:resize-none [&>textarea]:overflow-auto [&>textarea]:p-3 [&>textarea]:font-mono [&>textarea]:text-[12px] [&>textarea]:leading-5"
           defaultValue={state?.recording.join("\n") ?? ""}
           key={state?.recording.join("\n") ?? ""}
           spellCheck={false}

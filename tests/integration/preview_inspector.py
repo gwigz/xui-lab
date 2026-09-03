@@ -32,6 +32,11 @@ class PreviewSession:
             return None
         return self.latest_capture
 
+    def capture_snapshot(self, version: int) -> dict[str, Any] | None:
+        if self.capture_path(version) is None:
+            return None
+        return None
+
     def close(self) -> None:
         return
 
@@ -111,6 +116,7 @@ class PreviewSession:
                 "available": self.latest_capture is not None,
                 "version": 1 if self.latest_capture is not None else 0,
             },
+            "captures": [],
         }
 
 

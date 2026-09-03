@@ -363,6 +363,200 @@
         "title": "InspectorCaptureInfo",
         "type": "object"
       },
+      "InspectorCaptureSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          },
+          "diagnostics": {
+            "additionalProperties": true,
+            "title": "Diagnostics",
+            "type": "object"
+          },
+          "locators": {
+            "additionalProperties": true,
+            "title": "Locators",
+            "type": "object"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "recording": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Recording",
+            "type": "array"
+          },
+          "selector": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "controlId": "#/components/schemas/ControlIdSelectorContract",
+                    "label": "#/components/schemas/LabelSelectorContract",
+                    "modelId": "#/components/schemas/ModelIdSelectorContract",
+                    "path": "#/components/schemas/PathSelectorContract",
+                    "placeholder": "#/components/schemas/PlaceholderSelectorContract",
+                    "role": "#/components/schemas/RoleSelectorContract",
+                    "text": "#/components/schemas/TextSelectorContract"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PathSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ModelIdSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ControlIdSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RoleSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LabelSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PlaceholderSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TextSelectorContract"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selector"
+          },
+          "sequence": {
+            "minimum": 0.0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "tree": {
+            "additionalProperties": true,
+            "title": "Tree",
+            "type": "object"
+          },
+          "version": {
+            "exclusiveMinimum": 0.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "sequence",
+          "name",
+          "tree",
+          "diagnostics",
+          "recording",
+          "locators"
+        ],
+        "title": "InspectorCaptureSnapshot",
+        "type": "object"
+      },
+      "InspectorFilmstripEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          },
+          "name": {
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "selector": {
+            "anyOf": [
+              {
+                "discriminator": {
+                  "mapping": {
+                    "controlId": "#/components/schemas/ControlIdSelectorContract",
+                    "label": "#/components/schemas/LabelSelectorContract",
+                    "modelId": "#/components/schemas/ModelIdSelectorContract",
+                    "path": "#/components/schemas/PathSelectorContract",
+                    "placeholder": "#/components/schemas/PlaceholderSelectorContract",
+                    "role": "#/components/schemas/RoleSelectorContract",
+                    "text": "#/components/schemas/TextSelectorContract"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/PathSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ModelIdSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ControlIdSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RoleSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/LabelSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PlaceholderSelectorContract"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TextSelectorContract"
+                  }
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selector"
+          },
+          "sequence": {
+            "minimum": 0.0,
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "version": {
+            "exclusiveMinimum": 0.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "sequence",
+          "name"
+        ],
+        "title": "InspectorFilmstripEntry",
+        "type": "object"
+      },
       "InspectorProblemDetails": {
         "additionalProperties": false,
         "properties": {
@@ -483,6 +677,18 @@
             "title": "Title",
             "type": "string"
           },
+          "treeExcerpt": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Treeexcerpt"
+          },
           "type": {
             "minLength": 1,
             "title": "Type",
@@ -512,6 +718,13 @@
           },
           "capture": {
             "$ref": "#/components/schemas/InspectorCaptureInfo"
+          },
+          "captures": {
+            "items": {
+              "$ref": "#/components/schemas/InspectorFilmstripEntry"
+            },
+            "title": "Captures",
+            "type": "array"
           },
           "diagnostics": {
             "additionalProperties": true,
@@ -1549,6 +1762,65 @@
           }
         },
         "summary": "Get Capture"
+      }
+    },
+    "/api/v1/captures/{version}/snapshot": {
+      "get": {
+        "operationId": "get_capture_snapshot_api_v1_captures__version__snapshot_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "title": "Version",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectorCaptureSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectorProblemDetails"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectorProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InspectorProblemDetails"
+                }
+              }
+            },
+            "description": "Not Found"
+          }
+        },
+        "summary": "Get Capture Snapshot"
       }
     },
     "/api/v1/events": {

@@ -66,7 +66,7 @@ export function Sidebar({ state, selectedControlId, onSelect, onSwitch }: Sideba
   }, [fixture, state, subject]);
 
   return (
-    <aside className="flex min-h-0 flex-col border-border border-e bg-card">
+    <aside className="flex h-full min-h-0 flex-col bg-card">
       <section className="shrink-0 border-b border-white/6 p-3">
         <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-600">
           Subject

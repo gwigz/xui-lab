@@ -285,6 +285,9 @@ class Capture:
     path: str | None = None
     include_overlay: bool = False
     highlight: Selector | None = None
+    step: str | None = None
+    sequence: int | None = None
+    action: str | None = None
 
     def to_command(self) -> dict[str, Any]:
         command: dict[str, Any] = {
@@ -297,6 +300,12 @@ class Capture:
             command["path"] = self.path
         if self.highlight is not None:
             command["highlight"] = self.highlight.target()
+        if self.step is not None:
+            command["step"] = self.step
+        if self.sequence is not None:
+            command["sequence"] = self.sequence
+        if self.action is not None:
+            command["action"] = self.action
         return command
 
 

@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, NoReturn
 
-from .api import Lab, artifact_directory
+from .api import Lab, artifact_directory, default_artifact_root
 from .contracts import (
     SCHEMA_VERSION,
     AdapterContract,
@@ -500,7 +500,7 @@ def parser() -> argparse.ArgumentParser:
     start.add_argument("--width", type=int, default=1200)
     start.add_argument("--height", type=int, default=800)
     start.add_argument("--ui-scale", type=float, default=1.0)
-    start.add_argument("--artifacts", default=str(ROOT / "artifacts"))
+    start.add_argument("--artifacts", default=str(default_artifact_root()))
     _add_jq(start)
     status = session_commands.add_parser(
         "status", help="Show one session or every session."
@@ -547,7 +547,7 @@ def parser() -> argparse.ArgumentParser:
     run = commands.add_parser("run")
     run.add_argument("scenarios", nargs="*")
     run.add_argument("--runtime")
-    run.add_argument("--artifacts", default=str(ROOT / "artifacts"))
+    run.add_argument("--artifacts", default=str(default_artifact_root()))
     _add_dry_run(run)
     interactive = commands.add_parser("interactive")
     interactive.add_argument("subject")
@@ -556,7 +556,7 @@ def parser() -> argparse.ArgumentParser:
     interactive.add_argument("--width", type=int, default=1200)
     interactive.add_argument("--height", type=int, default=800)
     interactive.add_argument("--ui-scale", type=float, default=1.0)
-    interactive.add_argument("--artifacts", default=str(ROOT / "artifacts"))
+    interactive.add_argument("--artifacts", default=str(default_artifact_root()))
     interactive.add_argument("--artifact-id")
     interactive.add_argument("--host", default="127.0.0.1")
     interactive.add_argument("--port", type=int, default=0)

@@ -21,33 +21,6 @@ Interactive mode and scenario mode already share `Window`. `xui-lab run`
 starts a fresh process per scenario. Structural assertions are the pass
 condition.
 
-## Intercept external effects
-
-- [ ] Intercept URL launches, file dialogs, and network requests at their
-  system boundaries. Record each attempted effect and its declared result.
-- [ ] Add one real scenario that proves a recorded effect, then declare
-  `external_effects`.
-- [ ] Prove scenario mode does not contact the network. Fail with the missing
-  capability name when a subject requests an undeclared service.
-
-## Inspection diagnostics
-
-Tree nodes already report class, path, source, rectangles, visibility and
-enabled chains, focus, mouse capture, and hit-test order. `get` and `tree`
-already return excerpts. Capture sidecars already record fork, commit,
-fixture, UI scale, viewport, and overlay. The artifact manifest already lists
-files.
-
-- [ ] Add overlap and text-clipping diagnostics from production layout state.
-- [ ] Put the scenario step and graphics environment on every capture sidecar.
-- [ ] Link each automatic screenshot in the capture manifest to the action,
-  selector, and sequence that produced it.
-- [ ] On locator and expectation failures, include the smallest relevant tree
-  excerpt in the error.
-- [ ] In the headed inspector, add a scrubbable capture filmstrip. Scrubbing a
-  historical frame shows that step's tree, selection, focus, recording, and
-  diagnostics without mutating the live viewer.
-
 ## Inventory Explorer coverage
 
 - [ ] Prove shared selection across tree, single-folder list, and grid views.

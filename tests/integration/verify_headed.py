@@ -15,7 +15,7 @@ from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from xui_lab.api import Lab
+from xui_lab.api import Lab, default_artifact_root
 from xui_lab.domain import Capability, ForkId, Viewport
 from xui_lab.interactive import (
     InteractiveConfig,
@@ -159,7 +159,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--runtime", type=Path, required=True)
     parser.add_argument("--viewer-source", type=Path, default=ROOT / "viewers/alchemy")
-    parser.add_argument("--artifacts", type=Path, default=ROOT / "artifacts/headed")
+    parser.add_argument("--artifacts", type=Path, default=None)
     return parser.parse_args()
 
 
@@ -167,7 +167,11 @@ def main() -> int:
     args = parse_args()
     executable = args.runtime.expanduser().resolve()
     viewer_source = args.viewer_source.expanduser().resolve()
-    artifact_root = args.artifacts.expanduser().resolve()
+    artifact_root = (
+        args.artifacts.expanduser().resolve()
+        if args.artifacts is not None
+        else default_artifact_root() / "headed"
+    )
     require(executable.is_file(), f"runtime executable not found: {executable}")
 
     manifest = parse_manifest(ROOT, read_json(ROOT / "forks.json"))

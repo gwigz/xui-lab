@@ -1,5 +1,7 @@
 """Errors that may safely cross the command-line boundary."""
 
+from typing import Any
+
 
 class XUILabError(Exception):
     """A user-facing xui-lab failure."""
@@ -31,3 +33,14 @@ class RuntimeFailure(XUILabError):
 
 class AssertionFailure(XUILabError):
     """A structural expectation failed."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        tree_excerpt: dict[str, Any] | None = None,
+        selector: Any = None,
+    ) -> None:
+        super().__init__(message)
+        self.tree_excerpt = tree_excerpt
+        self.selector = selector

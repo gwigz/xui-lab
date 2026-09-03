@@ -44,6 +44,20 @@ const validState = {
   scenarios: ["test_floater"],
   inputOperations: ["click", "drag", "fill"],
   capture: { available: true, version: 2 },
+  captures: [
+    {
+      version: 1,
+      sequence: 1,
+      action: "initial",
+      name: "interactive-0001-initial",
+    },
+    {
+      version: 2,
+      sequence: 2,
+      action: "click",
+      name: "interactive-0002-click",
+    },
+  ],
   stateVersion: 4,
   openapiHash: OPENAPI_HASH,
 };
@@ -53,6 +67,8 @@ describe("parseInspectorState", () => {
     const state = parseInspectorState(validState);
 
     expect(state.capture).toEqual({ kind: "available", version: 2 });
+    expect(state.captures).toHaveLength(2);
+    expect(state.captures[1]?.action).toBe("click");
     expect(state.stateVersion).toBe(4);
     expect(state.inputOperations).toEqual(["click", "drag", "fill"]);
     expect(state.locators["save-button"]?.signals).toEqual(["role", "name"]);

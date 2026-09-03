@@ -70,6 +70,8 @@ class CommandLineTests(unittest.TestCase):
         self.assertEqual((1200, 800), (command.width, command.height))
         self.assertIsInstance(command.viewer_source, tuple)
         self.assertTrue(command.request_id.startswith("req_"))
+        repo_artifacts = (Path(__file__).resolve().parents[1] / "artifacts").resolve()
+        self.assertNotEqual(repo_artifacts, Path(command.artifacts).resolve())
 
         with patch("xui_lab.cli.cmd_interactive", return_value=0) as handler:
             self.assertEqual(0, dispatch(command))

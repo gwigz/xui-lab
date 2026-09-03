@@ -1,42 +1,42 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
-import { fetchInspectorState, performAction, subscribeInspectorEvents } from "./api";
+import {
+  fetchCaptureSnapshot,
+  fetchInspectorState,
+  performAction,
+  subscribeInspectorEvents,
+} from "./api";
 import { Diagnostics } from "./components/diagnostics";
+import type { FilmstripVersion } from "./components/filmstrip";
 import { InspectorToolbar } from "./components/inspector-toolbar";
 import { Sidebar } from "./components/sidebar";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+  useDefaultLayout,
+} from "./components/ui/resizable";
+import { toastManager } from "./components/ui/toast";
 import type { InspectorAction, InspectorState } from "./contracts";
-import { cn } from "./lib/utils";
-import type { InspectorStatus, InspectorTab } from "./model";
+import type { InspectorTab } from "./model";
 import { shouldInvalidateInspectorState } from "./query";
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function StatusBar({ status }: Readonly<{ status: InspectorStatus }>) {
-  return (
-    <div
-      className={cn(
-        "col-span-2 flex h-8 min-w-0 items-center gap-2 border-border border-t bg-card px-3 font-mono text-[11px] max-[720px]:col-span-1",
-        status.kind === "error" ? "text-destructive-foreground" : "text-muted-foreground",
-      )}
-      role={status.kind === "error" ? "alert" : "status"}
-    >
-      <span
-        className={cn(
-          "size-1.5 shrink-0 rounded-full",
-          status.kind === "error" && "bg-red-400",
-          status.kind === "busy" && "animate-pulse bg-amber-300",
-          status.kind === "loading" && "animate-pulse bg-neutral-500",
-          status.kind === "ready" && "bg-emerald-400",
-        )}
-      />
-      <span className="truncate">{status.message}</span>
-    </div>
-  );
+function toastError(title: string, error: unknown): void {
+  toastManager.add({
+    description: errorMessage(error),
+    title,
+    type: "error",
+  });
 }
 
 export function App() {
+  const { defaultLayout, onLayoutChanged } = useDefaultLayout({
+    id: "xui-lab-inspector-shell",
+  });
   const queryClient = useQueryClient();
   const stateQuery = useQuery({
     queryKey: ["inspector-state"],
@@ -44,24 +44,27 @@ export function App() {
   });
   const state: InspectorState | null = stateQuery.data ?? null;
   const actionMutation = useMutation({ mutationFn: performAction });
-  const [status, setStatus] = useState<InspectorStatus>({
-    kind: "loading",
-    message: "Connecting…",
-  });
   const [selectedControlId, setSelectedControlId] = useState("");
   const [tab, setTab] = useState<InspectorTab>("snapshot");
+  const [filmstripVersion, setFilmstripVersion] = useState<FilmstripVersion>("live");
+  const historical = filmstripVersion !== "live";
+  const snapshotQuery = useQuery({
+    queryKey: ["capture-snapshot", filmstripVersion],
+    queryFn: () => fetchCaptureSnapshot(filmstripVersion as number),
+    enabled: historical,
+  });
 
   useEffect(() => {
     if (stateQuery.error !== null) {
-      setStatus({ kind: "error", message: errorMessage(stateQuery.error) });
-      return;
+      toastError("Could not load inspector state", stateQuery.error);
     }
-    if (state !== null && status.kind === "loading") {
-      const processId = state.diagnostics.processId;
-      const pid = typeof processId === "number" ? `PID ${processId} · ` : "";
-      setStatus({ kind: "ready", message: `${pid}${state.artifactDir}` });
+  }, [stateQuery.error]);
+
+  useEffect(() => {
+    if (snapshotQuery.error !== null) {
+      toastError("Could not load capture", snapshotQuery.error);
     }
-  }, [state, stateQuery.error, status.kind]);
+  }, [snapshotQuery.error]);
 
   useEffect(() => {
     const unsubscribe = subscribeInspectorEvents(
@@ -73,7 +76,7 @@ export function App() {
       },
       (source) => {
         if (source.readyState === EventSource.CLOSED) {
-          setStatus({ kind: "error", message: "inspector event stream closed" });
+          toastError("Inspector disconnected", "inspector event stream closed");
         }
       },
     );
@@ -85,13 +88,10 @@ export function App() {
 
   const runAction = useCallback(
     async (action: InspectorAction, nextTab?: InspectorTab): Promise<unknown> => {
-      setStatus({ kind: "busy", message: `${action.action}…` });
-
       try {
         const result = await actionMutation.mutateAsync(action);
         await queryClient.invalidateQueries({ queryKey: ["inspector-state"] });
-
-        setStatus({ kind: "ready", message: `${action.action} completed` });
+        setFilmstripVersion("live");
 
         if (nextTab !== undefined) {
           setTab(nextTab);
@@ -99,8 +99,7 @@ export function App() {
 
         return result;
       } catch (error) {
-        setStatus({ kind: "error", message: errorMessage(error) });
-
+        toastError(`${action.action} failed`, error);
         return undefined;
       }
     },
@@ -109,6 +108,9 @@ export function App() {
 
   async function selectControl(controlId: string) {
     setSelectedControlId(controlId);
+    if (historical) {
+      return;
+    }
 
     const selector = state?.locators[controlId]?.selector;
 
@@ -117,35 +119,58 @@ export function App() {
     }
   }
 
-  return (
-    <div className="grid h-dvh grid-cols-[minmax(230px,290px)_minmax(0,1fr)] grid-rows-[minmax(0,1fr)_32px] bg-background text-foreground max-[720px]:grid-cols-1 max-[720px]:grid-rows-[minmax(180px,30%)_minmax(0,1fr)_32px]">
-      <Sidebar
-        onSelect={(controlId) => void selectControl(controlId)}
-        onSwitch={(subject, fixture) =>
-          void runAction({ schemaVersion: 1, action: "switch", subject, fixture })
+  const displayedState: InspectorState | null =
+    historical && snapshotQuery.data !== undefined && state !== null
+      ? {
+          ...state,
+          tree: snapshotQuery.data.tree,
+          diagnostics: snapshotQuery.data.diagnostics,
+          recording: snapshotQuery.data.recording,
+          locators: snapshotQuery.data.locators,
         }
-        selectedControlId={selectedControlId}
-        state={state}
-      />
+      : state;
 
-      <main className="flex min-h-0 min-w-0 flex-col overflow-hidden p-3">
-        <InspectorToolbar
-          onSelectedControlId={setSelectedControlId}
-          onStatus={setStatus}
-          runAction={runAction}
+  return (
+    <ResizablePanelGroup
+      className="h-dvh min-h-0 bg-background text-foreground"
+      defaultLayout={defaultLayout}
+      id="xui-lab-inspector-shell"
+      onLayoutChanged={onLayoutChanged}
+      orientation="horizontal"
+    >
+      <ResizablePanel
+        className="min-h-0"
+        defaultSize={290}
+        id="inspector-sidebar"
+        maxSize="50%"
+        minSize={230}
+      >
+        <Sidebar
+          onSelect={(controlId) => void selectControl(controlId)}
+          onSwitch={(subject, fixture) =>
+            void runAction({ schemaVersion: 1, action: "switch", subject, fixture })
+          }
           selectedControlId={selectedControlId}
-          state={state}
+          state={displayedState}
         />
-        <Diagnostics
-          onSelectedControlId={setSelectedControlId}
-          onTab={setTab}
-          runAction={runAction}
-          selectedControlId={selectedControlId}
-          state={state}
-          tab={tab}
-        />
-      </main>
-      <StatusBar status={status} />
-    </div>
+      </ResizablePanel>
+      <ResizableHandle withHandle />
+      <ResizablePanel className="min-h-0 min-w-0" id="inspector-main" minSize={360}>
+        <main className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden p-3">
+          <InspectorToolbar runAction={runAction} state={displayedState} />
+          <Diagnostics
+            filmstripVersion={filmstripVersion}
+            historical={historical}
+            onFilmstripVersion={setFilmstripVersion}
+            onSelectedControlId={setSelectedControlId}
+            onTab={setTab}
+            runAction={runAction}
+            selectedControlId={selectedControlId}
+            state={displayedState}
+            tab={tab}
+          />
+        </main>
+      </ResizablePanel>
+    </ResizablePanelGroup>
   );
 }

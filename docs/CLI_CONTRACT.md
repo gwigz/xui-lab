@@ -52,7 +52,10 @@ these documents the same way it filters session output.
 
 `session start SUBJECT --runtime PATH` starts a hidden viewer process, binds a
 user-local Unix socket under `platformdirs`, and writes a session id, PIDs,
-fork commit, subject, viewport, and capabilities to stdout. `session status`
+fork commit, subject, viewport, and capabilities to stdout. `--artifacts`
+defaults to a user-temp directory (`XUI_LAB_ARTIFACTS_DIR` overrides it) so
+session and test runs do not write into the checkout. Pass an explicit path
+when you want to keep the files. `session status`
 and `session close` inspect or stop that process. Close is idempotent and
 reports whether a process was terminated. Dead PIDs are removed on status and
 close. `--dry-run` on `session close`, `reload`, and `run` shows the session,
