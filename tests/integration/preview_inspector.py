@@ -108,6 +108,8 @@ class PreviewSession:
                 }
             },
             "artifactDir": str(self._artifact_dir),
+            "subject": "test_widgets",
+            "fixture": "",
             "subjects": ["test_widgets", "inventory_explorer"],
             "fixtures": ["inventory-explorer"],
             "scenarios": ["test_floater", "inventory_explorer"],

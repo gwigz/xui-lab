@@ -1,5 +1,6 @@
-import { Crosshair, Maximize2, Minimize2 } from "lucide-react";
+import { Columns2, Crosshair, ImagePlus, Layers2, Maximize2, Minimize2, X } from "lucide-react";
 import {
+  type ChangeEvent,
   type MouseEvent,
   type PointerEvent,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -69,10 +70,14 @@ function Snapshot({
 }: SnapshotProps) {
   const [expanded, setExpanded] = useState(false);
   const [inspecting, setInspecting] = useState(false);
+  const [reference, setReference] = useState<Readonly<{ name: string; url: string }> | null>(null);
+  const [referenceMode, setReferenceMode] = useState<"side" | "overlay">("side");
+  const [referenceOpacity, setReferenceOpacity] = useState(0.5);
   const [hovered, setHovered] = useState<
     Readonly<{ controlId: string; outline: FrameOutline }> | undefined
   >();
   const container = useRef<HTMLDivElement>(null);
+  const referenceInput = useRef<HTMLInputElement>(null);
   const pointerStart = useRef<Readonly<{
     pointerId: number;
     point: FramePoint;
@@ -125,6 +130,15 @@ function Snapshot({
       setHovered(undefined);
     }
   }, [historical]);
+
+  useEffect(() => {
+    const url = reference?.url;
+    return () => {
+      if (url !== undefined) {
+        URL.revokeObjectURL(url);
+      }
+    };
+  }, [reference?.url]);
 
   if (capture?.kind !== "available") {
     return (
@@ -364,6 +378,15 @@ function Snapshot({
     });
   }
 
+  function loadReference(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (file === undefined) {
+      return;
+    }
+    setReference({ name: file.name, url: URL.createObjectURL(file) });
+  }
+
   return (
     <div
       className={cn(
@@ -375,18 +398,31 @@ function Snapshot({
       data-expanded={expanded}
     >
       <div className="relative z-10 flex shrink-0 items-center justify-between gap-2 px-3 py-2">
-        <Button
-          aria-label="Inspect"
-          aria-pressed={inspecting}
-          onClick={() => {
-            setHovered(undefined);
-            setInspecting((value) => !value);
-          }}
-          size="icon-xs"
-          variant={inspecting ? "default" : "outline"}
-        >
-          <Crosshair aria-hidden size={14} />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            aria-label="Inspect"
+            aria-pressed={inspecting}
+            onClick={() => {
+              setHovered(undefined);
+              setInspecting((value) => !value);
+            }}
+            size="icon-xs"
+            variant={inspecting ? "default" : "outline"}
+          >
+            <Crosshair aria-hidden size={14} />
+          </Button>
+          <input
+            accept="image/*"
+            className="hidden"
+            onChange={loadReference}
+            ref={referenceInput}
+            type="file"
+          />
+          <Button onClick={() => referenceInput.current?.click()} size="xs" variant="outline">
+            <ImagePlus aria-hidden size={14} />
+            Reference
+          </Button>
+        </div>
         <div className="flex gap-1">
           <DisplaySettings runAction={runAction} state={state} />
           <Button
@@ -400,61 +436,138 @@ function Snapshot({
           </Button>
         </div>
       </div>
-      <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden" ref={container}>
-        {hovered === undefined ? null : (
-          <div
-            aria-hidden
-            className="pointer-events-none absolute z-[5] border-2 border-sky-400 bg-sky-400/10 shadow-[0_0_0_1px_rgba(2,6,23,0.85)]"
-            data-hovered-control-id={hovered.controlId}
-            style={hovered.outline}
-          />
+      {reference === null ? null : (
+        <fieldset
+          aria-label="Reference comparison controls"
+          className="flex min-w-0 shrink-0 items-center gap-1 border-white/8 border-t px-3 py-1.5"
+        >
+          <span className="min-w-0 flex-1 truncate text-[11px] text-neutral-500">
+            Visual aid only · {reference.name}
+          </span>
+          <Button
+            aria-pressed={referenceMode === "side"}
+            onClick={() => setReferenceMode("side")}
+            size="xs"
+            variant={referenceMode === "side" ? "secondary" : "outline"}
+          >
+            <Columns2 aria-hidden size={13} />
+            Side by side
+          </Button>
+          <Button
+            aria-pressed={referenceMode === "overlay"}
+            onClick={() => setReferenceMode("overlay")}
+            size="xs"
+            variant={referenceMode === "overlay" ? "secondary" : "outline"}
+          >
+            <Layers2 aria-hidden size={13} />
+            Overlay
+          </Button>
+          {referenceMode === "overlay" ? (
+            <label className="flex items-center gap-2 px-1 text-[11px] text-neutral-500">
+              Opacity
+              <input
+                aria-label="Reference opacity"
+                className="w-20 accent-sky-400"
+                max={1}
+                min={0}
+                onChange={(event) => setReferenceOpacity(Number(event.currentTarget.value))}
+                step={0.05}
+                type="range"
+                value={referenceOpacity}
+              />
+            </label>
+          ) : null}
+          <Button
+            aria-label="Remove reference"
+            onClick={() => setReference(null)}
+            size="icon-xs"
+            variant="ghost"
+          >
+            <X aria-hidden size={13} />
+          </Button>
+        </fieldset>
+      )}
+      <div
+        className={cn(
+          "flex min-h-0 min-w-0 flex-1 overflow-hidden",
+          reference !== null && referenceMode === "side" && "gap-px bg-white/10",
         )}
-        <img
-          alt="xui-lab screenshot"
-          className={cn(
-            "absolute inset-0 m-auto max-h-full max-w-full touch-none select-none object-contain outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-black",
-            inspecting ? "cursor-crosshair" : "cursor-default",
+      >
+        <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-black" ref={container}>
+          {hovered === undefined ? null : (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute z-[5] border-2 border-sky-400 bg-sky-400/10 shadow-[0_0_0_1px_rgba(2,6,23,0.85)]"
+              data-hovered-control-id={hovered.controlId}
+              style={hovered.outline}
+            />
           )}
-          draggable={false}
-          onClick={clicked}
-          onContextMenu={rightClick}
-          onDoubleClick={doubleClicked}
-          onKeyDown={pressKey}
-          onLoad={() => setHovered(undefined)}
-          onPointerCancel={() => {
-            pointerStart.current = null;
-          }}
-          onPointerDown={(event) => {
-            if (!inspecting && !historical) {
-              event.currentTarget.focus();
-            }
-            if (event.button !== 0) {
-              return;
-            }
-            const start = point(event);
-            if (start !== undefined) {
-              const sourceNode =
-                state === null
-                  ? undefined
-                  : (findModelTreeNodeAtPoint(state.tree, start) ??
-                    findTreeNodeAtPoint(state.tree, start));
-              const modelId = sourceNode?.raw.model_id;
-              event.currentTarget.setPointerCapture(event.pointerId);
-              pointerStart.current = {
-                pointerId: event.pointerId,
-                point: start,
-                sourceControlId: sourceNode?.controlId,
-                sourceModelId: typeof modelId === "string" ? modelId : undefined,
-              };
-            }
-          }}
-          onPointerLeave={() => setHovered(undefined)}
-          onPointerMove={updateHovered}
-          onPointerUp={(event) => void finishGesture(event)}
-          onWheel={wheel}
-          src={`/api/v1/captures/${String(captureVersion)}`}
-          tabIndex={!historical && !inspecting && state?.inputOperations.includes("key") ? 0 : -1}
-        />
+          <img
+            alt="xui-lab screenshot"
+            className={cn(
+              "absolute inset-0 m-auto max-h-full max-w-full touch-none select-none object-contain outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 focus-visible:ring-offset-black",
+              inspecting ? "cursor-crosshair" : "cursor-default",
+            )}
+            draggable={false}
+            onClick={clicked}
+            onContextMenu={rightClick}
+            onDoubleClick={doubleClicked}
+            onKeyDown={pressKey}
+            onLoad={() => setHovered(undefined)}
+            onPointerCancel={() => {
+              pointerStart.current = null;
+            }}
+            onPointerDown={(event) => {
+              if (!inspecting && !historical) {
+                event.currentTarget.focus();
+              }
+              if (event.button !== 0) {
+                return;
+              }
+              const start = point(event);
+              if (start !== undefined) {
+                const sourceNode =
+                  state === null
+                    ? undefined
+                    : (findModelTreeNodeAtPoint(state.tree, start) ??
+                      findTreeNodeAtPoint(state.tree, start));
+                const modelId = sourceNode?.raw.model_id;
+                event.currentTarget.setPointerCapture(event.pointerId);
+                pointerStart.current = {
+                  pointerId: event.pointerId,
+                  point: start,
+                  sourceControlId: sourceNode?.controlId,
+                  sourceModelId: typeof modelId === "string" ? modelId : undefined,
+                };
+              }
+            }}
+            onPointerLeave={() => setHovered(undefined)}
+            onPointerMove={updateHovered}
+            onPointerUp={(event) => void finishGesture(event)}
+            onWheel={wheel}
+            src={`/api/v1/captures/${String(captureVersion)}`}
+            tabIndex={!historical && !inspecting && state?.inputOperations.includes("key") ? 0 : -1}
+          />
+          {reference !== null && referenceMode === "overlay" ? (
+            <img
+              alt={`Reference: ${reference.name}`}
+              className="pointer-events-none absolute inset-0 z-[1] m-auto max-h-full max-w-full select-none object-contain"
+              draggable={false}
+              src={reference.url}
+              style={{ opacity: referenceOpacity }}
+            />
+          ) : null}
+        </div>
+        {reference !== null && referenceMode === "side" ? (
+          <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-black">
+            <img
+              alt={`Reference: ${reference.name}`}
+              className="absolute inset-0 m-auto max-h-full max-w-full select-none object-contain"
+              draggable={false}
+              src={reference.url}
+            />
+          </div>
+        ) : null}
       </div>
       <div className="min-w-0 shrink-0">
         <Filmstrip

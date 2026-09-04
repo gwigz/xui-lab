@@ -242,6 +242,33 @@ test("applies subject-size and UI-scale comparison presets", async ({ page }) =>
     });
 });
 
+test("compares a capture with a local reference image without affecting the session", async ({
+  page,
+}) => {
+  const actions: unknown[] = [];
+  await mockInspectorApi(page, actions);
+  await page.goto("/");
+
+  await page.locator('input[type="file"][accept="image/*"]').setInputFiles({
+    name: "inventory-reference.png",
+    mimeType: "image/png",
+    buffer: largePng,
+  });
+
+  const reference = page.getByRole("img", { name: "Reference: inventory-reference.png" });
+  await expect(reference).toBeVisible();
+  await expect.poll(() => reference.evaluate((image) => image.naturalWidth)).toBeGreaterThan(0);
+  await expect(page.getByText("Visual aid only")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Side by side" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  await page.getByRole("button", { name: "Overlay" }).click();
+  await expect(page.getByRole("slider", { name: "Reference opacity" })).toBeVisible();
+  expect(actions).toEqual([]);
+});
+
 test("filters the view tree while retaining the selected control", async ({ page }) => {
   const actions: unknown[] = [];
   await mockInspectorApi(page, actions);

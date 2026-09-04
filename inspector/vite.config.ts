@@ -74,7 +74,7 @@ export default defineConfig({
       // Keep in sync with xui_lab.inspector_http.SECURITY_HEADERS. Do not add
       // unsafe-eval; Playwright preview must fail the same way FastAPI does.
       "Content-Security-Policy":
-        "default-src 'self'; img-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'",
+        "default-src 'self'; img-src 'self' blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'",
     },
   },
   test: {

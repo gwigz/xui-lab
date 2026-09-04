@@ -60,7 +60,7 @@ Explorer. The changes belong in XUI Lab or its Alchemy adapter.
 - [x] Add UI-scale presets for 1.0 and 1.25.
 - [x] Label filmstrip entries with subject size, UI scale, fixture, and view
   state.
-- [ ] Allow the inspector to display a reference image beside a capture or as
+- [x] Allow the inspector to display a reference image beside a capture or as
   an adjustable overlay.
-- [ ] Keep reference images outside scenario pass criteria. Structural
+- [x] Keep reference images outside scenario pass criteria. Structural
   assertions remain the primary proof.

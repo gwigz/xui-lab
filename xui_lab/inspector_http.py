@@ -72,7 +72,7 @@ SECURITY_HEADERS = {
     # script-src must not include 'unsafe-eval'. The inspector precompiles JSON
     # Schema validators; ajv.compile() at runtime is a hard load failure.
     "Content-Security-Policy": (
-        "default-src 'self'; img-src 'self'; script-src 'self'; "
+        "default-src 'self'; img-src 'self' blob:; script-src 'self'; "
         "style-src 'self' 'unsafe-inline'; connect-src 'self'"
     ),
     "Referrer-Policy": "no-referrer",

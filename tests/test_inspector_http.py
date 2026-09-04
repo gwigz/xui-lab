@@ -532,6 +532,11 @@ class InspectorHttpTests(unittest.TestCase):
         self.assertNotIn("Function(", source)
         self.assertNotIn("unsafe-eval", SECURITY_HEADERS["Content-Security-Policy"])
 
+    def test_browser_policy_allows_local_reference_images(self) -> None:
+        self.assertIn(
+            "img-src 'self' blob:", SECURITY_HEADERS["Content-Security-Policy"]
+        )
+
     def test_rejects_non_loopback_bind_addresses(self) -> None:
         with self.assertRaisesRegex(InputError, "loopback"):
             create_inspector_app(session_token=SESSION_TOKEN, host="0.0.0.0")
