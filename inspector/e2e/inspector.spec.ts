@@ -270,6 +270,10 @@ test("compares a capture with a local reference image without affecting the sess
   await expect(page.locator('[data-slot="slider-control"]')).toBeVisible();
   await expect(page.locator('[data-slot="slider-value"]')).toContainText("50");
   await expect(page.locator('[data-slot="slider-control"] input[type="range"]')).toHaveCount(1);
+  await opacity.press("ArrowRight");
+  await expect(opacity).toHaveValue("55");
+  await expect(page.locator('[data-slot="slider-value"]')).toContainText("55");
+  await expect(reference).toHaveCSS("opacity", "0.55");
   expect(actions).toEqual([]);
 });
 

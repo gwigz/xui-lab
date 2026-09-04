@@ -137,14 +137,14 @@ The browser inspector is a React and TypeScript app in `inspector/`. Vite
 builds it into `xui_lab/_inspector/`. FastAPI serves that build and the
 `/api/v1` routes on a random loopback port. The browser receives an HttpOnly
 session cookie. Unexpected `Host` and `Origin` headers are rejected. Captures
-resolve through the current session artifact directory. Button, Input, Select,
-Tabs, Toolbar, Toast, and Popover come from the Coss UI registry. They use
-Base UI behavior and Coss neutral tokens. The resizable sidebar uses the
-shadcn Base UI Resizable wrapper around react-resizable-panels. Tailwind CSS
-supplies the generated utilities.
+resolve through the current session artifact directory. Button, Input, Popover,
+Select, Slider, Tabs, Toggle Group, Toolbar, and Toast come from the Coss UI
+registry. They use Base UI behavior and Coss neutral tokens. The resizable
+sidebar uses the shadcn Base UI Resizable wrapper around
+react-resizable-panels. Tailwind CSS supplies the generated utilities.
 
 The view tree starts at the visible subject subtree. Use **Hidden**, **Menus**,
-and **Lab roots** to inspect controls outside that default view. The tree keeps
+and **Roots** to inspect controls outside that default view. The tree keeps
 a selected hidden control visible when you turn **Hidden** off.
 
 ```sh

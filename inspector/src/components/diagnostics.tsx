@@ -464,23 +464,24 @@ function Snapshot({
             Overlay
           </Button>
           {referenceMode === "overlay" ? (
-            <Slider
-              className="w-28 px-1"
-              max={100}
-              min={0}
-              onValueChange={(value) => {
-                if (typeof value === "number") {
-                  setReferenceOpacity(value);
-                }
-              }}
-              step={5}
-              value={referenceOpacity}
-            >
-              <div className="mb-1 flex items-center justify-between gap-2 text-[11px] text-neutral-500">
-                <SliderPrimitive.Label>Opacity</SliderPrimitive.Label>
-                <SliderValue className="text-[11px] tabular-nums" />
-              </div>
-            </Slider>
+            <div className="w-44 shrink-0 px-1">
+              <Slider
+                max={100}
+                min={0}
+                onValueChange={(value) => {
+                  if (typeof value === "number") {
+                    setReferenceOpacity(value);
+                  }
+                }}
+                step={5}
+                value={referenceOpacity}
+              >
+                <div className="mb-1 flex items-center justify-between gap-2 text-[11px] text-neutral-500">
+                  <SliderPrimitive.Label>Opacity</SliderPrimitive.Label>
+                  <SliderValue className="text-[11px] tabular-nums" />
+                </div>
+              </Slider>
+            </div>
           ) : null}
           <Button
             aria-label="Remove reference"
