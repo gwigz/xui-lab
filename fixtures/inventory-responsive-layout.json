@@ -1,0 +1,36 @@
+{
+  "$schema": "../schemas/fixture.schema.json",
+  "schemaVersion": 1,
+  "id": "inventory_responsive_layout",
+  "agent": {
+    "id": "11111111-1111-4111-8111-111111111111",
+    "name": "Lab Resident"
+  },
+  "inventory": [
+    {
+      "id": "20000000-0000-4000-8000-000000000001",
+      "parentId": "00000000-0000-0000-0000-000000000000",
+      "kind": "root",
+      "name": "My Inventory"
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000002",
+      "parentId": "20000000-0000-4000-8000-000000000001",
+      "kind": "folder",
+      "name": "Responsive Layout"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000001",
+      "parentId": "20000000-0000-4000-8000-000000000002",
+      "kind": "notecard",
+      "name": "Known Notecard"
+    }
+  ],
+  "avatarNames": [
+    {
+      "id": "11111111-1111-4111-8111-111111111111",
+      "displayName": "Lab Resident",
+      "userName": "lab.resident"
+    }
+  ]
+}
