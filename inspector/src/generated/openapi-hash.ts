@@ -1,1 +1,1 @@
-export const OPENAPI_HASH = "bc1da218849f7b7c12daa7d04aea87fa8053ce4905e70d1b22c88ddad5442675";
+export const OPENAPI_HASH = "e019ebc58629b233a78eb2b30d73cb84cf7e6b7a7b816ec6e35e6d05b17edc54";

@@ -43,6 +43,8 @@ const inspectorState = {
     },
   },
   artifactDir: "/tmp/artifacts",
+  subject: "test_widgets",
+  fixture: "",
   subjects: ["test_widgets"],
   fixtures: [],
   scenarios: ["test_floater"],
@@ -161,6 +163,23 @@ test("renders the production tree and capture from the inspector API", async ({ 
   await expect(page.getByLabel("Viewport width")).toBeVisible();
   await expect(page.getByLabel("Subject width")).toBeVisible();
   expect(pageErrors).toEqual([]);
+});
+
+test("shows the active subject and fixture", async ({ page }) => {
+  await mockInspectorApi(page, [], {
+    state: {
+      ...inspectorState,
+      subject: "inventory_explorer",
+      fixture: "inventory_explorer",
+      subjects: ["inventory_explorer", "test_widgets"],
+      fixtures: ["inventory_explorer"],
+    },
+  });
+
+  await page.goto("/");
+
+  await expect(page.getByLabel("Subject")).toContainText("inventory_explorer");
+  await expect(page.getByLabel("Fixture")).toContainText("inventory_explorer");
 });
 
 test("shows an error toast when an inspector action fails", async ({ page }) => {

@@ -142,7 +142,13 @@ class CommandLineTests(unittest.TestCase):
         widgets = next(
             subject for subject in document.subjects if subject.name == "test_widgets"
         )
+        inventory = next(
+            subject
+            for subject in document.subjects
+            if subject.name == "inventory_explorer"
+        )
         self.assertEqual(("input", "inspection"), widgets.required_capabilities)
+        self.assertEqual("inventory_explorer", inventory.default_fixture)
         self.assertFalse(widgets.openable)
         self.assertEqual("runtime_not_selected", widgets.unavailable_reason)
 
@@ -356,6 +362,69 @@ class CommandLineTests(unittest.TestCase):
         click = next(item for item in document.operations if item.name == "click")
         self.assertTrue(click.available)
         self.assertEqual((), click.suggested_operations)
+
+    def test_preflight_rejects_a_subject_with_a_missing_default_fixture(self) -> None:
+        stdout = StringIO()
+
+        with patch("xui_lab.cli.discover_fixtures", return_value={}):
+            with redirect_stdout(stdout):
+                status = main(
+                    [
+                        "preflight",
+                        "--json",
+                        "--subject",
+                        "inventory_explorer",
+                        "--operation",
+                        "click",
+                    ]
+                )
+
+        self.assertEqual(1, status)
+        document = PreflightContract.model_validate_json(stdout.getvalue())
+        self.assertEqual("inventory_explorer", document.fixture.default_fixture)
+        self.assertFalse(document.fixture.available)
+        self.assertEqual("fixture_missing", document.fixture.unavailable_reason)
+        click = next(item for item in document.operations if item.name == "click")
+        self.assertFalse(click.available)
+        self.assertEqual("fixture_missing", click.unavailable_reason)
+
+    def test_interactive_uses_the_subject_default_fixture(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            runtime = Path(directory) / "xui-lab"
+            runtime.write_text("runtime", encoding="utf-8")
+            configs: list[object] = []
+
+            def interactive_session(
+                _lab: object, config: object, *_args: object, **_kwargs: object
+            ) -> object:
+                configs.append(config)
+                return object()
+
+            with (
+                patch(
+                    "xui_lab.cli.InteractiveSession", side_effect=interactive_session
+                ),
+                patch("xui_lab.cli.serve_inspector", return_value=0),
+            ):
+                status = main(
+                    [
+                        "interactive",
+                        "inventory_explorer",
+                        "--runtime",
+                        str(runtime),
+                        "--no-browser",
+                    ]
+                )
+
+        self.assertEqual(0, status)
+        self.assertEqual(1, len(configs))
+        fixture = getattr(configs[0], "fixture")
+        self.assertEqual(
+            (
+                Path(__file__).resolve().parents[1] / "fixtures/inventory-explorer.json"
+            ).resolve(),
+            fixture,
+        )
 
     def test_preflight_json_rejects_an_unknown_operation(self) -> None:
         stdout = StringIO()

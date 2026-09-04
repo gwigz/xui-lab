@@ -358,6 +358,8 @@ export interface components {
       diagnostics: {
         [key: string]: unknown;
       };
+      /** Fixture */
+      fixture: string;
       /** Fixtures */
       fixtures: string[];
       /** Inputoperations */
@@ -374,6 +376,8 @@ export interface components {
       scenarios: string[];
       /** Stateversion */
       stateVersion: number;
+      /** Subject */
+      subject: string;
       /** Subjects */
       subjects: string[];
       /** Tree */

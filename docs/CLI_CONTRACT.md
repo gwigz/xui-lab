@@ -26,12 +26,13 @@ error. JSON success documents contain no diagnostic prose.
 
 ## Discovery commands
 
-`subjects --json` lists adapter-declared subjects, required capabilities, the
-selected viewer source, and whether a `--runtime` binary can open each subject.
-`operations --json` lists query and input operations. `preflight --json` reports
-whether a subject or operation is available and suggests valid operations when
-a capability is missing. `schema` prints the generated JSON Schema catalog.
-These commands write one JSON document and do not start a viewer session.
+`subjects --json` lists adapter-declared subjects, required capabilities,
+default fixtures, the selected viewer source, and whether a `--runtime` binary
+can open each subject. `operations --json` lists query and input operations.
+`preflight --json` reports capability and fixture availability. It suggests
+valid operations when a capability is missing. `schema` prints the generated
+JSON Schema catalog. These commands write one JSON document and do not start a
+viewer session.
 
 ```sh
 ./xui-lab --request-id req_discover subjects --json
@@ -42,11 +43,11 @@ These commands write one JSON document and do not start a viewer session.
 ```
 
 Omit `--runtime` to inspect declarations without probing a binary. When
-`--runtime` is present, a subject is openable only if the binary reports the
-same fork and commit as the selected source. JSON commands do not print color,
-prompts, or progress animation. Pass `--request-id` before the subcommand, or
-the CLI generates one and copies it into the JSON document. `--jq` filters
-these documents the same way it filters session output.
+`--runtime` is present, a subject is openable only if the binary matches the
+selected source and its default fixture is available. JSON commands do not
+print color, prompts, or progress animation. Pass `--request-id` before the
+subcommand, or the CLI generates one and copies it into the JSON document.
+`--jq` filters these documents the same way it filters session output.
 
 ## Sessions and one-shot commands
 
@@ -55,12 +56,13 @@ user-local Unix socket under `platformdirs`, and writes a session id, PIDs,
 fork commit, subject, viewport, and capabilities to stdout. `--artifacts`
 defaults to a user-temp directory (`XUI_LAB_ARTIFACTS_DIR` overrides it) so
 session and test runs do not write into the checkout. Pass an explicit path
-when you want to keep the files. `session status`
-and `session close` inspect or stop that process. Close is idempotent and
-reports whether a process was terminated. Dead PIDs are removed on status and
-close. `--dry-run` on `session close`, `reload`, and `run` shows the session,
-subject, or artifact directory that would change without reloading, pruning,
-or terminating. Input gestures do not accept `--dry-run`.
+when you want to keep the files. A subject's declared default fixture loads
+when `--fixture` is absent. Pass `--fixture PATH` to override the default.
+`session status` and `session close` inspect or stop that process. Close is
+idempotent and reports whether a process was terminated. Dead PIDs are removed
+on status and close. `--dry-run` on `session close`, `reload`, and `run` shows
+the session, subject, or artifact directory that would change without
+reloading, pruning, or terminating. Input gestures do not accept `--dry-run`.
 
 `session jsonl SESSION_ID` reads one typed CLI command per stdin line and
 writes one result or `ErrorRecord` per stdout line. One-shot commands such as

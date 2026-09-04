@@ -68,6 +68,8 @@ export type InspectorState = Readonly<{
   recording: readonly string[];
   locators: Readonly<Record<string, RankedLocator>>;
   artifactDir: string;
+  subject: string;
+  fixture: string;
   subjects: readonly string[];
   fixtures: readonly string[];
   scenarios: readonly string[];
@@ -310,6 +312,8 @@ export function parseInspectorState(value: unknown): InspectorState {
     recording: stringArray(record.recording, "state.recording"),
     locators: parseRankedLocators(record.locators),
     artifactDir: stringValue(record.artifactDir, "state.artifactDir"),
+    subject: nonEmptyStringValue(record.subject, "state.subject"),
+    fixture: stringValue(record.fixture, "state.fixture"),
     subjects: stringArray(record.subjects, "state.subjects"),
     fixtures: stringArray(record.fixtures, "state.fixtures"),
     scenarios: stringArray(record.scenarios, "state.scenarios"),

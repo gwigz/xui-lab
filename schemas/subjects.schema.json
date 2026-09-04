@@ -36,6 +36,20 @@
     "SubjectContract": {
       "additionalProperties": false,
       "properties": {
+        "defaultFixture": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Defaultfixture"
+        },
         "name": {
           "minLength": 1,
           "title": "Name",
@@ -58,7 +72,8 @@
             {
               "enum": [
                 "runtime_not_selected",
-                "source_mismatch"
+                "source_mismatch",
+                "fixture_missing"
               ],
               "type": "string"
             },

@@ -1,7 +1,8 @@
 # Alchemy adapter
 
 This directory defines how `xui-lab` builds against Alchemy. `adapter.json` is
-the machine-readable capability contract.
+the machine-readable capability contract. Each subject declares its required
+capabilities and can name a default fixture by fixture ID.
 
 [`EVENT_APIS.md`](EVENT_APIS.md) records the event APIs retained by the reusable
 UI target and their no-login constraints.

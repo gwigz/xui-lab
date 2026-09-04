@@ -17,6 +17,8 @@ describe("generated OpenAPI validators", () => {
         recording: [],
         locators: {},
         artifactDir: "/tmp",
+        subject: "test_widgets",
+        fixture: "",
         subjects: [],
         fixtures: [],
         scenarios: [],

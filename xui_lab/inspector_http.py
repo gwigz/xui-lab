@@ -240,6 +240,8 @@ class InspectorStateDocument(ContractModel):
     recording: list[str]
     locators: dict[str, Any]
     artifact_dir: NonEmptyString = Field(alias="artifactDir")
+    subject: NonEmptyString
+    fixture: str
     subjects: list[str]
     fixtures: list[str]
     scenarios: list[str]

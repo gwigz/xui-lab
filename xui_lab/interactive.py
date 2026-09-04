@@ -144,12 +144,15 @@ class InteractiveSession:
         subjects: dict[str, frozenset[Capability]],
         fixtures: dict[str, Path],
         scenarios: dict[str, Scenario],
+        *,
+        default_fixtures: dict[str, str],
     ):
         self.lab = lab
         self.config = config
         self.subjects = subjects
         self.fixtures = fixtures
         self.scenarios = scenarios
+        self.default_fixtures = default_fixtures
         self._generation = 0
         self._latest_capture: Path | None = None
         self._capture_version = 0
@@ -205,6 +208,8 @@ class InteractiveSession:
                 and control_id
             },
             "artifactDir": str(self.window.artifact_dir),
+            "subject": self.window.subject,
+            "fixture": self.window.fixture or "",
             "subjects": sorted(self.subjects),
             "fixtures": sorted(self.fixtures),
             "scenarios": sorted(self.scenarios),
@@ -289,13 +294,16 @@ class InteractiveSession:
                 raise InputError(f"unknown scenario: {request.scenario}")
             return self._replay(scenario)
         if isinstance(request, contracts.SwitchInteractiveAction):
-            fixture = self.fixtures.get(request.fixture) if request.fixture else None
+            fixture_id = request.fixture or self.default_fixtures.get(request.subject)
+            fixture = self.fixtures.get(fixture_id) if fixture_id else None
+            if fixture_id is not None and fixture is None:
+                raise InputError(f"fixture is not available: {fixture_id}")
             self.window.close()
             self.window = self._open(request.subject, fixture)
             self._latest_capture = None
             return {
                 "subject": request.subject,
-                "fixture": request.fixture or "",
+                "fixture": self.window.fixture or "",
                 "processId": self.window.runtime.pid,
             }
         raise AssertionError("unhandled validated interactive action")
@@ -437,7 +445,3 @@ class InteractiveSession:
             "processIdBefore": before,
             "processIdAfter": self.window.runtime.pid,
         }
-
-
-def discover_fixtures(root: Path) -> dict[str, Path]:
-    return {path.stem: path for path in sorted((root / "fixtures").glob("*.json"))}

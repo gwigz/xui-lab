@@ -12,12 +12,12 @@ from .contracts import (
     OperationsContract,
     PreflightCapabilityReport,
     PreflightContract,
+    PreflightFixtureReport,
     PreflightOperationReport,
     SelectedRuntimeContract,
     SubjectContract,
     SubjectsContract,
     SubjectSourceContract,
-    UnavailableReason,
 )
 from .domain import Fork
 from .errors import InputError
@@ -148,6 +148,7 @@ def subjects_contract(
     repository_root: Path,
     overridden: bool,
     runtime: Path | None,
+    fixtures: frozenset[str],
     request_id: str | None = None,
 ) -> SubjectsContract:
     """List declared subjects and whether the selected runtime can open them."""
@@ -157,26 +158,31 @@ def subjects_contract(
     if runtime is not None:
         runtime_record = selected_runtime_record(fork, commit, runtime)
         matched = runtime_record.matched
-    reason: UnavailableReason | None
-    if runtime is None:
-        openable = False
-        reason = "runtime_not_selected"
-    elif not matched:
-        openable = False
-        reason = "source_mismatch"
-    else:
-        openable = True
-        reason = None
     subjects = tuple(
         SubjectContract.model_validate(
             {
                 "name": name,
-                "requiredCapabilities": required,
-                "openable": openable,
-                "unavailableReason": reason,
+                "requiredCapabilities": subject.required_capabilities,
+                "defaultFixture": subject.default_fixture,
+                "openable": runtime is not None
+                and matched
+                and (
+                    subject.default_fixture is None
+                    or subject.default_fixture in fixtures
+                ),
+                "unavailableReason": (
+                    "runtime_not_selected"
+                    if runtime is None
+                    else "source_mismatch"
+                    if not matched
+                    else "fixture_missing"
+                    if subject.default_fixture is not None
+                    and subject.default_fixture not in fixtures
+                    else None
+                ),
             }
         )
-        for name, required in sorted(adapter.subjects.items())
+        for name, subject in sorted(adapter.subjects.items())
     )
     return SubjectsContract(
         schemaVersion=SCHEMA_VERSION,
@@ -205,6 +211,7 @@ def preflight_contract(
     runtime: Path | None,
     subject: str | None,
     operation: str | None,
+    fixtures: frozenset[str],
     request_id: str,
 ) -> PreflightContract:
     """Report capability and operation availability for the selected subject."""
@@ -216,7 +223,10 @@ def preflight_contract(
         raise InputError(f"subject is not declared by the adapter: {subject}")
 
     declared = adapter.capabilities
-    required = adapter.subjects[subject] if subject is not None else ()
+    declaration = adapter.subjects[subject] if subject is not None else None
+    required = declaration.required_capabilities if declaration is not None else ()
+    default_fixture = declaration.default_fixture if declaration is not None else None
+    fixture_available = default_fixture is None or default_fixture in fixtures
     available_caps = frozenset(required if subject is not None else declared)
     missing = tuple(capability for capability in required if capability not in declared)
     available = tuple(
@@ -234,24 +244,30 @@ def preflight_contract(
     available_names = tuple(
         item.name
         for item in catalog.operations
-        if not runtime_blocked and not missing_capabilities(item)
+        if not runtime_blocked and fixture_available and not missing_capabilities(item)
     )
     reports = tuple(
         PreflightOperationReport.model_validate(
             {
                 "name": item.name,
                 "kind": item.kind,
-                "available": not runtime_blocked and not missing_capabilities(item),
+                "available": not runtime_blocked
+                and fixture_available
+                and not missing_capabilities(item),
                 "requiredCapabilities": item.required_capabilities,
                 "missingCapabilities": missing_capabilities(item),
                 "suggestedOperations": (
                     ()
-                    if runtime_blocked or not missing_capabilities(item)
+                    if runtime_blocked
+                    or not fixture_available
+                    or not missing_capabilities(item)
                     else available_names
                 ),
                 "unavailableReason": (
                     "source_mismatch"
                     if runtime_blocked
+                    else "fixture_missing"
+                    if not fixture_available
                     else "missing_capability"
                     if missing_capabilities(item)
                     else None
@@ -271,6 +287,11 @@ def preflight_contract(
             required=required,
             available=available,
             missing=missing,
+        ),
+        fixture=PreflightFixtureReport(
+            defaultFixture=default_fixture,
+            available=fixture_available,
+            unavailableReason=None if fixture_available else "fixture_missing",
         ),
         operations=reports,
     )

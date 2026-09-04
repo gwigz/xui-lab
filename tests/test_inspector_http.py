@@ -58,6 +58,8 @@ class SessionStub:
             "recording": [],
             "locators": {},
             "artifactDir": str(self._artifact_dir),
+            "subject": "test_widgets",
+            "fixture": "",
             "subjects": ["test_widgets"],
             "fixtures": [],
             "scenarios": ["test_floater"],

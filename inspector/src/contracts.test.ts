@@ -39,6 +39,8 @@ const validState = {
     },
   },
   artifactDir: "/tmp/artifacts",
+  subject: "test_widgets",
+  fixture: "",
   subjects: ["test_widgets"],
   fixtures: [],
   scenarios: ["test_floater"],
@@ -71,6 +73,8 @@ describe("parseInspectorState", () => {
     expect(state.captures[1]?.action).toBe("click");
     expect(state.stateVersion).toBe(4);
     expect(state.inputOperations).toEqual(["click", "drag", "fill"]);
+    expect(state.subject).toBe("test_widgets");
+    expect(state.fixture).toBe("");
     expect(state.locators["save-button"]?.signals).toEqual(["role", "name"]);
     expect(findTreeNodeByControlId(state.tree, "save-button")?.title).toBe("Save · LLButton");
   });

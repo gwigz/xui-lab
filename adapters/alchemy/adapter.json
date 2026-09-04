@@ -12,13 +12,18 @@
     "menus"
   ],
   "subjects": {
-    "test_widgets": ["input", "inspection"],
-    "inventory_explorer": [
-      "input",
-      "inspection",
-      "inventory_model",
-      "agent_identity",
-      "menus"
-    ]
+    "test_widgets": {
+      "requiredCapabilities": ["input", "inspection"]
+    },
+    "inventory_explorer": {
+      "requiredCapabilities": [
+        "input",
+        "inspection",
+        "inventory_model",
+        "agent_identity",
+        "menus"
+      ],
+      "defaultFixture": "inventory_explorer"
+    }
   }
 }

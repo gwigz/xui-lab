@@ -43,6 +43,8 @@ process.
 
 Replace `test_widgets` with a subject from
 [`adapters/alchemy/adapter.json`](adapters/alchemy/adapter.json).
+The lab loads a subject's declared default fixture. Pass `--fixture PATH` to
+override it.
 
 ## Drive it from the CLI
 

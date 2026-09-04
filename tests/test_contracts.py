@@ -335,6 +335,16 @@ class StrictContractTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             AdapterContract.model_validate(adapter)
 
+    def test_adapter_subject_declares_its_default_fixture(self) -> None:
+        adapter = AdapterContract.model_validate_json(
+            (ROOT / "adapters/alchemy/adapter.json").read_text()
+        )
+
+        inventory = adapter.subjects["inventory_explorer"]
+        self.assertEqual("inventory_explorer", inventory.default_fixture)
+        self.assertIn("inventory_model", inventory.required_capabilities)
+        self.assertIsNone(adapter.subjects["test_widgets"].default_fixture)
+
     def test_event_and_transport_envelopes_are_closed(self) -> None:
         event = ProgressEvent(
             schemaVersion=1,

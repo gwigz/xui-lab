@@ -27,6 +27,7 @@ from .contracts import (
 )
 from .domain import Capability, ForkId, Viewport
 from .errors import InputError
+from .fixtures import discover_fixtures, resolve_fixture
 from .io import resolved_source
 from .json_output import emit_json_document
 from .oneshot import apply_window_command
@@ -147,6 +148,13 @@ def cmd_session_start(
     adapter = adapter_config(fork)
     if command.subject not in adapter.subjects:
         raise InputError(f"subject is not declared by the adapter: {command.subject}")
+    subject = adapter.subjects[command.subject]
+    fixture = resolve_fixture(
+        command.fixture,
+        subject.default_fixture,
+        discover_fixtures(ROOT),
+        subject=command.subject,
+    )
     session_id = "sess_" + uuid.uuid4().hex[:16]
     timeout = _timeout(command, 30.0)
     record = SessionFile(
@@ -164,11 +172,9 @@ def cmd_session_start(
         width=command.width,
         height=command.height,
         uiScale=command.ui_scale,
-        capabilities=tuple(adapter.subjects[command.subject]),
+        capabilities=tuple(subject.required_capabilities),
         viewerSource=command.viewer_source,
-        fixture=str(Path(command.fixture).expanduser().resolve())
-        if command.fixture
-        else None,
+        fixture=str(fixture) if fixture is not None else None,
     )
     write_session(record)
     argv = [

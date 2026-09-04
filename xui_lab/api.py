@@ -357,6 +357,14 @@ class Window:
         self._capture_sequence = 0
         self._capture_records: list[_CaptureRecord] = []
 
+    @property
+    def subject(self) -> str:
+        return self._subject
+
+    @property
+    def fixture(self) -> str | None:
+        return self._fixture
+
     def _install(
         self,
         capabilities: frozenset[Capability],

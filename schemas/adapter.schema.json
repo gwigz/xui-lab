@@ -1,4 +1,38 @@
 {
+  "$defs": {
+    "SubjectDeclarationContract": {
+      "additionalProperties": false,
+      "properties": {
+        "defaultFixture": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Defaultfixture"
+        },
+        "requiredCapabilities": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Requiredcapabilities",
+          "type": "array"
+        }
+      },
+      "required": [
+        "requiredCapabilities"
+      ],
+      "title": "SubjectDeclarationContract",
+      "type": "object"
+    }
+  },
   "$id": "https://xui-lab.local/schemas/adapter.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
@@ -41,11 +75,7 @@
     },
     "subjects": {
       "additionalProperties": {
-        "items": {
-          "minLength": 1,
-          "type": "string"
-        },
-        "type": "array"
+        "$ref": "#/$defs/SubjectDeclarationContract"
       },
       "propertyNames": {
         "minLength": 1

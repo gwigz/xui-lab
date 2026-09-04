@@ -42,9 +42,15 @@ class CheckError(XUILabError):
 
 
 @dataclass(frozen=True)
+class Subject:
+    capabilities: frozenset[str]
+    default_fixture: str | None
+
+
+@dataclass(frozen=True)
 class Adapter:
     capabilities: frozenset[str]
-    subjects: dict[str, frozenset[str]]
+    subjects: dict[str, Subject]
 
 
 def relative_path(value: str, label: str) -> Path:
@@ -153,7 +159,12 @@ def load_adapter(fork: Fork) -> Adapter:
         raise CheckError(f"adapter {fork.id}.fork must be {fork.id}")
     return Adapter(
         frozenset(contract.capabilities),
-        {name: frozenset(required) for name, required in contract.subjects.items()},
+        {
+            name: Subject(
+                frozenset(subject.required_capabilities), subject.default_fixture
+            )
+            for name, subject in contract.subjects.items()
+        },
     )
 
 
@@ -192,7 +203,7 @@ def check_scenarios(adapters: dict[str, Adapter]) -> None:
                 f"scenario {scenario.id} requires undeclared capabilities: {', '.join(unknown)}"
             )
         subject_missing = sorted(
-            adapter.subjects[scenario.subject] - scenario.capabilities
+            adapter.subjects[scenario.subject].capabilities - scenario.capabilities
         )
         if subject_missing:
             raise CheckError(

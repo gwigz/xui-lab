@@ -746,6 +746,10 @@
             "title": "Diagnostics",
             "type": "object"
           },
+          "fixture": {
+            "title": "Fixture",
+            "type": "string"
+          },
           "fixtures": {
             "items": {
               "type": "string"
@@ -789,6 +793,11 @@
             "title": "Stateversion",
             "type": "integer"
           },
+          "subject": {
+            "minLength": 1,
+            "title": "Subject",
+            "type": "string"
+          },
           "subjects": {
             "items": {
               "type": "string"
@@ -808,6 +817,8 @@
           "recording",
           "locators",
           "artifactDir",
+          "subject",
+          "fixture",
           "subjects",
           "fixtures",
           "scenarios",

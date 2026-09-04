@@ -707,11 +707,46 @@ class PlaywrightApiTests(unittest.TestCase):
             {"test_widgets": frozenset()},
             {},
             {},
+            default_fixtures={},
         )
 
         self.assertEqual(1, len(capture_names))
         self.assertEqual(capture.resolve(), session.latest_capture)
         self.assertEqual(1, session._capture_version)
+
+    def test_interactive_state_reports_the_active_subject_and_fixture(self) -> None:
+        session = object.__new__(InteractiveSession)
+        session.window = type(
+            "WindowStub",
+            (),
+            {
+                "artifact_dir": self.directory,
+                "subject": "inventory_explorer",
+                "fixture": "inventory_explorer",
+                "input_operations": frozenset(),
+                "query_tree": staticmethod(
+                    lambda: {
+                        "control_id": "root",
+                        "path": "/root",
+                        "children": [],
+                    }
+                ),
+                "diagnostics": staticmethod(lambda: {}),
+            },
+        )()
+        session.subjects = {"inventory_explorer": frozenset()}
+        session.fixtures = {
+            "inventory_explorer": self.directory / "inventory-explorer.json"
+        }
+        session.scenarios = {}
+        session._latest_capture = None
+        session._capture_version = 0
+        session._filmstrip = []
+
+        state = session.state()
+
+        self.assertEqual("inventory_explorer", state["subject"])
+        self.assertEqual("inventory_explorer", state["fixture"])
 
     def test_interactive_inputs_refresh_the_browser_capture(self) -> None:
         capture = self.directory / "artifacts" / "latest.png"

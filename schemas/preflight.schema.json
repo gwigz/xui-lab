@@ -45,6 +45,47 @@
       "title": "PreflightCapabilityReport",
       "type": "object"
     },
+    "PreflightFixtureReport": {
+      "additionalProperties": false,
+      "properties": {
+        "available": {
+          "title": "Available",
+          "type": "boolean"
+        },
+        "defaultFixture": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "pattern": "^[a-z][a-z0-9_-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Defaultfixture"
+        },
+        "unavailableReason": {
+          "anyOf": [
+            {
+              "const": "fixture_missing",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unavailablereason"
+        }
+      },
+      "required": [
+        "available"
+      ],
+      "title": "PreflightFixtureReport",
+      "type": "object"
+    },
     "PreflightOperationReport": {
       "additionalProperties": false,
       "properties": {
@@ -94,7 +135,8 @@
             {
               "enum": [
                 "source_mismatch",
-                "missing_capability"
+                "missing_capability",
+                "fixture_missing"
               ],
               "type": "string"
             },
@@ -158,6 +200,9 @@
     "capabilities": {
       "$ref": "#/$defs/PreflightCapabilityReport"
     },
+    "fixture": {
+      "$ref": "#/$defs/PreflightFixtureReport"
+    },
     "fork": {
       "minLength": 1,
       "pattern": "^[a-z][a-z0-9_-]*$",
@@ -211,6 +256,7 @@
     "subject",
     "runtime",
     "capabilities",
+    "fixture",
     "operations"
   ],
   "title": "xui-lab capability preflight report",

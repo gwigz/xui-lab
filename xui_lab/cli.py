@@ -57,11 +57,11 @@ from .cpp_quality import format_cpp, tidy_cpp
 from .discovery import operations_contract, preflight_contract, subjects_contract
 from .domain import Capability, Fork, ForkId, Manifest, Viewport
 from .errors import InputError, XUILabError
+from .fixtures import discover_fixtures, resolve_fixture
 from .inspector_http import serve_inspector
 from .interactive import (
     InteractiveConfig,
     InteractiveSession,
-    discover_fixtures,
 )
 from .io import parse_manifest, parse_source_overrides, read_json, resolved_source
 from .json_output import compile_jq, emit_json_document
@@ -219,6 +219,7 @@ def cmd_subjects(command: SubjectsCliCommand) -> int:
         repository_root=ROOT,
         overridden=fork.id in overrides,
         runtime=optional_runtime(command.runtime),
+        fixtures=frozenset(discover_fixtures(ROOT)),
         request_id=command.request_id,
     )
     emit_json(document, jq=command.jq)
@@ -244,6 +245,7 @@ def cmd_preflight(command: PreflightCliCommand) -> int:
         runtime=optional_runtime(command.runtime),
         subject=command.subject,
         operation=command.operation,
+        fixtures=frozenset(discover_fixtures(ROOT)),
         request_id=command.request_id,
     )
     emit_json(document, jq=command.jq)
@@ -260,6 +262,8 @@ def cmd_preflight(command: PreflightCliCommand) -> int:
     ):
         return 1
     if command.subject is not None and document.capabilities.missing:
+        return 1
+    if command.subject is not None and not document.fixture.available:
         return 1
     return 0
 
@@ -325,15 +329,19 @@ def cmd_interactive(command: InteractiveCliCommand) -> int:
         raise InputError(f"runtime executable not found: {executable}")
     config = adapter_config(fork)
     subjects = {
-        name: frozenset(Capability(value) for value in capabilities)
-        for name, capabilities in config.subjects.items()
+        name: frozenset(Capability(value) for value in subject.required_capabilities)
+        for name, subject in config.subjects.items()
     }
     if command.subject not in subjects:
         raise InputError(f"subject is not declared by the adapter: {command.subject}")
 
-    fixture = Path(command.fixture).expanduser().resolve() if command.fixture else None
-    if fixture is not None and not fixture.is_file():
-        raise InputError(f"fixture not found: {fixture}")
+    fixtures = discover_fixtures(ROOT)
+    fixture = resolve_fixture(
+        command.fixture,
+        config.subjects[command.subject].default_fixture,
+        fixtures,
+        subject=command.subject,
+    )
     artifact_id = command.artifact_id or datetime.now(timezone.utc).strftime(
         "interactive-%Y%m%d-%H%M%S"
     )
@@ -354,8 +362,13 @@ def cmd_interactive(command: InteractiveCliCommand) -> int:
             request_id=command.request_id,
         ),
         subjects,
-        discover_fixtures(ROOT),
+        fixtures,
         discover_scenarios(ROOT, str(fork.id)),
+        default_fixtures={
+            name: subject.default_fixture
+            for name, subject in config.subjects.items()
+            if subject.default_fixture is not None
+        },
     )
     return serve_inspector(
         session,

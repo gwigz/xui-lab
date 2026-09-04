@@ -10,8 +10,9 @@ import unittest
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
+from unittest.mock import patch
 
-from xui_lab.cli import main, parse_command
+from xui_lab.cli import adapter_config, main, parse_command, select_fork
 from xui_lab.contracts import (
     ClickCliCommand,
     ReloadCliCommand,
@@ -30,6 +31,7 @@ from xui_lab.session import (
     socket_path,
     write_session,
 )
+from xui_lab.session_cli import cmd_session_start
 
 
 class SessionStoreTests(unittest.TestCase):
@@ -168,6 +170,51 @@ class SessionStoreTests(unittest.TestCase):
         self.assertIsInstance(command, SessionStartCliCommand)
         assert isinstance(command, SessionStartCliCommand)
         self.assertEqual("test_widgets", command.subject)
+
+    def test_session_start_uses_the_subject_default_fixture(self) -> None:
+        executable = self.runtime / "xui-lab"
+        executable.write_text("runtime", encoding="utf-8")
+        command = parse_command(
+            [
+                "session",
+                "start",
+                "inventory_explorer",
+                "--runtime",
+                str(executable),
+            ]
+        )
+        assert isinstance(command, SessionStartCliCommand)
+        records: list[SessionFile] = []
+
+        class ProcessStub:
+            pid = os.getpid()
+
+        def ready(_session_id: str, _timeout: float) -> SessionFile:
+            return records[-1].model_copy(update={"status": "ready"})
+
+        with (
+            patch("xui_lab.session_cli.write_session", side_effect=records.append),
+            patch("xui_lab.session_cli.subprocess.Popen", return_value=ProcessStub()),
+            patch("xui_lab.session_cli.wait_until_ready", side_effect=ready),
+        ):
+            with redirect_stdout(StringIO()):
+                status = cmd_session_start(
+                    command,
+                    select_fork=select_fork,
+                    runtime_path=lambda _fork, _source, _explicit: executable,
+                    adapter_config=adapter_config,
+                )
+
+        self.assertEqual(0, status)
+        self.assertEqual(
+            str(
+                (
+                    Path(__file__).resolve().parents[1]
+                    / "fixtures/inventory-explorer.json"
+                ).resolve()
+            ),
+            records[0].fixture,
+        )
 
     def test_tree_parses_include_tree_and_fields(self) -> None:
         command = parse_command(

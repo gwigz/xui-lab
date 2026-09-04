@@ -101,19 +101,27 @@ class ForkManifestContract(VersionedContract):
         return self
 
 
+class SubjectDeclarationContract(ContractModel):
+    required_capabilities: FrozenTuple[NonEmptyString] = Field(
+        alias="requiredCapabilities"
+    )
+    default_fixture: Identifier | None = Field(default=None, alias="defaultFixture")
+
+
 class AdapterContract(VersionedContract):
     schema_ref: str | None = Field(default=None, alias="$schema")
     fork: Identifier
     production_target: NonEmptyString = Field(alias="productionTarget")
     capabilities: FrozenTuple[NonEmptyString]
-    subjects: dict[NonEmptyString, FrozenTuple[NonEmptyString]]
+    subjects: dict[NonEmptyString, SubjectDeclarationContract]
 
     @model_validator(mode="after")
     def validate_capabilities(self) -> AdapterContract:
         if len(self.capabilities) != len(set(self.capabilities)):
             raise ValueError("capabilities must be unique")
         declared = set(self.capabilities)
-        for required in self.subjects.values():
+        for subject in self.subjects.values():
+            required = subject.required_capabilities
             if len(required) != len(set(required)):
                 raise ValueError("subject capabilities must be unique")
             if not set(required) <= declared:
@@ -938,7 +946,9 @@ class SelectedRuntimeContract(ContractModel):
     matched: bool
 
 
-UnavailableReason: TypeAlias = Literal["runtime_not_selected", "source_mismatch"]
+UnavailableReason: TypeAlias = Literal[
+    "runtime_not_selected", "source_mismatch", "fixture_missing"
+]
 
 
 class SubjectContract(ContractModel):
@@ -946,6 +956,7 @@ class SubjectContract(ContractModel):
     required_capabilities: FrozenTuple[NonEmptyString] = Field(
         alias="requiredCapabilities"
     )
+    default_fixture: Identifier | None = Field(default=None, alias="defaultFixture")
     openable: bool
     unavailable_reason: UnavailableReason | None = Field(
         default=None, alias="unavailableReason"
@@ -975,6 +986,23 @@ class PreflightCapabilityReport(ContractModel):
     missing: FrozenTuple[NonEmptyString]
 
 
+class PreflightFixtureReport(ContractModel):
+    default_fixture: Identifier | None = Field(default=None, alias="defaultFixture")
+    available: bool
+    unavailable_reason: Literal["fixture_missing"] | None = Field(
+        default=None, alias="unavailableReason"
+    )
+
+    @model_validator(mode="after")
+    def validate_availability(self) -> PreflightFixtureReport:
+        if self.default_fixture is None:
+            if self.available and self.unavailable_reason is None:
+                return self
+        elif self.available == (self.unavailable_reason is None):
+            return self
+        raise ValueError("fixture reason must be set only when a default is missing")
+
+
 class PreflightOperationReport(ContractModel):
     name: NonEmptyString
     kind: Literal["query", "input"]
@@ -988,9 +1016,9 @@ class PreflightOperationReport(ContractModel):
     suggested_operations: FrozenTuple[NonEmptyString] = Field(
         alias="suggestedOperations"
     )
-    unavailable_reason: Literal["source_mismatch", "missing_capability"] | None = Field(
-        default=None, alias="unavailableReason"
-    )
+    unavailable_reason: (
+        Literal["source_mismatch", "missing_capability", "fixture_missing"] | None
+    ) = Field(default=None, alias="unavailableReason")
 
     @model_validator(mode="after")
     def validate_availability(self) -> PreflightOperationReport:
@@ -1007,6 +1035,7 @@ class PreflightContract(VersionedContract):
     subject: NonEmptyString | None
     runtime: SelectedRuntimeContract | None
     capabilities: PreflightCapabilityReport
+    fixture: PreflightFixtureReport
     operations: FrozenTuple[PreflightOperationReport]
 
 

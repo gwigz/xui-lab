@@ -10,6 +10,11 @@
     "available": ["input", "inspection"],
     "missing": []
   },
+  "fixture": {
+    "defaultFixture": null,
+    "available": true,
+    "unavailableReason": null
+  },
   "operations": [
     {
       "name": "tree",

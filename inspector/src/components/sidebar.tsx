@@ -55,15 +55,13 @@ type SidebarProps = Readonly<{
 export function Sidebar({ state, selectedControlId, onSelect, onSwitch }: SidebarProps) {
   const [subject, setSubject] = useState("");
   const [fixture, setFixture] = useState("");
+  const activeSubject = state?.subject ?? "";
+  const activeFixture = state?.fixture ?? "";
 
   useEffect(() => {
-    if (state !== null && !state.subjects.includes(subject)) {
-      setSubject(state.subjects[0] ?? "");
-    }
-    if (state !== null && fixture !== "" && !state.fixtures.includes(fixture)) {
-      setFixture("");
-    }
-  }, [fixture, state, subject]);
+    setSubject(activeSubject);
+    setFixture(activeFixture);
+  }, [activeFixture, activeSubject]);
 
   return (
     <aside className="flex h-full min-h-0 flex-col bg-card">

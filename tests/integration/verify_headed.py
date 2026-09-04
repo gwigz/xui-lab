@@ -18,10 +18,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from xui_lab.api import Lab, default_artifact_root
 from xui_lab.contracts import CaptureMetadataContract
 from xui_lab.domain import Capability, ForkId, Viewport
+from xui_lab.fixtures import discover_fixtures
 from xui_lab.interactive import (
     InteractiveConfig,
     InteractiveSession,
-    discover_fixtures,
 )
 from xui_lab.io import git_commit, parse_manifest, read_json, write_json
 from xui_lab.scenarios import discover_scenarios
@@ -194,6 +194,7 @@ def main() -> int:
         {"test_widgets": capabilities},
         discover_fixtures(ROOT),
         discover_scenarios(ROOT, "alchemy"),
+        default_fixtures={},
     )
 
     proof: dict[str, Any] = {"forkCommit": commit}

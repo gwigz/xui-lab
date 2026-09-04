@@ -23,7 +23,8 @@ Check an operation before you start a viewer:
 ```sh
 ./xui-lab --viewer-source alchemy="$SOURCE" \
   preflight --json --subject test_widgets --operation click \
-  --runtime "$RUNTIME" --jq .available
+  --runtime "$RUNTIME" \
+  --jq '{fixture, operation: (.operations[] | select(.name=="click"))}'
 ```
 
 ## Inspect one session
@@ -33,6 +34,14 @@ Start a hidden 1200 by 800 viewer and retain its session ID:
 ```sh
 SESSION=$(./xui-lab --viewer-source alchemy="$SOURCE" \
   session start test_widgets --runtime "$RUNTIME" --jq .sessionId)
+```
+
+Subjects can declare a default fixture. Inventory Explorer starts with its
+fixture when `--fixture` is absent:
+
+```sh
+SESSION=$(./xui-lab --viewer-source alchemy="$SOURCE" \
+  session start inventory_explorer --runtime "$RUNTIME" --jq .sessionId)
 ```
 
 Read one control and its ranked selector:
