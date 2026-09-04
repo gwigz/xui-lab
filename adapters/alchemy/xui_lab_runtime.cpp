@@ -14,11 +14,13 @@
 #include "llapp.h"
 #include "llfolderviewitem.h"
 #include "llfolderviewmodelinventory.h"
+#include "llinventorygallery.h"
 #include "llinventorymodel.h"
 #include "llsdjson.h"
 #include "llsdutil.h"
 #include "llui.h"
 #include "llview.h"
+#include "llviewerassettype.h"
 #include "llviewermenu.h"
 
 #include <algorithm>
@@ -444,13 +446,21 @@ private:
     {
         auto* folder_item = dynamic_cast<LLFolderViewItem*>(source);
         auto* model_item  = folder_item ? dynamic_cast<LLFolderViewModelItemInventory*>(folder_item->getViewModelItem()) : nullptr;
-        if (!model_item)
-            return { DAD_NONE, nullptr };
-
         requireCapability("inventory_model");
         EDragAndDropType cargo_type = DAD_NONE;
         LLUUID           cargo_id;
-        if (!model_item->startDrag(&cargo_type, &cargo_id) || cargo_type == DAD_NONE || cargo_id.isNull())
+        if (model_item)
+        {
+            if (!model_item->startDrag(&cargo_type, &cargo_id))
+                throw LabError("input", "production inventory source refused the drag: " + source->getPathname());
+        }
+        else if (auto* gallery_item = dynamic_cast<LLInventoryGalleryItem*>(source))
+        {
+            cargo_id = gallery_item->getUUID();
+            if (const LLInventoryObject* object = gInventory.getObject(cargo_id))
+                cargo_type = LLViewerAssetType::lookupDragAndDropType(object->getType());
+        }
+        if (cargo_type == DAD_NONE || cargo_id.isNull())
             throw LabError("input", "production inventory source refused the drag: " + source->getPathname());
         LLInventoryObject* cargo = gInventory.getObject(cargo_id);
         if (!cargo)
@@ -489,8 +499,9 @@ private:
         bool tray_drag_capture         = false;
         if (!target->isInVisibleChain())
         {
-            auto* folder_item = dynamic_cast<LLFolderViewItem*>(source);
-            if (!folder_item)
+            auto* folder_item  = dynamic_cast<LLFolderViewItem*>(source);
+            auto* gallery_item = dynamic_cast<LLInventoryGalleryItem*>(source);
+            if (!folder_item && !gallery_item)
                 throw LabError("input", "drag-and-drop target is hidden and the source cannot start a production inventory drag");
             LLToolDragAndDrop::instance().setMouseCapture(true);
             tray_drag_capture = true;

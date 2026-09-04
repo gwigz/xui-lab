@@ -18,6 +18,10 @@ DETAILS_TITLE = f"{DETAILS_PANEL}/details_title"
 PREVIEW = f"{DETAILS_PANEL}/preview_background"
 ITEM_NAME = f"{DETAILS_PANEL}/item_name"
 TYPE_BADGE = f"{DETAILS_PANEL}/item_type_badge"
+PRIMARY_ACTION = f"{DETAILS_PANEL}/primary_action"
+EDIT_ACTION = f"{DETAILS_PANEL}/edit_action"
+SHARE_ACTION = f"{DETAILS_PANEL}/share_action"
+PROPERTIES_ACTION = f"{DETAILS_PANEL}/properties_action"
 PROPERTIES_HINT = f"{DETAILS_PANEL}/properties_hint"
 VERTICAL_SCROLLBAR = f"{DETAILS_SCROLL}/scrollable vertical"
 HORIZONTAL_SCROLLBAR = f"{DETAILS_SCROLL}/scrollable horizontal"
@@ -102,6 +106,18 @@ def run(window: Window) -> None:
         raise AssertionFailure("selected-item details did not become visible")
     _assert_details_width(tree)
     _assert_details_hierarchy(tree)
+
+    primary_action = window.get_by_path(PRIMARY_ACTION)
+    primary_action.expect_visible()
+    primary_action.expect_enabled()
+    if any(
+        node.get("path") in (EDIT_ACTION, SHARE_ACTION) and node.get("visible_chain")
+        for node in _nodes(tree)
+    ):
+        raise AssertionFailure("notecard inspector exposed an ineligible action")
+    properties_action = window.get_by_path(PROPERTIES_ACTION)
+    properties_action.expect_visible()
+    properties_action.expect_enabled()
 
     obsolete = (PROPERTIES_HINT, DETAILS_TITLE)
     if any(node.get("path") in obsolete for node in _nodes(tree)):

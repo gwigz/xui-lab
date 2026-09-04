@@ -11,6 +11,7 @@ from xui_lab.image_comparison import compare_png
 LAB_FIXTURES = "20000000-0000-4000-8000-000000000002"
 VISUAL_SAMPLES = "20000000-0000-4000-8000-000000000003"
 KNOWN_NOTECARD = "30000000-0000-4000-8000-000000000001"
+MENU_FILE = "menu_al_inventory_explorer.xml"
 PANEL = (
     "/Floater View/floater_al_inventory_explorer/inventory_explorer_panel/"
     "inventory_explorer_layout_stack/content_layout_panel/content_layout_stack"
@@ -93,6 +94,22 @@ def _path_visible(window: Window, path: str) -> bool:
     )
 
 
+def _visible_path(window: Window, suffix: str, *, within: str) -> str:
+    matches = [
+        node["path"]
+        for node in _nodes(window.query_tree())
+        if isinstance(node.get("path"), str)
+        and node["path"].startswith(within)
+        and node["path"].endswith(f"/{suffix}")
+        and node.get("visible_chain") is True
+    ]
+    if len(matches) != 1:
+        raise AssertionFailure(
+            f"visible control {suffix!r} matched {len(matches)} paths: {matches}"
+        )
+    return str(matches[0])
+
+
 def _assert_selection(window: Window, view_button: str) -> None:
     window.get_by_path(view_button).click().expect_handled()
     window.wait_for_stable()
@@ -147,6 +164,35 @@ def run(window: Window) -> None:
     window.wait_for_stable()
     if _model_value(window, VISUAL_SAMPLES, "folder_count") != "3":
         raise AssertionFailure("grid folder badge has the wrong item count")
+
+    grid_notecard = window.get_by_model_id(KNOWN_NOTECARD)
+    grid_notecard.expect_selected()
+    grid_notecard.press("Left").expect_handled()
+    window.get_by_model_id(VISUAL_SAMPLES).expect_selected()
+    window.get_by_model_id(VISUAL_SAMPLES).press("Right").expect_handled()
+    grid_notecard.expect_selected()
+
+    grid_notecard.right_click().expect_handled()
+    window.expect_menu_visible(True)
+    menu_entry = window.expect_menu_entry("Open")
+    if not menu_entry.source_file.endswith(MENU_FILE):
+        raise AssertionFailure(
+            f"grid context menu came from {menu_entry.source_file}, expected {MENU_FILE}"
+        )
+    grid_notecard.click().expect_handled()
+    window.expect_menu_visible(False)
+
+    grid_drop = (
+        grid_notecard.drag_to(window.get_by_path(HOLDING_TRAY)).expect_handled().data
+    )
+    if grid_drop.get("accepted") is not True or grid_drop.get("dropped") is not True:
+        raise AssertionFailure(f"grid item drag was rejected: {grid_drop}")
+    window.get_by_path(
+        _visible_path(window, "remove_button", within=HOLDING_TRAY)
+    ).click().expect_handled()
+    if _path_visible(window, HOLDING_LAYOUT):
+        raise AssertionFailure("removing the grid item did not hide the holding tray")
+
     window.get_by_path(LIST_VIEW).click().expect_handled()
     window.wait_for_stable()
     window.get_by_path(STATUS).expect_value("My Inventory > Lab Fixtures")
@@ -174,6 +220,23 @@ def run(window: Window) -> None:
         raise AssertionFailure("holding tray stayed hidden after an accepted drop")
     if _value(window, "item_name", within=HOLDING_TRAY) != "Known Notecard":
         raise AssertionFailure("holding tray did not display the dropped item")
+    holding_item = window.get_by_path(
+        _visible_path(
+            window,
+            "panel_al_inventory_explorer_holding_item",
+            within=HOLDING_TRAY,
+        )
+    )
+    holding_item.right_click().expect_handled()
+    window.expect_menu_visible(True)
+    holding_menu_entry = window.expect_menu_entry("Open")
+    if not holding_menu_entry.source_file.endswith(MENU_FILE):
+        raise AssertionFailure(
+            "holding item context menu came from "
+            f"{holding_menu_entry.source_file}, expected {MENU_FILE}"
+        )
+    holding_item.click().expect_handled()
+    window.expect_menu_visible(False)
     capture = window.capture("inventory-explorer-workflow")
     baseline = (
         Path(__file__).parents[1]
