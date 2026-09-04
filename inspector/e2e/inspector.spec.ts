@@ -252,6 +252,10 @@ test("compares a capture with a local reference image without affecting the sess
   await mockInspectorApi(page, actions);
   await page.goto("/");
 
+  const snapshotControls = page.getByRole("group", { name: "Snapshot controls" });
+  await expect(snapshotControls.getByRole("button", { name: "Side by side" })).toHaveCount(0);
+  await expect(snapshotControls.locator('[data-slot="separator"]')).toHaveCount(0);
+
   await page.locator('input[type="file"][accept="image/*"]').setInputFiles({
     name: "inventory-reference.png",
     mimeType: "image/png",
@@ -266,6 +270,11 @@ test("compares a capture with a local reference image without affecting the sess
     "aria-pressed",
     "true",
   );
+  await expect(snapshotControls.getByRole("button").nth(0)).toHaveAccessibleName("Reference");
+  await expect(snapshotControls.getByRole("button").nth(1)).toHaveAccessibleName("Side by side");
+  await expect(snapshotControls.getByRole("button").nth(2)).toHaveAccessibleName("Overlay");
+  await expect(snapshotControls.getByRole("button").nth(3)).toHaveAccessibleName("Settings");
+  await expect(snapshotControls.locator('[data-slot="separator"]')).toHaveCount(1);
 
   await page.getByRole("button", { name: "Overlay" }).click();
   const opacity = page.getByRole("slider", { name: "Opacity" });

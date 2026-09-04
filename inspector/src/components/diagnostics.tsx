@@ -10,6 +10,7 @@ import {
   type WheelEvent,
 } from "react";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import { Slider, SliderPrimitive, SliderValue } from "@/components/ui/slider";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -428,6 +429,29 @@ function Snapshot({
             <ImagePlus aria-hidden size={14} />
             Reference
           </Button>
+          {reference === null ? null : (
+            <>
+              <Button
+                aria-pressed={referenceMode === "side"}
+                onClick={() => setReferenceMode("side")}
+                size="xs"
+                variant={referenceMode === "side" ? "secondary" : "outline"}
+              >
+                <Columns2 aria-hidden size={13} />
+                Side by side
+              </Button>
+              <Button
+                aria-pressed={referenceMode === "overlay"}
+                onClick={() => setReferenceMode("overlay")}
+                size="xs"
+                variant={referenceMode === "overlay" ? "secondary" : "outline"}
+              >
+                <Layers2 aria-hidden size={13} />
+                Overlay
+              </Button>
+              <Separator className="mx-1 h-4" orientation="vertical" />
+            </>
+          )}
           <DisplaySettings runAction={runAction} state={state} />
           <Button
             aria-pressed={expanded}
@@ -448,24 +472,6 @@ function Snapshot({
           <span className="min-w-0 flex-1 truncate text-[11px] text-neutral-500">
             Visual aid only · {reference.name}
           </span>
-          <Button
-            aria-pressed={referenceMode === "side"}
-            onClick={() => setReferenceMode("side")}
-            size="xs"
-            variant={referenceMode === "side" ? "secondary" : "outline"}
-          >
-            <Columns2 aria-hidden size={13} />
-            Side by side
-          </Button>
-          <Button
-            aria-pressed={referenceMode === "overlay"}
-            onClick={() => setReferenceMode("overlay")}
-            size="xs"
-            variant={referenceMode === "overlay" ? "secondary" : "outline"}
-          >
-            <Layers2 aria-hidden size={13} />
-            Overlay
-          </Button>
           {referenceMode === "overlay" ? (
             <div className="w-44 shrink-0 px-1">
               <Slider
