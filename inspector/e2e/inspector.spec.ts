@@ -211,6 +211,34 @@ test("renders the production tree and capture from the inspector API", async ({ 
   expect(pageErrors).toEqual([]);
 });
 
+test("applies subject-size and UI-scale comparison presets", async ({ page }) => {
+  const actions: unknown[] = [];
+  await mockInspectorApi(page, actions);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings" }).click();
+
+  await page.getByRole("button", { name: "Narrow 360 × 580" }).click();
+  await expect
+    .poll(() => actions.at(-1))
+    .toMatchObject({
+      schemaVersion: 1,
+      action: "resizeSubject",
+      width: 360,
+      height: 580,
+    });
+
+  await page.getByRole("button", { name: "UI scale 1.25×" }).click();
+  await expect
+    .poll(() => actions.at(-1))
+    .toMatchObject({
+      schemaVersion: 1,
+      action: "resizeViewport",
+      width: 1000,
+      height: 750,
+      uiScale: 1.25,
+    });
+});
+
 test("filters the view tree while retaining the selected control", async ({ page }) => {
   const actions: unknown[] = [];
   await mockInspectorApi(page, actions);

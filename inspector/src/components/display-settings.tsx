@@ -14,6 +14,7 @@ import {
 import { Popover, PopoverPopup, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { type InspectorState, recordValue } from "../contracts";
+import { SUBJECT_SIZE_PRESETS, UI_SCALE_PRESETS, viewportAtScale } from "../display-presets";
 import type { RunInspectorAction } from "../model";
 
 function integer(value: number | null): number | undefined {
@@ -99,6 +100,40 @@ export function DisplaySettings({ state, runAction }: DisplaySettingsProps) {
   const canResizeSubject =
     integer(subjectWidth) !== undefined && integer(subjectHeight) !== undefined;
 
+  function resizeViewport(width: number, height: number, uiScale: number): void {
+    setViewportWidth(width);
+    setViewportHeight(height);
+    setScale(uiScale);
+    setViewportDirty(true);
+    void runAction({
+      schemaVersion: 1,
+      action: "resizeViewport",
+      width,
+      height,
+      uiScale,
+    }).then((result) => {
+      if (result !== undefined) {
+        setViewportDirty(false);
+      }
+    });
+  }
+
+  function resizeSubject(width: number, height: number): void {
+    setSubjectWidth(width);
+    setSubjectHeight(height);
+    setSubjectDirty(true);
+    void runAction({
+      schemaVersion: 1,
+      action: "resizeSubject",
+      width,
+      height,
+    }).then((result) => {
+      if (result !== undefined) {
+        setSubjectDirty(false);
+      }
+    });
+  }
+
   return (
     <Popover>
       <PopoverTrigger render={<Button size="xs" variant="outline" />}>
@@ -172,6 +207,27 @@ export function DisplaySettings({ state, runAction }: DisplaySettingsProps) {
               </NumberFieldGroup>
             </NumberField>
           </Setting>
+          <fieldset aria-label="UI scale presets" className="grid grid-cols-2 gap-1">
+            {UI_SCALE_PRESETS.map((preset) => (
+              <Button
+                aria-label={`UI scale ${String(preset)}×`}
+                key={preset}
+                onClick={() => {
+                  const width = integer(viewportWidth);
+                  const height = integer(viewportHeight);
+                  const currentScale = finiteNumber(scale);
+                  if (width !== undefined && height !== undefined && currentScale !== undefined) {
+                    const next = viewportAtScale(width, height, currentScale, preset);
+                    resizeViewport(next.width, next.height, next.uiScale);
+                  }
+                }}
+                size="xs"
+                variant={scale === preset ? "secondary" : "outline"}
+              >
+                {preset}×
+              </Button>
+            ))}
+          </fieldset>
           <Button
             className="mt-1 justify-self-end"
             disabled={!canResize}
@@ -180,17 +236,7 @@ export function DisplaySettings({ state, runAction }: DisplaySettingsProps) {
               const nextHeight = integer(viewportHeight);
               const uiScale = finiteNumber(scale);
               if (nextWidth !== undefined && nextHeight !== undefined && uiScale !== undefined) {
-                void runAction({
-                  schemaVersion: 1,
-                  action: "resizeViewport",
-                  width: nextWidth,
-                  height: nextHeight,
-                  uiScale,
-                }).then((result) => {
-                  if (result !== undefined) {
-                    setViewportDirty(false);
-                  }
-                });
+                resizeViewport(nextWidth, nextHeight, uiScale);
               }
             }}
             size="xs"
@@ -202,6 +248,23 @@ export function DisplaySettings({ state, runAction }: DisplaySettingsProps) {
         <Separator className={`${separatorClassName} my-4`} />
         <Fieldset className="grid gap-2">
           <FieldsetLegend className="text-xs">Subject</FieldsetLegend>
+          <fieldset aria-label="Subject size presets" className="grid grid-cols-3 gap-1">
+            {SUBJECT_SIZE_PRESETS.map((preset) => (
+              <Button
+                aria-label={`${preset.label} ${String(preset.width)} × ${String(preset.height)}`}
+                key={preset.id}
+                onClick={() => resizeSubject(preset.width, preset.height)}
+                size="xs"
+                variant={
+                  subjectWidth === preset.width && subjectHeight === preset.height
+                    ? "secondary"
+                    : "outline"
+                }
+              >
+                {preset.label}
+              </Button>
+            ))}
+          </fieldset>
           <Setting id="subjectWidth" label="Width">
             <NumberField
               format={{ useGrouping: false }}
@@ -249,16 +312,7 @@ export function DisplaySettings({ state, runAction }: DisplaySettingsProps) {
               const nextWidth = integer(subjectWidth);
               const nextHeight = integer(subjectHeight);
               if (nextWidth !== undefined && nextHeight !== undefined) {
-                void runAction({
-                  schemaVersion: 1,
-                  action: "resizeSubject",
-                  width: nextWidth,
-                  height: nextHeight,
-                }).then((result) => {
-                  if (result !== undefined) {
-                    setSubjectDirty(false);
-                  }
-                });
+                resizeSubject(nextWidth, nextHeight);
               }
             }}
             size="xs"
