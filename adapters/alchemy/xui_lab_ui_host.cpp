@@ -61,6 +61,7 @@
 #include <cctype>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -213,7 +214,36 @@ public:
     }
 
     LLPointer<LLUIImage> getUIImageByID(const LLUUID& id, S32) override
-    { throw xui_lab::Error("texture_id", "network texture UUID is unavailable in xui-lab: " + id.asString()); }
+    {
+        const std::string name = id.asString();
+        if (const auto found = mImages.find(name); found != mImages.end())
+            return found->second;
+
+        constexpr S32         size   = 128;
+        LLPointer<LLImageRaw> raw    = new LLImageRaw(size, size, 4);
+        U8*                   pixels = raw->getData();
+        for (S32 y = 0; y < size; ++y)
+        {
+            for (S32 x = 0; x < size; ++x)
+            {
+                const S32  offset = (y * size + x) * 4;
+                const bool stripe = ((x + y) / 16) % 2 == 0;
+                const bool mark   = std::abs(x - size / 2) + std::abs(y - size / 2) < size / 4;
+                pixels[offset] =
+                    mark ? static_cast<U8>(210 + id.mData[0] % 32) : static_cast<U8>(24 + id.mData[0] % 64 + (stripe ? 18 : 0));
+                pixels[offset + 1] = mark ? static_cast<U8>(150 + id.mData[5] % 48) : static_cast<U8>(48 + id.mData[5] % 80 + y / 4);
+                pixels[offset + 2] = mark ? static_cast<U8>(48 + id.mData[10] % 48) : static_cast<U8>(112 + id.mData[15] % 64 + x / 4);
+                pixels[offset + 3] = 255;
+            }
+        }
+
+        LLPointer<LLGLTexture> texture = new LLGLTexture(raw, false);
+        texture->setBoostLevel(LLGLTexture::BOOST_THUMBNAIL);
+        texture->setNoDelete();
+        LLPointer<LLUIImage> image = new LLUIImage(name, texture);
+        mImages.emplace(name, image);
+        return image;
+    }
 
     void installWhiteTexture()
     {

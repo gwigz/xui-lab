@@ -4,6 +4,7 @@
 
 #include "xui_lab_error.h"
 
+#include "llappearancemgr.h"
 #include "llagentdata.h"
 #include "llavatarname.h"
 #include "llavatarnamecache.h"
@@ -355,6 +356,7 @@ InventoryFixture::InventoryFixture(InventoryFixtureData fixture) : mId(std::move
             }
         }
         gInventory.buildParentChildMap();
+        LLAppearanceMgr::instance().initCOFID();
         if (!gInventory.isInventoryUsable() || !gInventory.getCategory(root_id) || gInventory.getItemCount() == 0)
         {
             throw Error("inventory_model",

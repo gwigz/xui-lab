@@ -13,6 +13,7 @@ ASSETS = "20000000-0000-4000-8000-000000000005"
 NESTED = "20000000-0000-4000-8000-000000000006"
 ARCHIVE = "20000000-0000-4000-8000-000000000007"
 FAVORITE_LANDMARK = "30000000-0000-4000-8000-000000000002"
+THUMBNAIL_TEXTURE = "30000000-0000-4000-8000-000000000005"
 WORN_JACKET = "30000000-0000-4000-8000-000000000003"
 FIRST_ARCHIVE_ITEM = "30000000-0000-4000-8000-000000000012"
 LAST_ARCHIVE_ITEM = "30000000-0000-4000-8000-000000000043"
@@ -30,6 +31,12 @@ INSPECTOR = (
     "/Floater View/floater_al_inventory_explorer/inventory_explorer_panel/"
     "inventory_explorer_layout_stack/inspector_layout_panel/inventory_inspector"
 )
+RAIL = (
+    "/Floater View/floater_al_inventory_explorer/inventory_explorer_panel/"
+    "inventory_explorer_layout_stack/collections_rail_layout_panel"
+)
+ALL_COUNT = f"{RAIL}/all_collection_count"
+FAVORITES_COUNT = f"{RAIL}/favorites_collection_count"
 
 
 def _nodes(tree: Any) -> list[dict[str, Any]]:
@@ -86,6 +93,8 @@ def _up(window: Window) -> None:
 
 def run(window: Window) -> None:
     window.wait_for_stable()
+    window.get_by_path(ALL_COUNT).expect_value("45")
+    window.get_by_path(FAVORITES_COUNT).expect_value("1")
     _open(window, LAB_FIXTURES)
     window.get_by_path(LIST_VIEW).click().expect_handled()
     window.wait_for_stable()
@@ -95,6 +104,38 @@ def run(window: Window) -> None:
     window.get_by_model_id(FAVORITE_LANDMARK).click().expect_handled()
     if _inspector_value(window, "item_state") != "Favorite":
         raise AssertionFailure("favorite fixture item did not reach the inspector")
+
+    window.get_by_path(GRID_VIEW).click().expect_handled()
+    window.wait_for_stable()
+    thumbnail = _visible_model_node(window, THUMBNAIL_TEXTURE)
+    if thumbnail is None:
+        raise AssertionFailure("thumbnail fixture item is missing from grid view")
+    thumbnail_labels = [
+        node
+        for node in _nodes(thumbnail)
+        if isinstance(node.get("path"), str)
+        and node["path"].endswith("/item_name")
+        and node.get("visible_chain") is True
+        and node.get("value") == "Cobalt Fabric Swatch"
+    ]
+    if len(thumbnail_labels) != 1:
+        raise AssertionFailure("ordinary fixture item inherited worn presentation")
+    thumbnail_controls = [
+        node
+        for node in _nodes(thumbnail)
+        if isinstance(node.get("path"), str)
+        and node["path"].endswith("/preview_thumbnail")
+        and node.get("visible_chain") is True
+        and node.get("thumbnail_state") == "image"
+    ]
+    if len(thumbnail_controls) != 1:
+        raise AssertionFailure(
+            "fixture thumbnail did not load through the image provider"
+        )
+    window.capture("inventory-real-thumbnail")
+
+    window.get_by_path(LIST_VIEW).click().expect_handled()
+    window.wait_for_stable()
 
     _up(window)
     _open(window, CLOTHING)
@@ -134,6 +175,7 @@ def run(window: Window) -> None:
         if isinstance(node.get("path"), str)
         and node["path"].endswith("/preview_thumbnail")
         and node.get("visible_chain") is True
+        and node.get("thumbnail_state") == "fallback"
     ]
     if len(fallback) != 1:
         raise AssertionFailure("item without a thumbnail did not show fallback artwork")
@@ -165,6 +207,7 @@ SCENARIO = Scenario(
             Capability("inventory_model"),
             Capability("agent_identity"),
             Capability("menus"),
+            Capability("texture_fetch"),
         }
     ),
     fixture=Path("fixtures/inventory-explorer.json"),

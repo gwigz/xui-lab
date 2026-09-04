@@ -120,15 +120,16 @@ branches without changing the submodule commit.
   SDL OpenGL window in scenario mode. Both modes use the same renderer.
 - The runtime loads the production UI shader set. It also loads the selected
   fork's fonts, named colors, XUI, and skin textures from the chosen source.
-- The initial texture provider reads local skin assets synchronously. A scenario
-  does not start the viewer texture-fetch service.
+- The texture provider reads local skin assets synchronously. UUID-backed test
+  thumbnails resolve to deterministic local images through the same LLUI image
+  provider boundary. A scenario does not start the viewer texture-fetch service.
 - The runtime constructs the normal root view, floater view, menu holder, focus
   manager integration, tooltip host, and popup routing required by a subject.
   It does not construct the world view or scene-rendering pipeline.
 - A subject declares its required capabilities. Initial capabilities include
-  inventory model state, agent identity, avatar state, cached avatar names, and
-  external-effect recording. The adapter reports missing capabilities before it
-  opens the subject.
+  inventory model state, agent identity, avatar state, cached avatar names,
+  deterministic texture fetches, and external-effect recording. The adapter
+  reports missing capabilities before it opens the subject.
 - Fixtures populate production models with deterministic identifiers and data.
   Fixtures do not implement viewer models, filters, bridge rules, permissions,
   or actions.

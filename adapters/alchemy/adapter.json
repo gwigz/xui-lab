@@ -9,7 +9,8 @@
     "external_effects",
     "inventory_model",
     "agent_identity",
-    "menus"
+    "menus",
+    "texture_fetch"
   ],
   "subjects": {
     "test_widgets": {

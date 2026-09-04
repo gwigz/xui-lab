@@ -191,6 +191,7 @@ private:
             capabilities.append("inventory_model");
             capabilities.append("agent_identity");
             capabilities.append("menus");
+            capabilities.append("texture_fetch");
         }
         return capabilities;
     }

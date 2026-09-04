@@ -29,6 +29,7 @@ The runtime side of the adapter must:
 - Initialize the real LLUI, LLXUI, rendering, skin, and floater systems
 - Declare the viewer capabilities available to a scenario
 - Populate real viewer models from deterministic fixtures
+- Resolve fixture thumbnail UUIDs through the injected local image provider
 - Intercept unavailable external effects at their system boundaries
 - Report a clear error when a subject needs an unavailable capability
 

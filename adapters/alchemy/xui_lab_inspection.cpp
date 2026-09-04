@@ -18,6 +18,7 @@
 #include "llresizehandle.h"
 #include "llscrollbar.h"
 #include "lltextbox.h"
+#include "llthumbnailctrl.h"
 #include "llui.h"
 #include "lluictrl.h"
 #include "llview.h"
@@ -206,6 +207,8 @@ LLSD buildTree(LLView* view, const ControlIds& control_ids)
         addFolderState(node, folder_item);
     if (auto* gallery_item = dynamic_cast<LLInventoryGalleryItem*>(view))
         addGalleryState(node, gallery_item);
+    if (auto* thumbnail = dynamic_cast<LLThumbnailCtrl*>(view))
+        node["thumbnail_state"] = thumbnail->hasImage() ? "image" : thumbnail->hasFallbackImage() ? "fallback" : "empty";
     LLSD children  = LLSD::emptyArray();
     S32  hit_order = 0;
     if (auto* folder = dynamic_cast<LLFolderViewFolder*>(view))

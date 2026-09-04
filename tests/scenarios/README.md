@@ -22,10 +22,10 @@ exists. To accept an intentional visual change on the current platform, run:
 ```
 
 `inventory_visual_fixture.py` traverses the generated visual dataset. It proves
-favorite and worn presentation, valid long-name handling, fallback artwork,
-nested navigation, and the top and bottom scroll boundaries. Regenerate the
-fixture with `./scripts/generate-inventory-fixture`. The schema audit fails if
-the checked-in copy drifts from the generator.
+favorite and worn presentation, valid long-name handling, deterministic and
+fallback thumbnails, nested navigation, and the top and bottom scroll
+boundaries. Regenerate the fixture with `./scripts/generate-inventory-fixture`.
+The schema audit fails if the checked-in copy drifts from the generator.
 
 A module whose name starts with `_` stays out of scenario discovery and out of
 a bare `xui-lab run`. Pass the file to run it anyway.
