@@ -9,6 +9,7 @@ from xui_lab.errors import AssertionFailure
 from xui_lab.image_comparison import compare_png
 
 LAB_FIXTURES = "20000000-0000-4000-8000-000000000002"
+VISUAL_SAMPLES = "20000000-0000-4000-8000-000000000003"
 KNOWN_NOTECARD = "30000000-0000-4000-8000-000000000001"
 PANEL = (
     "/Floater View/floater_al_inventory_explorer/inventory_explorer_panel/"
@@ -21,6 +22,7 @@ BACK = f"{PANEL}/toolbar_layout_panel/back_button"
 FORWARD = f"{PANEL}/toolbar_layout_panel/forward_button"
 UP = f"{PANEL}/toolbar_layout_panel/up_button"
 SEARCH = f"{PANEL}/toolbar_layout_panel/inventory_explorer_search_editor"
+CURRENT_FOLDER_COUNT = f"{PANEL}/toolbar_layout_panel/current_folder_count"
 STATUS = f"{PANEL}/status_layout_panel/status_text"
 HOLDING_LAYOUT = f"{PANEL}/holding_tray_layout_panel"
 HOLDING_TRAY = f"{HOLDING_LAYOUT}/inventory_holding_tray"
@@ -63,6 +65,25 @@ def _model_visible(window: Window, model_id: str) -> bool:
         node.get("model_id") == model_id and node.get("visible_chain") is True
         for node in _nodes(window.query_tree())
     )
+
+
+def _model_value(window: Window, model_id: str, suffix: str) -> Any:
+    model_nodes = [
+        node for node in _nodes(window.query_tree()) if node.get("model_id") == model_id
+    ]
+    values = [
+        node.get("value")
+        for model_node in model_nodes
+        for node in _nodes(model_node)
+        if isinstance(node.get("path"), str)
+        and node["path"].endswith(f"/{suffix}")
+        and node.get("visible_chain") is True
+    ]
+    if len(values) != 1:
+        raise AssertionFailure(
+            f"model {model_id} control {suffix!r} matched values {values}"
+        )
+    return values[0]
 
 
 def _path_visible(window: Window, path: str) -> bool:
@@ -114,12 +135,20 @@ def run(window: Window) -> None:
             )
 
     window.get_by_path(LIST_VIEW).click().expect_handled()
+    window.get_by_path(CURRENT_FOLDER_COUNT).expect_value("2 items")
     window.get_by_path(STATUS).expect_value("My Inventory > Lab Fixtures")
     window.get_by_path(UP).click().expect_handled()
     window.get_by_path(STATUS).expect_value("My Inventory")
     back = window.get_by_path(BACK)
     back.expect_enabled()
     back.click().expect_handled()
+
+    window.get_by_path(GRID_VIEW).click().expect_handled()
+    window.wait_for_stable()
+    if _model_value(window, VISUAL_SAMPLES, "folder_count") != "3":
+        raise AssertionFailure("grid folder badge has the wrong item count")
+    window.get_by_path(LIST_VIEW).click().expect_handled()
+    window.wait_for_stable()
     window.get_by_path(STATUS).expect_value("My Inventory > Lab Fixtures")
     forward = window.get_by_path(FORWARD)
     forward.expect_enabled()

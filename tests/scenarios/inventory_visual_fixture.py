@@ -173,12 +173,11 @@ def run(window: Window) -> None:
         node
         for node in _nodes(first_grid_item)
         if isinstance(node.get("path"), str)
-        and node["path"].endswith("/preview_thumbnail")
+        and node["path"].endswith("/fallback_type_icon")
         and node.get("visible_chain") is True
-        and node.get("thumbnail_state") == "fallback"
     ]
     if len(fallback) != 1:
-        raise AssertionFailure("item without a thumbnail did not show fallback artwork")
+        raise AssertionFailure("item without a thumbnail did not show its type icon")
 
     window.get_by_path(LIST_VIEW).click().expect_handled()
     window.wait_for_stable()

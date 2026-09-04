@@ -14,6 +14,10 @@ INSPECTOR = (
 )
 DETAILS_SCROLL = f"{INSPECTOR}/details_scroll"
 DETAILS_PANEL = f"{DETAILS_SCROLL}/details_panel"
+DETAILS_TITLE = f"{DETAILS_PANEL}/details_title"
+PREVIEW = f"{DETAILS_PANEL}/preview_background"
+ITEM_NAME = f"{DETAILS_PANEL}/item_name"
+TYPE_BADGE = f"{DETAILS_PANEL}/item_type_badge"
 PROPERTIES_HINT = f"{DETAILS_PANEL}/properties_hint"
 VERTICAL_SCROLLBAR = f"{DETAILS_SCROLL}/scrollable vertical"
 HORIZONTAL_SCROLLBAR = f"{DETAILS_SCROLL}/scrollable horizontal"
@@ -69,6 +73,22 @@ def _assert_details_width(tree: Any) -> None:
         raise AssertionFailure("details panel triggered a horizontal scrollbar")
 
 
+def _assert_details_hierarchy(tree: Any) -> None:
+    preview = _rect(_node(tree, PREVIEW), "screen_rect")
+    item_name = _rect(_node(tree, ITEM_NAME), "screen_rect")
+    type_badge = _rect(_node(tree, TYPE_BADGE), "screen_rect")
+    if preview["right"] - preview["left"] < 150:
+        raise AssertionFailure(f"inspector preview is too small: {preview}")
+    if item_name["top"] > preview["bottom"]:
+        raise AssertionFailure(
+            f"item name is not below the preview: preview={preview}, name={item_name}"
+        )
+    if type_badge["top"] > item_name["bottom"]:
+        raise AssertionFailure(
+            f"type badge is not below the item name: name={item_name}, badge={type_badge}"
+        )
+
+
 def run(window: Window) -> None:
     window.wait_for_stable()
     folder = window.get_by_model_id(LAB_FIXTURES)
@@ -81,9 +101,11 @@ def run(window: Window) -> None:
     if details_scroll.get("visible_chain") is not True:
         raise AssertionFailure("selected-item details did not become visible")
     _assert_details_width(tree)
+    _assert_details_hierarchy(tree)
 
-    if any(node.get("path") == PROPERTIES_HINT for node in _nodes(tree)):
-        raise AssertionFailure("obsolete Properties hint remains in the inspector")
+    obsolete = (PROPERTIES_HINT, DETAILS_TITLE)
+    if any(node.get("path") in obsolete for node in _nodes(tree)):
+        raise AssertionFailure("obsolete inspector copy remains")
 
     window.expect_no_layout_diagnostics(path_prefix=INSPECTOR)
     window.capture("inventory-inspector-details")
@@ -95,6 +117,12 @@ def run(window: Window) -> None:
 
     window.resize_subject(1024, 700)
     window.wait_for_stable()
+    window.expect_no_layout_diagnostics(path_prefix=INSPECTOR)
+
+    window.resize_subject(760, 700)
+    window.wait_for_stable()
+    _assert_details_width(window.query_tree())
+    _assert_details_hierarchy(window.query_tree())
     window.expect_no_layout_diagnostics(path_prefix=INSPECTOR)
 
 
