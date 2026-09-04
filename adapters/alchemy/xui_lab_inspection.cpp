@@ -8,6 +8,7 @@
 #include "llfolderviewitem.h"
 #include "llfolderviewmodelinventory.h"
 #include "llinventorymodel.h"
+#include "llinventorygallery.h"
 #include "llinventorypanel.h"
 #include "lldraghandle.h"
 #include "lllayoutstack.h"
@@ -52,6 +53,29 @@ void addFolderState(LLSD& node, LLFolderViewItem* item)
     {
         node["model_id"] = model_item->getUUID();
     }
+}
+
+void addGalleryState(LLSD& node, LLInventoryGalleryItem* item)
+{
+    node["label"]    = item->getItemName();
+    node["selected"] = item->isSelected();
+    node["open"]     = false;
+    node["model_id"] = item->getUUID();
+}
+
+LLInventoryGalleryItem* findGalleryItem(LLView* view, const LLUUID& id)
+{
+    if (auto* item = dynamic_cast<LLInventoryGalleryItem*>(view); item && item->getUUID() == id)
+        return item;
+    for (LLView* child : *view->getChildList())
+    {
+        if (child)
+        {
+            if (LLInventoryGalleryItem* item = findGalleryItem(child, id))
+                return item;
+        }
+    }
+    return nullptr;
 }
 
 using ControlIds = std::unordered_map<LLView*, std::string>;
@@ -171,6 +195,8 @@ LLSD buildTree(LLView* view, const ControlIds& control_ids)
         node["label"] = menu_item->getLabel();
     if (auto* folder_item = dynamic_cast<LLFolderViewItem*>(view))
         addFolderState(node, folder_item);
+    if (auto* gallery_item = dynamic_cast<LLInventoryGalleryItem*>(view))
+        addGalleryState(node, gallery_item);
     LLSD children  = LLSD::emptyArray();
     S32  hit_order = 0;
     if (auto* folder = dynamic_cast<LLFolderViewFolder*>(view))
@@ -539,6 +565,17 @@ LLView* Inspection::resolveModelId(const LLUUID& id) const
         if (!rejected.empty())
             rejected += "; ";
         rejected += std::string(panel_name) + " " + reason;
+    }
+    LLInventoryGallery*     gallery      = mRoot.findChild<LLInventoryGallery>("all_items_grid");
+    LLInventoryGalleryItem* gallery_item = gallery ? findGalleryItem(gallery, id) : nullptr;
+    if (gallery_item)
+    {
+        if (gallery_item->isInVisibleChain() && clippedScreenRect(*gallery_item).getWidth() > 0 &&
+            clippedScreenRect(*gallery_item).getHeight() > 0)
+            return gallery_item;
+        if (!rejected.empty())
+            rejected += "; ";
+        rejected += "all_items_grid not in the visible clipping area";
     }
     if (!rejected.empty())
         throw Error("model_id", "inventory view item is not usable for input: " + id.asString() + " (" + rejected + ")");

@@ -875,6 +875,7 @@ public:
             "mouseCapture", describeView(dynamic_cast<LLView*>(gFocusMgr.getMouseCapture())))(
             "visibleMenu", describeView(gMenuHolder ? gMenuHolder->getVisibleMenu() : nullptr))(
             "subject", LLSDMap("id", std::string(subjectName(current_subject)))("view", describeView(mFloater)))(
+            "window", LLSDMap("interactive", mInteractive)("visible", mWindow->get()->getVisible()))(
             "viewport", LLSDMap("pixelWidth", pixel_size.mX)("pixelHeight", pixel_size.mY)("windowMeasured", measured_window)(
                             "windowWidth", screen_size.mX)("windowHeight", screen_size.mY)("screenMeasured", measured_screen)(
                             "lluiWidth", llui_rect.getWidth())("lluiHeight", llui_rect.getHeight())("uiScale", mUIScale)(
@@ -972,7 +973,7 @@ public:
             overlay_metadata["framebufferRect"] = rectToLLSD(*highlighted_rect);
         LLSD graphics;
         gGLManager.asLLSD(graphics);
-        LLSD metadata = LLSDMap("fork", std::string(kFork))("forkCommit", std::string(kForkCommit))(
+        LLSD metadata = LLSDMap("schemaVersion", 1)("fork", std::string(kFork))("forkCommit", std::string(kForkCommit))(
             "subject", std::string(subjectName(current_subject)))("fixture", std::string(fixture_id))(
             "viewport", LLSDMap("width", mWidth)("height", mHeight)("uiScale", mUIScale)("systemUIScale", mSystemUIScale)(
                             "effectiveUIScale", displayScale())("windowWidth", screen_size.mX)("windowHeight", screen_size.mY)(

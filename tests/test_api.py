@@ -167,7 +167,33 @@ def fake_runtime(directory: Path, command_log: Path) -> Path:
                 elif op == "diagnostics":
                     result = {{"effects": [{{"kind": "url", "value": "https://example.test"}}]}}
                 elif op == "capture":
-                    result = {{"path": str(Path(command.get("name", "frame")).with_suffix(".png"))}}
+                    result = {{
+                        "path": str(Path(command.get("name", "frame")).with_suffix(".png")),
+                        "highlightedPath": command.get("highlight", {{}}).get("path", ""),
+                        "metadata": {{
+                            "schemaVersion": 1,
+                            "fork": "alchemy",
+                            "forkCommit": "0" * 40,
+                            "subject": subject,
+                            "fixture": "",
+                            "viewport": {{
+                                "width": 640,
+                                "height": 480,
+                                "uiScale": 1.0,
+                                "systemUIScale": 1.0,
+                                "effectiveUIScale": 1.0,
+                                "windowWidth": 640,
+                                "windowHeight": 480,
+                                "screenMeasured": True,
+                            }},
+                            "overlay": {{
+                                "included": command["includeOverlay"],
+                                "highlightedPath": command.get("highlight", {{}}).get("path", ""),
+                                "interactiveState": {{"visible": False, "path": ""}},
+                            }},
+                            "graphics": {{"gl_renderer": "fake"}},
+                        }},
+                    }}
                 elif op == "shutdown":
                     result = {{"shutdown": True}}
                 else:

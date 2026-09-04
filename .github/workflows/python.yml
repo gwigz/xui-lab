@@ -17,22 +17,25 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.10"
-          cache: pip
-      - name: Install developer tools
-        run: python -m pip install --requirement requirements-dev.txt
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.12.9"
+      - name: Install dependencies
+        run: uv sync --locked
       - name: Lint Python
-        run: ruff check .
+        run: uv run --locked ruff check .
       - name: Check Python formatting
-        run: ruff format --check .
+        run: uv run --locked ruff format --check .
       - name: Check Python types
-        run: mypy
+        run: uv run --locked mypy
       - name: Check C++ formatting
-        run: ./xui-lab cpp format --check
+        run: uv run --locked ./xui-lab cpp format --check
       - name: Validate JSON schemas and instances
-        run: ./scripts/check-schemas
+        run: uv run --locked ./scripts/check-schemas
       - name: Check repository
-        run: ./xui-lab check
+        run: uv run --locked ./xui-lab check
       - name: Run Python tests with branch coverage
-        run: coverage run -m pytest
+        run: uv run --locked coverage run -m pytest
       - name: Enforce the coverage floor
-        run: coverage report
+        run: uv run --locked coverage report

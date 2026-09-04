@@ -16,6 +16,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from xui_lab.api import Lab, default_artifact_root
+from xui_lab.contracts import CaptureMetadataContract
 from xui_lab.domain import Capability, ForkId, Viewport
 from xui_lab.interactive import (
     InteractiveConfig,
@@ -200,6 +201,10 @@ def main() -> int:
         initial = session.window.diagnostics()
         process_id = session.window.runtime.pid
         require(initial["processId"] == process_id, "runtime PID diagnostic mismatch")
+        require(
+            initial["window"] == {"interactive": True, "visible": True},
+            "interactive runtime did not create a visible production window",
+        )
         initial_viewport = initial["viewport"]
         require(
             initial_viewport["windowWidth"] == 1200
@@ -356,6 +361,32 @@ def main() -> int:
             == scale_rectangle(control.info.get("screen_rect"), effective_scale),
             "capture highlight did not convert its screen rectangle to framebuffer coordinates",
         )
+        headed_sidecar = Path(str(capture["path"]) + ".json")
+        CaptureMetadataContract.model_validate(read_json(headed_sidecar))
+
+        with lab.open(
+            artifact_id="hidden-verification",
+            subject="test_widgets",
+            viewport=Viewport(1200, 800, 1.0),
+            capabilities=capabilities,
+        ) as hidden:
+            hidden_diagnostics = hidden.diagnostics()
+            require(
+                hidden_diagnostics["window"]
+                == {"interactive": False, "visible": False},
+                "scenario runtime did not keep its production window hidden",
+            )
+            hidden_capture = hidden.capture("hidden-render")
+            require(
+                png_dimensions(Path(hidden_capture["path"]))
+                == (
+                    hidden_diagnostics["viewport"]["pixelWidth"],
+                    hidden_diagnostics["viewport"]["pixelHeight"],
+                ),
+                "hidden runtime did not render its framebuffer",
+            )
+            hidden_sidecar = Path(str(hidden_capture["path"]) + ".json")
+            CaptureMetadataContract.model_validate(read_json(hidden_sidecar))
 
         session.window.get_by_path(LINE_EDITOR).type_text("replace me")
         filled = session.window.get_by_path(LINE_EDITOR).fill("headed input").data
@@ -414,6 +445,8 @@ def main() -> int:
                 "capture": capture,
                 "swatchPixel": swatch_pixel,
                 "highlightedCapture": highlighted_capture,
+                "hiddenCapture": hidden_capture,
+                "hiddenWindow": hidden_diagnostics["window"],
                 "reload": reload_result,
                 "replay": replay,
                 "recording": recording,

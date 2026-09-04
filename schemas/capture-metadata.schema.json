@@ -1,0 +1,484 @@
+{
+  "$defs": {
+    "CaptureOverlayContract": {
+      "additionalProperties": false,
+      "properties": {
+        "framebufferRect": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CaptureRectangleContract"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "highlightedPath": {
+          "title": "Highlightedpath",
+          "type": "string"
+        },
+        "included": {
+          "title": "Included",
+          "type": "boolean"
+        },
+        "interactiveState": {
+          "$ref": "#/$defs/CaptureOverlayStateContract"
+        }
+      },
+      "required": [
+        "included",
+        "highlightedPath",
+        "interactiveState"
+      ],
+      "title": "CaptureOverlayContract",
+      "type": "object"
+    },
+    "CaptureOverlayStateContract": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "visible": {
+          "title": "Visible",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "visible",
+        "path"
+      ],
+      "title": "CaptureOverlayStateContract",
+      "type": "object"
+    },
+    "CaptureRectangleContract": {
+      "additionalProperties": false,
+      "properties": {
+        "bottom": {
+          "title": "Bottom",
+          "type": "integer"
+        },
+        "left": {
+          "title": "Left",
+          "type": "integer"
+        },
+        "right": {
+          "title": "Right",
+          "type": "integer"
+        },
+        "top": {
+          "title": "Top",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "left",
+        "right",
+        "bottom",
+        "top"
+      ],
+      "title": "CaptureRectangleContract",
+      "type": "object"
+    },
+    "CaptureViewportContract": {
+      "additionalProperties": false,
+      "properties": {
+        "effectiveUIScale": {
+          "exclusiveMinimum": 0,
+          "title": "Effectiveuiscale",
+          "type": "number"
+        },
+        "height": {
+          "exclusiveMinimum": 0,
+          "title": "Height",
+          "type": "integer"
+        },
+        "screenMeasured": {
+          "title": "Screenmeasured",
+          "type": "boolean"
+        },
+        "systemUIScale": {
+          "exclusiveMinimum": 0,
+          "title": "Systemuiscale",
+          "type": "number"
+        },
+        "uiScale": {
+          "exclusiveMinimum": 0,
+          "title": "Uiscale",
+          "type": "number"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "title": "Width",
+          "type": "integer"
+        },
+        "windowHeight": {
+          "exclusiveMinimum": 0,
+          "title": "Windowheight",
+          "type": "integer"
+        },
+        "windowWidth": {
+          "exclusiveMinimum": 0,
+          "title": "Windowwidth",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "width",
+        "height",
+        "uiScale",
+        "systemUIScale",
+        "effectiveUIScale",
+        "windowWidth",
+        "windowHeight",
+        "screenMeasured"
+      ],
+      "title": "CaptureViewportContract",
+      "type": "object"
+    },
+    "ControlIdSelectorContract": {
+      "additionalProperties": false,
+      "properties": {
+        "controlId": {
+          "minLength": 1,
+          "title": "Controlid",
+          "type": "string"
+        },
+        "kind": {
+          "const": "controlId",
+          "title": "Kind",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "controlId"
+      ],
+      "title": "ControlIdSelectorContract",
+      "type": "object"
+    },
+    "LabelSelectorContract": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "label",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "label"
+      ],
+      "title": "LabelSelectorContract",
+      "type": "object"
+    },
+    "ModelIdSelectorContract": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "modelId",
+          "title": "Kind",
+          "type": "string"
+        },
+        "modelId": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "title": "Modelid",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "modelId"
+      ],
+      "title": "ModelIdSelectorContract",
+      "type": "object"
+    },
+    "PathSelectorContract": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "path",
+          "title": "Kind",
+          "type": "string"
+        },
+        "path": {
+          "minLength": 1,
+          "pattern": "^/",
+          "title": "Path",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "path"
+      ],
+      "title": "PathSelectorContract",
+      "type": "object"
+    },
+    "PlaceholderSelectorContract": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "placeholder",
+          "title": "Kind",
+          "type": "string"
+        },
+        "placeholder": {
+          "minLength": 1,
+          "title": "Placeholder",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "placeholder"
+      ],
+      "title": "PlaceholderSelectorContract",
+      "type": "object"
+    },
+    "RoleSelectorContract": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "role",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "role": {
+          "minLength": 1,
+          "title": "Role",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "role"
+      ],
+      "title": "RoleSelectorContract",
+      "type": "object"
+    },
+    "TextSelectorContract": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "text",
+          "title": "Kind",
+          "type": "string"
+        },
+        "schemaVersion": {
+          "const": 1,
+          "title": "Schemaversion",
+          "type": "integer"
+        },
+        "text": {
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "kind",
+        "text"
+      ],
+      "title": "TextSelectorContract",
+      "type": "object"
+    }
+  },
+  "$id": "https://xui-lab.local/schemas/capture-metadata.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Action"
+    },
+    "fixture": {
+      "title": "Fixture",
+      "type": "string"
+    },
+    "fork": {
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9_-]*$",
+      "title": "Fork",
+      "type": "string"
+    },
+    "forkCommit": {
+      "minLength": 1,
+      "title": "Forkcommit",
+      "type": "string"
+    },
+    "graphics": {
+      "additionalProperties": true,
+      "minProperties": 1,
+      "title": "Graphics",
+      "type": "object"
+    },
+    "overlay": {
+      "$ref": "#/$defs/CaptureOverlayContract"
+    },
+    "scenarioStep": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Scenariostep"
+    },
+    "schemaVersion": {
+      "const": 1,
+      "title": "Schemaversion",
+      "type": "integer"
+    },
+    "selector": {
+      "anyOf": [
+        {
+          "discriminator": {
+            "mapping": {
+              "controlId": "#/$defs/ControlIdSelectorContract",
+              "label": "#/$defs/LabelSelectorContract",
+              "modelId": "#/$defs/ModelIdSelectorContract",
+              "path": "#/$defs/PathSelectorContract",
+              "placeholder": "#/$defs/PlaceholderSelectorContract",
+              "role": "#/$defs/RoleSelectorContract",
+              "text": "#/$defs/TextSelectorContract"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/PathSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/ModelIdSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/ControlIdSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/RoleSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/LabelSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/PlaceholderSelectorContract"
+            },
+            {
+              "$ref": "#/$defs/TextSelectorContract"
+            }
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Selector"
+    },
+    "sequence": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sequence"
+    },
+    "subject": {
+      "minLength": 1,
+      "title": "Subject",
+      "type": "string"
+    },
+    "viewport": {
+      "$ref": "#/$defs/CaptureViewportContract"
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "fork",
+    "forkCommit",
+    "subject",
+    "fixture",
+    "viewport",
+    "overlay",
+    "graphics"
+  ],
+  "title": "xui-lab capture metadata",
+  "type": "object"
+}

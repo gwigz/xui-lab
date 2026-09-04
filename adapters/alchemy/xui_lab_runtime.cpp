@@ -481,24 +481,51 @@ private:
         const LLSD& target_selector = command["target"];
         LLView*     source          = resolveSelector(source_selector);
         LLView*     target          = resolveSelector(target_selector);
-        if (!source->isInVisibleChain() || !target->isInVisibleChain())
-            throw LabError("input", "drag-and-drop source and target must be visible");
+        if (!source->isInVisibleChain())
+            throw LabError("input", "drag-and-drop source must be visible");
 
         const auto [cargo_type, cargo] = dragCargo(source);
-        const LLRect target_rect       = target->calcScreenRect();
-        const S32    screen_x          = target_rect.getCenterX();
-        const S32    screen_y          = target_rect.getCenterY();
-
+        bool tray_drag_capture         = false;
+        if (!target->isInVisibleChain())
+        {
+            auto* folder_item = dynamic_cast<LLFolderViewItem*>(source);
+            if (!folder_item)
+                throw LabError("input", "drag-and-drop target is hidden and the source cannot start a production inventory drag");
+            LLToolDragAndDrop::instance().setMouseCapture(true);
+            tray_drag_capture = true;
+            mUIHost->renderFrame(true);
+            if (!target->isInVisibleChain())
+            {
+                gFocusMgr.removeMouseCaptureWithoutCallback(&LLToolDragAndDrop::instance());
+                throw LabError("input", "drag-and-drop target did not become visible during the production drag");
+            }
+        }
         EAcceptance acceptance = ACCEPT_NO;
         std::string tooltip;
-        const bool  handled      = dispatchDragAndDrop(screen_x, screen_y, false, cargo_type, cargo, &acceptance, tooltip);
-        const bool  accepted     = handled && acceptance >= ACCEPT_YES_COPY_SINGLE;
+        bool        handled      = false;
+        bool        accepted     = false;
         bool        drop_handled = false;
-        if (accepted)
+        try
         {
-            EAcceptance drop_acceptance = acceptance;
-            drop_handled                = dispatchDragAndDrop(screen_x, screen_y, true, cargo_type, cargo, &drop_acceptance, tooltip);
+            const LLRect target_rect = target->calcScreenRect();
+            const S32    screen_x    = target_rect.getCenterX();
+            const S32    screen_y    = target_rect.getCenterY();
+            handled                  = dispatchDragAndDrop(screen_x, screen_y, false, cargo_type, cargo, &acceptance, tooltip);
+            accepted                 = handled && acceptance >= ACCEPT_YES_COPY_SINGLE;
+            if (accepted)
+            {
+                EAcceptance drop_acceptance = acceptance;
+                drop_handled                = dispatchDragAndDrop(screen_x, screen_y, true, cargo_type, cargo, &drop_acceptance, tooltip);
+            }
         }
+        catch (...)
+        {
+            if (tray_drag_capture)
+                gFocusMgr.removeMouseCaptureWithoutCallback(&LLToolDragAndDrop::instance());
+            throw;
+        }
+        if (tray_drag_capture)
+            gFocusMgr.removeMouseCaptureWithoutCallback(&LLToolDragAndDrop::instance());
         mUIHost->renderFrame(true);
 
         const std::string source_control_id = mInspection->controlId(source);

@@ -19,6 +19,7 @@ from .contracts import (
     RuntimeExchangeEvent,
     Selector,
     error_record,
+    parse_capture_metadata,
     parse_fixture,
 )
 from .contracts import (
@@ -795,6 +796,9 @@ class Window:
         metadata["sequence"] = sequence
         if selector is not None:
             metadata["selector"] = selector.model_dump(mode="json", by_alias=True)
+        metadata = parse_capture_metadata(metadata).model_dump(
+            mode="json", by_alias=True, exclude_none=True
+        )
         sidecar_path = Path(str(resolved) + ".json")
         sidecar_path.parent.mkdir(parents=True, exist_ok=True)
         write_json(sidecar_path, metadata)
@@ -976,10 +980,13 @@ class Locator:
         self.window._require_operation("XUILab", "input")
         self.window._require_input_operation("dragAndDrop")
         self.window.wait_for_stable()
+        target_selector = (
+            target.selector
+            if isinstance(target.selector, (PathSelector, ControlIdSelector))
+            else target._input_selector()
+        )
         result = self.window._request(
-            DragAndDropAction(
-                self._input_selector(), target._input_selector()
-            ).to_command()
+            DragAndDropAction(self._input_selector(), target_selector).to_command()
         )
         self.window.wait_for_stable()
         return ActionResult("dragAndDrop", result)

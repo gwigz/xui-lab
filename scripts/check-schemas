@@ -15,6 +15,9 @@ check-jsonschema --schemafile schemas/result.schema.json examples/results/*.json
 check-jsonschema --schemafile schemas/event.schema.json examples/events/*.json
 check-jsonschema --schemafile schemas/error.schema.json examples/errors/*.json
 check-jsonschema --schemafile schemas/tree-node.schema.json examples/tree-nodes/*.json
+check-jsonschema \
+  --schemafile schemas/capture-metadata.schema.json \
+  examples/capture-metadata/*.json
 check-jsonschema --schemafile schemas/subjects.schema.json examples/subjects/*.json
 check-jsonschema --schemafile schemas/preflight.schema.json examples/preflight/*.json
 check-jsonschema --schemafile schemas/recording.schema.json examples/recordings/*.json

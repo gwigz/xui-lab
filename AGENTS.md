@@ -6,8 +6,7 @@ current machine.
 ## Protect repository state
 
 Before changing code, read `SPEC.md`, `forks.json`, and the selected fork
-adapter. `README.md` gives the current project status, and `TODO.md` tracks
-unfinished work.
+adapter. `README.md` gives the current project status.
 
 Inspect both worktrees before editing:
 
@@ -28,24 +27,24 @@ fails, record the failure and do not introduce another one.
 
 ## Use pinned tools
 
-The project supports Python 3.10 and newer. Install the tools in
-`requirements-dev.txt`. Use the pinned versions, not global or floating Ruff
-and LLVM versions.
+The project supports Python 3.10 and newer. Run `uv sync --locked` to install
+the environment from `uv.lock`. Use `uv run` for Python tools. Do not use
+global or floating Ruff and LLVM versions.
 
 Apply safe Ruff fixes and formatting only to the Python files you changed. Run
 the full checks before finishing a Python change:
 
 ```sh
-ruff check .
-ruff format --check .
-mypy
-coverage run -m pytest
-coverage report
-./scripts/check-schemas
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy
+uv run coverage run -m pytest
+uv run coverage report
+uv run ./scripts/check-schemas
 ```
 
 Do not enable Ruff preview rules or unsafe fixes. Upgrade Ruff in a dedicated
-change, with matching versions in `pyproject.toml`, `requirements-dev.txt`, and
+change, with matching versions in `pyproject.toml`, `uv.lock`, and
 `.pre-commit-config.yaml`.
 
 `xui-lab check` includes the Markdown style audit.
@@ -58,14 +57,14 @@ language level as a side effect of lab work.
 Format only adapter-owned C++ files with the pinned LLVM tools:
 
 ```sh
-./xui-lab cpp format
-./xui-lab cpp format --check
+uv run ./xui-lab cpp format
+uv run ./xui-lab cpp format --check
 ```
 
 Run `clang-tidy` with the selected viewer build's `compile_commands.json`:
 
 ```sh
-./xui-lab cpp tidy \
+uv run ./xui-lab cpp tidy \
   --compile-commands /absolute/path/to/viewer-build/compile_commands.json
 ```
 

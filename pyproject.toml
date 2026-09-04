@@ -1,3 +1,33 @@
+[project]
+name = "xui-lab"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi==0.141.1",
+    "jq==1.12.0",
+    "platformdirs==4.5.0",
+    "pydantic==2.13.5",
+    "uvicorn==0.52.4",
+]
+
+[dependency-groups]
+dev = [
+    "check-jsonschema==0.38.0",
+    "clang-format==22.1.8",
+    "clang-tidy==22.1.8",
+    "coverage==7.16.0",
+    "httpx==0.28.1",
+    "hypothesis==6.167.1",
+    "mypy==2.3.1",
+    "pre-commit==4.6.2",
+    "pytest==9.1.1",
+    "ruff==0.16.5",
+]
+
+[tool.uv]
+package = false
+required-version = "==0.12.9"
+
 [tool.mypy]
 files = ["xui_lab", "xui-lab"]
 python_version = "3.10"

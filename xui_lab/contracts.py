@@ -280,6 +280,60 @@ class ViewportContract(ContractModel):
     ui_scale: PositiveFloat = Field(alias="uiScale")
 
 
+class CaptureRectangleContract(ContractModel):
+    left: int = Field(strict=True)
+    right: int = Field(strict=True)
+    bottom: int = Field(strict=True)
+    top: int = Field(strict=True)
+
+
+class CaptureViewportContract(ContractModel):
+    width: PositiveInt
+    height: PositiveInt
+    ui_scale: PositiveFloat = Field(alias="uiScale")
+    system_ui_scale: PositiveFloat = Field(alias="systemUIScale")
+    effective_ui_scale: PositiveFloat = Field(alias="effectiveUIScale")
+    window_width: PositiveInt = Field(alias="windowWidth")
+    window_height: PositiveInt = Field(alias="windowHeight")
+    screen_measured: bool = Field(alias="screenMeasured")
+
+
+class CaptureOverlayStateContract(ContractModel):
+    visible: bool
+    path: str
+
+
+class CaptureOverlayContract(ContractModel):
+    included: bool
+    highlighted_path: str = Field(alias="highlightedPath")
+    interactive_state: CaptureOverlayStateContract = Field(alias="interactiveState")
+    framebuffer_rect: CaptureRectangleContract | None = Field(
+        default=None, alias="framebufferRect"
+    )
+
+
+class CaptureMetadataContract(VersionedContract):
+    fork: Identifier
+    fork_commit: NonEmptyString = Field(alias="forkCommit")
+    subject: NonEmptyString
+    fixture: str
+    viewport: CaptureViewportContract
+    overlay: CaptureOverlayContract
+    graphics: dict[str, Any] = Field(min_length=1)
+    scenario_step: NonEmptyString | None = Field(default=None, alias="scenarioStep")
+    action: NonEmptyString | None = None
+    sequence: NonNegativeInt | None = None
+    selector: Selector | None = None
+
+
+class CaptureResultContract(ContractModel):
+    path: NonEmptyString
+    metadata: CaptureMetadataContract
+    highlighted_path: str = Field(alias="highlightedPath")
+    error: None = None
+    reqid: None = None
+
+
 class RuntimeCommandBase(VersionedContract):
     pass
 
@@ -1528,6 +1582,16 @@ def parse_fixture(value: Any) -> FixtureContract:
         raise ContractViolation("fixture", validation_details(error, value)) from error
 
 
+def parse_capture_metadata(value: Any) -> CaptureMetadataContract:
+    """Validate metadata before writing a capture sidecar."""
+    try:
+        return CaptureMetadataContract.model_validate(value)
+    except ValidationError as error:
+        raise ContractViolation(
+            "capture metadata", validation_details(error, value)
+        ) from error
+
+
 def parse_runtime_response(value: Any, operation: str) -> RuntimeResponse:
     """Validate one JSONL response without leaking Pydantic diagnostics."""
     try:
@@ -1543,6 +1607,7 @@ def parse_runtime_result(value: Any, operation: str) -> dict[str, Any]:
     adapters: dict[str, TypeAdapter[Any]] = {
         "initialize": TypeAdapter(InitializeResultContract),
         "installCapabilities": TypeAdapter(InstallCapabilitiesResultContract),
+        "capture": TypeAdapter(CaptureResultContract),
     }
     adapter = adapters.get(operation)
     if adapter is None:
@@ -1669,6 +1734,11 @@ def schema_documents() -> dict[str, dict[str, Any]]:
             RuntimeCommandAdapter,
             "command.schema.json",
             "xui-lab runtime command",
+        ),
+        "capture-metadata.schema.json": _schema(
+            TypeAdapter(CaptureMetadataContract),
+            "capture-metadata.schema.json",
+            "xui-lab capture metadata",
         ),
         "error.schema.json": _schema(
             TypeAdapter(ErrorRecord), "error.schema.json", "xui-lab error record"

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "fork": "alchemy",
+  "forkCommit": "0000000000000000000000000000000000000000",
+  "subject": "test_widgets",
+  "fixture": "",
+  "viewport": {
+    "width": 1024,
+    "height": 700,
+    "uiScale": 1.0,
+    "systemUIScale": 2.0,
+    "effectiveUIScale": 2.0,
+    "windowWidth": 1024,
+    "windowHeight": 700,
+    "screenMeasured": true
+  },
+  "overlay": {
+    "included": false,
+    "highlightedPath": "",
+    "interactiveState": {
+      "visible": false,
+      "path": ""
+    }
+  },
+  "graphics": {
+    "gl_renderer": "example renderer"
+  },
+  "scenarioStep": "initial",
+  "action": "capture",
+  "sequence": 1
+}

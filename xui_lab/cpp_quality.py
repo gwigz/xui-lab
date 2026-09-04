@@ -60,9 +60,7 @@ def llvm_tool(name: str) -> str:
         None,
     ) or shutil.which(name)
     if not executable:
-        raise QualityError(
-            f"{name} {LLVM_VERSION} is required; install requirements-dev.txt"
-        )
+        raise QualityError(f"{name} {LLVM_VERSION} is required; run 'uv sync --locked'")
     try:
         version = subprocess.run(
             [executable, "--version"],

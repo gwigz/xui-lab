@@ -11,13 +11,6 @@ click it. The clicks go through normal LLUI.
 
 ![The inspector showing the production test floater in T3 Code](.github/assets/xui-lab-in-t3-code.png)
 
-`test_widgets` and `inventory_explorer` are declared.
-
-Agents should follow
-[`.agents/skills/xui-lab-ui/SKILL.md`](.agents/skills/xui-lab-ui/SKILL.md).
-That skill starts a session and drives it with JSON CLI commands. This document
-is for the inspector UI usage.
-
 ## Get a floater on screen
 
 You need an Alchemy checkout and a matching `xui-lab` binary. The binary embeds
@@ -99,10 +92,9 @@ accessible name, then a label, placeholder, visible text, or model ID. Use a
 control ID only when no user-visible selector is unique. `--path` records XUI
 provenance and is the last fallback.
 
-JSON goes to stdout. Diagnostics go to stderr. After the CLI accepts a JSON
-command, a failure also writes an `ErrorRecord`. Read `code`, not the stderr
-line. `session close`, `reload`, and `run` accept `--dry-run`. Clicks and
-other input gestures do not. Field lists and exit statuses live in
+After the CLI accepts a JSON command, a failure also writes an `ErrorRecord`.
+`session close`, `reload`, and `run` accept `--dry-run`. Clicks and other input
+gestures do not. Field lists and exit statuses live in
 [`docs/CLI_CONTRACT.md`](docs/CLI_CONTRACT.md).
 See [`docs/CLI_EXAMPLES.md`](docs/CLI_EXAMPLES.md) for complete discovery,
 inspection, resize, capture, scenario, and cleanup commands.
@@ -166,15 +158,21 @@ unit tests, and Playwright tests do not make the embedded build stale.
 
 ## Check Python changes
 
-Install the pinned tools from `requirements-dev.txt`. Then:
+Install the locked environment:
 
 ```sh
-ruff check .
-ruff format --check .
-mypy
-coverage run -m pytest
-coverage report
-./scripts/check-schemas
+uv sync --locked
+```
+
+Run the checks through that environment:
+
+```sh
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy
+uv run coverage run -m pytest
+uv run coverage report
+uv run ./scripts/check-schemas
 ```
 
 Pytest discovers tests under `tests/` but skips `tests/scenarios/`. Coverage
@@ -195,6 +193,8 @@ Debug arm64 timings from an Apple M2 Ultra on 2 September 2026:
 Dependencies were already installed, and the viewer reused dependency targets
 built for the lab. A persistent build tree reduces an adapter edit to one
 compile and one link.
+
+---
 
 For design and build details, read [`SPEC.md`](SPEC.md),
 [`forks.json`](forks.json), and the
