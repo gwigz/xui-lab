@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 import type { InspectorState, TreeNode } from "../contracts";
 import { filterTreeRoots, type TreeFilter } from "../tree-filter";
@@ -70,49 +70,32 @@ export function Sidebar({ state, selectedControlId, onSelect }: SidebarProps) {
       ?.scrollIntoView({ block: "nearest" });
   }, [roots, selectedControlId]);
 
-  function toggleFilter(key: keyof TreeFilter): void {
-    setFilter((current) => ({ ...current, [key]: !current[key] }));
-  }
-
   return (
     <aside className="flex h-full min-h-0 flex-col bg-card">
       <section className="flex min-h-0 flex-1 flex-col p-2">
-        <div className="px-1.5 pt-1">
-          <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-neutral-600">
-            View tree
-          </div>
-          <fieldset
+        <div className="px-1.5 pb-2 pt-1">
+          <ToggleGroup
             aria-label="Tree visibility"
-            className="flex flex-wrap gap-1 border-0 pb-2 pt-1.5"
+            multiple
+            onValueChange={(values) =>
+              setFilter({
+                showHidden: values.includes("hidden"),
+                showLabRoots: values.includes("roots"),
+                showMenus: values.includes("menus"),
+              })
+            }
+            size="sm"
+            value={[
+              ...(filter.showHidden ? ["hidden"] : []),
+              ...(filter.showMenus ? ["menus"] : []),
+              ...(filter.showLabRoots ? ["roots"] : []),
+            ]}
+            variant="outline"
           >
-            <Button
-              aria-pressed={filter.showHidden}
-              className={cn(filter.showHidden && "bg-accent text-foreground")}
-              onClick={() => toggleFilter("showHidden")}
-              size="xs"
-              variant="ghost"
-            >
-              Hidden
-            </Button>
-            <Button
-              aria-pressed={filter.showMenus}
-              className={cn(filter.showMenus && "bg-accent text-foreground")}
-              onClick={() => toggleFilter("showMenus")}
-              size="xs"
-              variant="ghost"
-            >
-              Menus
-            </Button>
-            <Button
-              aria-pressed={filter.showLabRoots}
-              className={cn(filter.showLabRoots && "bg-accent text-foreground")}
-              onClick={() => toggleFilter("showLabRoots")}
-              size="xs"
-              variant="ghost"
-            >
-              Lab roots
-            </Button>
-          </fieldset>
+            <ToggleGroupItem value="hidden">Hidden</ToggleGroupItem>
+            <ToggleGroupItem value="menus">Menus</ToggleGroupItem>
+            <ToggleGroupItem value="roots">Roots</ToggleGroupItem>
+          </ToggleGroup>
         </div>
         <div className="min-h-0 flex-1 overflow-auto overscroll-contain" ref={treeContainer}>
           {state === null ? (

@@ -10,6 +10,7 @@ import {
   type WheelEvent,
 } from "react";
 import { Button } from "@/components/ui/button";
+import { Slider, SliderPrimitive, SliderValue } from "@/components/ui/slider";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -72,7 +73,7 @@ function Snapshot({
   const [inspecting, setInspecting] = useState(false);
   const [reference, setReference] = useState<Readonly<{ name: string; url: string }> | null>(null);
   const [referenceMode, setReferenceMode] = useState<"side" | "overlay">("side");
-  const [referenceOpacity, setReferenceOpacity] = useState(0.5);
+  const [referenceOpacity, setReferenceOpacity] = useState(50);
   const [hovered, setHovered] = useState<
     Readonly<{ controlId: string; outline: FrameOutline }> | undefined
   >();
@@ -463,19 +464,23 @@ function Snapshot({
             Overlay
           </Button>
           {referenceMode === "overlay" ? (
-            <label className="flex items-center gap-2 px-1 text-[11px] text-neutral-500">
-              Opacity
-              <input
-                aria-label="Reference opacity"
-                className="w-20 accent-sky-400"
-                max={1}
-                min={0}
-                onChange={(event) => setReferenceOpacity(Number(event.currentTarget.value))}
-                step={0.05}
-                type="range"
-                value={referenceOpacity}
-              />
-            </label>
+            <Slider
+              className="w-28 px-1"
+              max={100}
+              min={0}
+              onValueChange={(value) => {
+                if (typeof value === "number") {
+                  setReferenceOpacity(value);
+                }
+              }}
+              step={5}
+              value={referenceOpacity}
+            >
+              <div className="mb-1 flex items-center justify-between gap-2 text-[11px] text-neutral-500">
+                <SliderPrimitive.Label>Opacity</SliderPrimitive.Label>
+                <SliderValue className="text-[11px] tabular-nums" />
+              </div>
+            </Slider>
           ) : null}
           <Button
             aria-label="Remove reference"
@@ -554,7 +559,7 @@ function Snapshot({
               className="pointer-events-none absolute inset-0 z-[1] m-auto max-h-full max-w-full select-none object-contain"
               draggable={false}
               src={reference.url}
-              style={{ opacity: referenceOpacity }}
+              style={{ opacity: referenceOpacity / 100 }}
             />
           ) : null}
         </div>

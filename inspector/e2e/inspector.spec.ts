@@ -265,7 +265,11 @@ test("compares a capture with a local reference image without affecting the sess
   );
 
   await page.getByRole("button", { name: "Overlay" }).click();
-  await expect(page.getByRole("slider", { name: "Reference opacity" })).toBeVisible();
+  const opacity = page.getByRole("slider", { name: "Opacity" });
+  await expect(opacity).toBeVisible();
+  await expect(page.locator('[data-slot="slider-control"]')).toBeVisible();
+  await expect(page.locator('[data-slot="slider-value"]')).toContainText("50");
+  await expect(page.locator('[data-slot="slider-control"] input[type="range"]')).toHaveCount(1);
   expect(actions).toEqual([]);
 });
 
@@ -277,7 +281,10 @@ test("filters the view tree while retaining the selected control", async ({ page
   const sidebar = page.getByRole("complementary");
   const hiddenToggle = sidebar.getByRole("button", { name: "Hidden", exact: true });
   const menuToggle = sidebar.getByRole("button", { name: "Menus", exact: true });
-  const rootsToggle = sidebar.getByRole("button", { name: "Lab roots", exact: true });
+  const rootsToggle = sidebar.getByRole("button", { name: "Roots", exact: true });
+
+  await expect(sidebar.getByText("View tree", { exact: true })).toHaveCount(0);
+  await expect(sidebar.locator('[data-slot="toggle-group"]')).toHaveCount(1);
 
   await expect(sidebar.getByRole("button", { name: "Test widgets · LLFloater" })).toBeVisible();
   await expect(sidebar.getByRole("button", { name: "Save · LLButton" })).toBeVisible();
