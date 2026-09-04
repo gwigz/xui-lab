@@ -175,7 +175,7 @@ export function Filmstrip({
       aria-valuemax={captures.length}
       aria-valuemin={1}
       aria-valuenow={selectedIndex + 1}
-      aria-valuetext={selected?.action ?? selected?.name}
+      aria-valuetext={selected?.label}
       className="relative min-w-0 cursor-text select-none border-white/8 border-t bg-black/40 px-1 pt-3 pb-1"
       onDoubleClick={() => onVersion("live")}
       onKeyDown={onKeyDown}
@@ -249,6 +249,14 @@ export function Filmstrip({
           />
         )}
       </div>
+      {selected === undefined ? null : (
+        <div className="flex min-w-0 items-center justify-between gap-3 px-1 pt-1 font-mono text-[10px] text-neutral-400">
+          <span className="truncate" title={selected.label}>
+            {selected.label}
+          </span>
+          <span className="shrink-0 text-neutral-500">{selected.action ?? selected.name}</span>
+        </div>
+      )}
       {previewEntry === undefined || preview === undefined ? null : (
         <div
           className="pointer-events-none absolute z-20 overflow-hidden rounded-md border border-white/15 bg-neutral-950 shadow-[0_8px_24px_rgba(0,0,0,0.55)]"
@@ -267,11 +275,12 @@ export function Filmstrip({
             src={`/api/v1/captures/${String(previewEntry.version)}`}
             width={hoverSize.width}
           />
-          {previewEntry.action === undefined && previewEntry.name.length === 0 ? null : (
-            <div className="truncate px-2 py-1 font-mono text-[11px] text-neutral-300">
+          <div className="px-2 py-1 font-mono text-[11px]">
+            <div className="truncate text-neutral-300">{previewEntry.label}</div>
+            <div className="truncate text-neutral-500">
               {previewEntry.action ?? previewEntry.name}
             </div>
-          )}
+          </div>
         </div>
       )}
     </div>

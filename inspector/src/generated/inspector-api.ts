@@ -252,6 +252,8 @@ export interface components {
       diagnostics: {
         [key: string]: unknown;
       };
+      /** Label */
+      label: string;
       /** Locators */
       locators: {
         [key: string]: unknown;
@@ -285,6 +287,8 @@ export interface components {
     InspectorFilmstripEntry: {
       /** Action */
       action?: string | null;
+      /** Label */
+      label: string;
       /** Name */
       name: string;
       /** Selector */

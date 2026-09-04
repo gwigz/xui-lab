@@ -26,6 +26,7 @@ export type FilmstripEntry = Readonly<{
   action?: string;
   selector?: Selector;
   name: string;
+  label: string;
 }>;
 
 export type CaptureSnapshot = Readonly<{
@@ -34,6 +35,7 @@ export type CaptureSnapshot = Readonly<{
   action?: string;
   selector?: Selector;
   name: string;
+  label: string;
   tree: TreeNode;
   diagnostics: Readonly<Record<string, unknown>>;
   recording: readonly string[];
@@ -343,6 +345,7 @@ function parseFilmstripEntry(value: unknown, context: string): FilmstripEntry {
     version: nonNegativeIntValue(record.version, `${context}.version`),
     sequence: nonNegativeIntValue(record.sequence, `${context}.sequence`),
     name: nonEmptyStringValue(record.name, `${context}.name`),
+    label: nonEmptyStringValue(record.label, `${context}.label`),
     ...(action === undefined ? {} : { action }),
     ...(selectorValue === undefined || selectorValue === null
       ? {}
@@ -358,6 +361,7 @@ export function parseCaptureSnapshot(value: unknown): CaptureSnapshot {
     version: nonNegativeIntValue(record.version, "capture snapshot.version"),
     sequence: nonNegativeIntValue(record.sequence, "capture snapshot.sequence"),
     name: nonEmptyStringValue(record.name, "capture snapshot.name"),
+    label: nonEmptyStringValue(record.label, "capture snapshot.label"),
     tree: parseTreeNode(record.tree, "capture snapshot.tree"),
     diagnostics: objectValue(record.diagnostics, "capture snapshot.diagnostics"),
     recording: stringArray(record.recording, "capture snapshot.recording"),

@@ -102,12 +102,14 @@ const inspectorState = {
       sequence: 1,
       action: "initial",
       name: "interactive-0001-initial",
+      label: "800×600 · 1× · no fixture · Default",
     },
     {
       version: 2,
       sequence: 2,
       action: "click",
       name: "interactive-0002-click",
+      label: "800×600 · 1× · no fixture · Default",
     },
   ],
   stateVersion: 4,
@@ -168,6 +170,7 @@ async function mockInspectorApi(
         sequence: 1,
         action: "initial",
         name: "interactive-0001-initial",
+        label: "800×600 · 1× · no fixture · Default",
         tree: state.tree,
         diagnostics: state.diagnostics,
         recording: state.recording,
@@ -383,6 +386,7 @@ test("scrubs a historical capture without sending a highlight action", async ({ 
   await page.goto("/");
   const timeline = page.getByRole("slider", { name: "Capture timeline" });
   await expect(timeline).toBeVisible();
+  await expect(page.getByText("800×600 · 1× · no fixture · Default")).toBeVisible();
   const box = await timeline.boundingBox();
   expect(box).not.toBeNull();
   if (box === null) {
@@ -407,6 +411,7 @@ test("keeps a large screenshot inside the panel and the capture timeline on scre
     sequence: index + 1,
     action: index === 0 ? "initial" : `clickAt-${String(index + 1)}`,
     name: `interactive-${String(index + 1).padStart(4, "0")}`,
+    label: "800×600 · 1× · no fixture · Default",
   }));
   await mockInspectorApi(page, [], {
     capturePng: largePng,

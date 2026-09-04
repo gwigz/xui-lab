@@ -220,6 +220,7 @@ class InspectorFilmstripEntry(ContractModel):
     action: NonEmptyString | None = None
     selector: Selector | None = None
     name: NonEmptyString
+    label: NonEmptyString
 
 
 class InspectorCaptureSnapshot(ContractModel):
@@ -228,6 +229,7 @@ class InspectorCaptureSnapshot(ContractModel):
     action: NonEmptyString | None = None
     selector: Selector | None = None
     name: NonEmptyString
+    label: NonEmptyString
     tree: dict[str, Any]
     diagnostics: dict[str, Any]
     recording: list[str]

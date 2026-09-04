@@ -87,6 +87,7 @@ class SessionStub:
             "sequence": 1,
             "action": "initial",
             "name": "interactive-0001-initial",
+            "label": "800×600 · 1× · no fixture · Default",
             "tree": self.state_value["tree"],
             "diagnostics": self.state_value["diagnostics"],
             "recording": self.state_value["recording"],
@@ -295,6 +296,7 @@ class InspectorHttpTests(unittest.TestCase):
         payload = found.json()
         self.assertEqual(1, payload["version"])
         self.assertEqual("initial", payload["action"])
+        self.assertEqual("800×600 · 1× · no fixture · Default", payload["label"])
         self.assertEqual("root", payload["tree"]["control_id"])
         self.assertEqual(404, missing.status_code)
 

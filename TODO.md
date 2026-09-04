@@ -58,7 +58,7 @@ Explorer. The changes belong in XUI Lab or its Alchemy adapter.
 - [x] Add named subject-size presets for common narrow, reference, and wide
   layouts.
 - [x] Add UI-scale presets for 1.0 and 1.25.
-- [ ] Label filmstrip entries with subject size, UI scale, fixture, and view
+- [x] Label filmstrip entries with subject size, UI scale, fixture, and view
   state.
 - [ ] Allow the inspector to display a reference image beside a capture or as
   an adjustable overlay.

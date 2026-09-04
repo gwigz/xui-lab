@@ -22,6 +22,61 @@ _ACTIONS_WITHOUT_AUTOMATIC_CAPTURE = frozenset(
 )
 
 
+def _finite_number(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    return number if number == number and abs(number) != float("inf") else None
+
+
+def _format_number(value: float) -> str:
+    return f"{value:g}"
+
+
+def capture_context_label(
+    tree: dict[str, Any], diagnostics: dict[str, Any], fixture: str | None
+) -> str:
+    """Describe the historical display context represented by a capture."""
+    subject = diagnostics.get("subject")
+    view = subject.get("view") if isinstance(subject, dict) else None
+    rect = view.get("screen_rect") if isinstance(view, dict) else None
+    if isinstance(rect, dict):
+        left = _finite_number(rect.get("left"))
+        right = _finite_number(rect.get("right"))
+        bottom = _finite_number(rect.get("bottom"))
+        top = _finite_number(rect.get("top"))
+    else:
+        left = right = bottom = top = None
+    if (
+        left is not None
+        and right is not None
+        and bottom is not None
+        and top is not None
+    ):
+        width = right - left
+        height = top - bottom
+        size = f"{_format_number(width)}×{_format_number(height)}"
+    else:
+        size = "unknown size"
+
+    viewport = diagnostics.get("viewport")
+    scale_value = viewport.get("uiScale") if isinstance(viewport, dict) else None
+    scale = _finite_number(scale_value)
+    scale_label = f"{_format_number(scale)}×" if scale is not None else "unknown scale"
+
+    view_state = "Default"
+    for node in tree_nodes(tree):
+        path = node.get("path")
+        if not isinstance(path, str) or node.get("value") is not True:
+            continue
+        name = path.rsplit("/", 1)[-1]
+        if name.endswith("_view_button"):
+            view_state = name.removesuffix("_view_button").replace("_", " ").title()
+            break
+
+    return f"{size} · {scale_label} · {fixture or 'no fixture'} · {view_state}"
+
+
 def _selector(value: object) -> Selector | None:
     if value is None:
         return None
@@ -366,12 +421,18 @@ class InteractiveSession:
         return result
 
     def _write_capture_snapshot(self, path: Path, entry: dict[str, Any]) -> None:
+        entry["label"] = capture_context_label(
+            {}, {}, getattr(self.window, "fixture", None)
+        )
         query_tree = getattr(self.window, "query_tree", None)
         diagnostics_fn = getattr(self.window, "diagnostics", None)
         if not callable(query_tree) or not callable(diagnostics_fn):
             return
         tree = query_tree()
         diagnostics = diagnostics_fn()
+        entry["label"] = capture_context_label(
+            tree, diagnostics, getattr(self.window, "fixture", None)
+        )
         actions = (
             diagnostics.get("recording", []) if isinstance(diagnostics, dict) else []
         )
@@ -389,6 +450,7 @@ class InteractiveSession:
                 "sequence": entry["sequence"],
                 "action": entry["action"],
                 "name": entry["name"],
+                "label": entry["label"],
                 "selector": entry["selector"],
                 "tree": tree,
                 "diagnostics": diagnostics,

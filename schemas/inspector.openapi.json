@@ -383,6 +383,11 @@
             "title": "Diagnostics",
             "type": "object"
           },
+          "label": {
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
           "locators": {
             "additionalProperties": true,
             "title": "Locators",
@@ -465,6 +470,7 @@
           "version",
           "sequence",
           "name",
+          "label",
           "tree",
           "diagnostics",
           "recording",
@@ -487,6 +493,11 @@
               }
             ],
             "title": "Action"
+          },
+          "label": {
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
           },
           "name": {
             "minLength": 1,
@@ -552,7 +563,8 @@
         "required": [
           "version",
           "sequence",
-          "name"
+          "name",
+          "label"
         ],
         "title": "InspectorFilmstripEntry",
         "type": "object"

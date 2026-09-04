@@ -52,12 +52,14 @@ const validState = {
       sequence: 1,
       action: "initial",
       name: "interactive-0001-initial",
+      label: "800×600 · 1× · no fixture · Default",
     },
     {
       version: 2,
       sequence: 2,
       action: "click",
       name: "interactive-0002-click",
+      label: "800×600 · 1× · no fixture · Default",
     },
   ],
   stateVersion: 4,
@@ -71,6 +73,7 @@ describe("parseInspectorState", () => {
     expect(state.capture).toEqual({ kind: "available", version: 2 });
     expect(state.captures).toHaveLength(2);
     expect(state.captures[1]?.action).toBe("click");
+    expect(state.captures[1]?.label).toBe("800×600 · 1× · no fixture · Default");
     expect(state.stateVersion).toBe(4);
     expect(state.inputOperations).toEqual(["click", "drag", "fill"]);
     expect(state.subject).toBe("test_widgets");

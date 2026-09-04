@@ -24,6 +24,7 @@ from xui_lab.errors import (
 from xui_lab.interactive import (
     InteractiveConfig,
     InteractiveSession,
+    capture_context_label,
     recorded_python,
 )
 from xui_lab.io import parse_manifest, read_json
@@ -35,6 +36,46 @@ CHECKBOX_PATH = "/root/checkbox"
 PRODUCTION_CHECKBOX = "/Floater View/floater_test_widgets/test_checkbox"
 PRODUCTION_CHECKBOX_BUTTON = f"{PRODUCTION_CHECKBOX}/CheckboxCtrl Button"
 RESIZE_HANDLE_PATH = "/root/resize_handle"
+
+
+class CaptureContextLabelTests(unittest.TestCase):
+    def test_labels_the_subject_scale_fixture_and_active_view(self) -> None:
+        tree = {
+            "control_id": "root",
+            "path": "/root",
+            "children": [
+                {
+                    "control_id": "grid-view",
+                    "path": "/root/grid_view_button",
+                    "value": True,
+                    "children": [],
+                }
+            ],
+        }
+        diagnostics = {
+            "subject": {
+                "view": {
+                    "screen_rect": {
+                        "left": 20,
+                        "right": 380,
+                        "bottom": 10,
+                        "top": 590,
+                    }
+                }
+            },
+            "viewport": {"uiScale": 1.25},
+        }
+
+        self.assertEqual(
+            "360×580 · 1.25× · inventory_explorer · Grid",
+            capture_context_label(tree, diagnostics, "inventory_explorer"),
+        )
+
+    def test_labels_unavailable_capture_context_explicitly(self) -> None:
+        self.assertEqual(
+            "unknown size · unknown scale · no fixture · Default",
+            capture_context_label({}, {}, ""),
+        )
 
 
 def fake_runtime(directory: Path, command_log: Path) -> Path:
