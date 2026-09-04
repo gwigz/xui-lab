@@ -12,7 +12,7 @@ from xui_lab.api import Lab, artifact_directory
 from xui_lab.cli import scenario_paths
 from xui_lab.domain import Capability, Viewport
 from xui_lab.errors import InputError, RuntimeFailure
-from xui_lab.io import parse_manifest, read_json
+from xui_lab.io import git_commit, parse_manifest, read_json
 from xui_lab.protocol import RuntimeProcess
 from xui_lab.scenarios import Scenario, discover_scenarios, load_scenario
 
@@ -97,6 +97,9 @@ class LabIsolationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory_text:
             directory = Path(directory_text)
             process_log = directory / "processes.jsonl"
+            manifest = parse_manifest(ROOT, read_json(ROOT / "forks.json"))
+            fork = manifest.forks[manifest.default_fork]
+            fork_commit = git_commit(fork.source.path)
             executable = fake_runtime(
                 directory,
                 f"""
@@ -104,6 +107,14 @@ class LabIsolationTests(unittest.TestCase):
                 import os
                 import sys
                 from pathlib import Path
+
+                if sys.argv[1:] == ["--metadata"]:
+                    print(json.dumps({{
+                        "fork": "alchemy",
+                        "forkCommit": {fork_commit!r},
+                        "protocolVersion": 1,
+                    }}))
+                    raise SystemExit(0)
 
                 with Path({str(process_log)!r}).open("a", encoding="utf-8") as stream:
                     print(json.dumps({{"pid": os.getpid(), "parentPid": os.getppid()}}), file=stream)
@@ -124,8 +135,6 @@ class LabIsolationTests(unittest.TestCase):
                         break
             """,
             )
-            manifest = parse_manifest(ROOT, read_json(ROOT / "forks.json"))
-            fork = manifest.forks[manifest.default_fork]
             lab = Lab(
                 ROOT,
                 fork,

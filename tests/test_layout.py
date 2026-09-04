@@ -51,7 +51,16 @@ class LayoutDiagnosticsTests(unittest.TestCase):
             "9LLFloater",
             screen=rect(0, 100, 0, 100),
             clipping=rect(0, 100, 0, 100),
-            children=[child],
+            children=[
+                child,
+                node(
+                    "rounded",
+                    "/Floater View/floater/rounded",
+                    "13LLLayoutPanel",
+                    screen=rect(0, 101, 0, 100),
+                    clipping=rect(0, 100, 0, 100),
+                ),
+            ],
         )
         tree = node(
             "floater-view",
@@ -82,8 +91,8 @@ class LayoutDiagnosticsTests(unittest.TestCase):
             "label",
             "/Floater View/floater/list/panel/label",
             "9LLTextBox",
-            screen=rect(10, 70, -20, -5),
-            clipping=rect(10, 70, 0, 0),
+            screen=rect(10, 70, -10, 5),
+            clipping=rect(10, 70, 0, 5),
         )
         panel = node(
             "panel",
@@ -135,7 +144,7 @@ class LayoutDiagnosticsTests(unittest.TestCase):
                     "path": offscreen["path"],
                     "textWidth": 60,
                     "textHeight": 15,
-                    "clippingRect": rect(10, 70, 0, 0),
+                    "clippingRect": rect(10, 70, 0, 5),
                 }
             ],
         }

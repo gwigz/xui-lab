@@ -23,6 +23,7 @@ from .contracts import (
     CppFormatCliCommand,
     CppTidyCliCommand,
     DiagnosticsCliCommand,
+    DoubleClickCliCommand,
     DragByCliCommand,
     DragToCliCommand,
     FillCliCommand,
@@ -37,6 +38,7 @@ from .contracts import (
     ReplayCliCommand,
     ResizeSubjectCliCommand,
     ResizeViewportCliCommand,
+    RightClickCliCommand,
     RunCliCommand,
     SchemaCatalogContract,
     SchemaCliCommand,
@@ -432,6 +434,10 @@ def _add_oneshot_commands(commands: Any) -> None:
     _add_session_bound(get_command, selector=True)
     click = commands.add_parser("click", help="Click a control.")
     _add_session_bound(click, selector=True)
+    double_click = commands.add_parser("double-click", help="Double-click a control.")
+    _add_session_bound(double_click, selector=True)
+    right_click = commands.add_parser("right-click", help="Right-click a control.")
+    _add_session_bound(right_click, selector=True)
     fill = commands.add_parser("fill", help="Replace text in a control.")
     _add_session_bound(fill, selector=True)
     fill.add_argument("--value", required=True)
@@ -659,6 +665,8 @@ def dispatch(command: CliCommand) -> int:
             PickCliCommand,
             GetCliCommand,
             ClickCliCommand,
+            DoubleClickCliCommand,
+            RightClickCliCommand,
             FillCliCommand,
             PressCliCommand,
             ScrollCliCommand,

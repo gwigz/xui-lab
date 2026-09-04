@@ -15,7 +15,9 @@ from unittest.mock import patch
 from xui_lab.cli import adapter_config, main, parse_command, select_fork
 from xui_lab.contracts import (
     ClickCliCommand,
+    DoubleClickCliCommand,
     ReloadCliCommand,
+    RightClickCliCommand,
     SessionCloseCliCommand,
     SessionStartCliCommand,
     TreeCliCommand,
@@ -162,6 +164,20 @@ class SessionStoreTests(unittest.TestCase):
             },
             command.selector_contract().model_dump(mode="json", by_alias=True),
         )
+
+    def test_pointer_click_commands_share_selector_syntax(self) -> None:
+        model_id = "00000000-0000-4000-8000-000000000001"
+        double_click = parse_command(
+            ["double-click", "--session", "sess_1", "--model-id", model_id]
+        )
+        right_click = parse_command(
+            ["right-click", "--session", "sess_1", "--path", "/root/item"]
+        )
+
+        self.assertIsInstance(double_click, DoubleClickCliCommand)
+        self.assertEqual(model_id, double_click.model_id)
+        self.assertIsInstance(right_click, RightClickCliCommand)
+        self.assertEqual("/root/item", right_click.path)
 
     def test_session_start_parses_to_a_typed_command(self) -> None:
         command = parse_command(

@@ -98,12 +98,12 @@ def _empty(rectangle: Rect) -> bool:
     )
 
 
-def _outside(rectangle: Rect, clipping: Rect) -> bool:
+def _outside(rectangle: Rect, clipping: Rect, *, tolerance: int = 0) -> bool:
     return (
-        rectangle["left"] < clipping["left"]
-        or rectangle["right"] > clipping["right"]
-        or rectangle["bottom"] < clipping["bottom"]
-        or rectangle["top"] > clipping["top"]
+        rectangle["left"] < clipping["left"] - tolerance
+        or rectangle["right"] > clipping["right"] + tolerance
+        or rectangle["bottom"] < clipping["bottom"] - tolerance
+        or rectangle["top"] > clipping["top"] + tolerance
     )
 
 
@@ -155,7 +155,7 @@ def _outside_parent(nodes: list[_IndexedNode]) -> list[dict[str, Any]]:
             screen is None
             or parent_clipping is None
             or _empty(screen)
-            or _outside(screen, parent_clipping) is False
+            or _outside(screen, parent_clipping, tolerance=1) is False
         ):
             continue
         issues.append(
@@ -217,8 +217,14 @@ def _text_clipping(
         if (
             indexed is not None
             and clipping is not None
-            and _empty(clipping)
             and _inside_scroll_container(indexed)
+            and (
+                _empty(clipping)
+                or (
+                    (screen := _rect(indexed.raw.get("screen_rect"))) is not None
+                    and _outside(screen, clipping)
+                )
+            )
         ):
             continue
         enriched = _enrich_raw_issue(value, indexed)

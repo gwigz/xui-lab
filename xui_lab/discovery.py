@@ -21,7 +21,7 @@ from .contracts import (
 )
 from .domain import Fork
 from .errors import InputError
-from .io import git_commit, read_runtime_metadata
+from .io import git_commit, matching_runtime_commit, read_runtime_metadata
 
 
 def _argument(
@@ -128,7 +128,7 @@ def operations_contract(*, request_id: str | None = None) -> OperationsContract:
 
 
 def selected_runtime_record(
-    fork: Fork, source_commit: str, runtime: Path
+    fork: Fork, source: Path, source_commit: str, runtime: Path
 ) -> SelectedRuntimeContract:
     """Read `--metadata` and compare it to the selected viewer source."""
     metadata = read_runtime_metadata(runtime)
@@ -136,7 +136,8 @@ def selected_runtime_record(
         path=str(runtime),
         fork=metadata.fork,
         commit=metadata.fork_commit,
-        matched=metadata.fork == fork.id and metadata.fork_commit == source_commit,
+        matched=matching_runtime_commit(source, fork.id, source_commit, metadata)
+        is not None,
     )
 
 
@@ -156,7 +157,7 @@ def subjects_contract(
     runtime_record = None
     matched = False
     if runtime is not None:
-        runtime_record = selected_runtime_record(fork, commit, runtime)
+        runtime_record = selected_runtime_record(fork, source, commit, runtime)
         matched = runtime_record.matched
     subjects = tuple(
         SubjectContract.model_validate(
@@ -234,7 +235,9 @@ def preflight_contract(
     )
     commit = git_commit(source)
     runtime_record = (
-        selected_runtime_record(fork, commit, runtime) if runtime is not None else None
+        selected_runtime_record(fork, source, commit, runtime)
+        if runtime is not None
+        else None
     )
     runtime_blocked = runtime_record is not None and not runtime_record.matched
 

@@ -838,6 +838,14 @@ class ClickCliCommand(SelectorCliCommand):
     command: Literal["click"]
 
 
+class DoubleClickCliCommand(SelectorCliCommand):
+    command: Literal["double-click"]
+
+
+class RightClickCliCommand(SelectorCliCommand):
+    command: Literal["right-click"]
+
+
 class FillCliCommand(SelectorCliCommand):
     command: Literal["fill"]
     text_value: str = Field(alias="value")
@@ -938,6 +946,8 @@ CliCommand: TypeAlias = (
     | PickCliCommand
     | GetCliCommand
     | ClickCliCommand
+    | DoubleClickCliCommand
+    | RightClickCliCommand
     | FillCliCommand
     | PressCliCommand
     | ScrollCliCommand

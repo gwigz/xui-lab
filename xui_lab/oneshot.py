@@ -13,6 +13,7 @@ from .contracts import (
     CaptureCliCommand,
     ClickCliCommand,
     DiagnosticsCliCommand,
+    DoubleClickCliCommand,
     DragByCliCommand,
     DragToCliCommand,
     FillCliCommand,
@@ -23,6 +24,7 @@ from .contracts import (
     ResizeSubjectCliCommand,
     ResizeViewportCliCommand,
     ResultRecord,
+    RightClickCliCommand,
     ScrollCliCommand,
     Selector,
     SelectorCliCommand,
@@ -122,6 +124,14 @@ def apply_window_command(window: Window, command: Any) -> dict[str, Any]:
     if isinstance(command, ClickCliCommand):
         locator = window.locator(selector_from_command(command))
         result = locator.click()
+        return _result(command, result.data)
+    if isinstance(command, DoubleClickCliCommand):
+        locator = window.locator(selector_from_command(command))
+        result = locator.double_click()
+        return _result(command, result.data)
+    if isinstance(command, RightClickCliCommand):
+        locator = window.locator(selector_from_command(command))
+        result = locator.right_click()
         return _result(command, result.data)
     if isinstance(command, FillCliCommand):
         locator = window.locator(selector_from_command(command))

@@ -44,8 +44,9 @@ viewer session.
 
 Omit `--runtime` to inspect declarations without probing a binary. When
 `--runtime` is present, a subject is openable only if the binary matches the
-selected source and its default fixture is available. JSON commands do not
-print color, prompts, or progress animation. Pass `--request-id` before the
+selected source and its default fixture is available. Commits with different
+messages match when their Git trees are identical. JSON commands do not print
+color, prompts, or progress animation. Pass `--request-id` before the
 subcommand, or the CLI generates one and copies it into the JSON document.
 `--jq` filters these documents the same way it filters session output.
 
@@ -66,12 +67,12 @@ reloading, pruning, or terminating. Input gestures do not accept `--dry-run`.
 
 `session jsonl SESSION_ID` reads one typed CLI command per stdin line and
 writes one result or `ErrorRecord` per stdout line. One-shot commands such as
-`tree`, `get`, `click`, `fill`, `press`, `scroll`, `drag-by`, `drag-to`,
-`pick`, `resize-viewport`, `resize-subject`, `capture`, `reload`, and
-`diagnostics` send the same models over that socket. They require `--session`.
-Selector flags are `--control-id`, `--model-id`, `--path`, `--role`, `--label`,
-`--placeholder`, and `--text`. Conflicting selector flags are rejected at
-parse time.
+`tree`, `get`, `click`, `double-click`, `right-click`, `fill`, `press`,
+`scroll`, `drag-by`, `drag-to`, `pick`, `resize-viewport`, `resize-subject`,
+`capture`, `reload`, and `diagnostics` send the same models over that socket.
+They require `--session`. Selector flags are `--control-id`, `--model-id`,
+`--path`, `--role`, `--label`, `--placeholder`, and `--text`. Conflicting
+selector flags are rejected at parse time.
 
 Every entry point converts selectors to `selector.schema.json`. The selector is
 a versioned discriminated union. Generated selectors rank a role and accessible

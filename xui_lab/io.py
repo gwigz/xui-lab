@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path, PurePosixPath
@@ -88,6 +89,39 @@ def git_commit(source: Path) -> str:
             f"cannot resolve viewer commit for {source}: {error}"
         ) from error
     return result.stdout.strip()
+
+
+def _git_tree(source: Path, commit: str) -> str | None:
+    if re.fullmatch(r"[0-9a-f]{40}", commit) is None:
+        return None
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(source), "rev-parse", "--verify", f"{commit}^{{tree}}"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def matching_runtime_commit(
+    source: Path,
+    fork_id: ForkId,
+    source_commit: str,
+    metadata: RuntimeMetadataContract,
+) -> str | None:
+    """Return the runtime commit when it represents the selected source tree."""
+    if metadata.fork != fork_id:
+        return None
+    if metadata.fork_commit == source_commit:
+        return metadata.fork_commit
+    source_tree = _git_tree(source, source_commit)
+    runtime_tree = _git_tree(source, metadata.fork_commit)
+    if source_tree is None or source_tree != runtime_tree:
+        return None
+    return metadata.fork_commit
 
 
 def read_runtime_metadata(

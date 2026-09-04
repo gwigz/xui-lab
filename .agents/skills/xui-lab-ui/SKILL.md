@@ -26,9 +26,11 @@ yet, add that support first, prove it, then do the original UI work.
 
 ## Start an instance
 
-You need a viewer checkout and a matching `xui-lab` binary. The binary embeds
-the viewer commit. Rebuild until `--metadata` matches `git rev-parse HEAD`.
-Keep host build commands in `AGENTS.local.md`.
+You need a viewer checkout and an `xui-lab` binary built from the same Git
+tree. The binary embeds the viewer commit. Preflight accepts an exact commit or
+a different commit with an identical tree, which covers message-only history
+rewrites. Rebuild only when preflight reports `source_mismatch`. Keep host
+build commands in `AGENTS.local.md`.
 
 ```sh
 RUNTIME=/absolute/path/to/xui-lab
@@ -49,7 +51,7 @@ before the subcommand, or the CLI generates one.
 - `missing_capability`: in explore mode, stop with the missing name and
   `suggestedOperations`. In change mode, add the smallest reusable operation
   or capability, prove it, then resume.
-- `source_mismatch`: rebuild until `--metadata` matches.
+- `source_mismatch`: the source trees differ. Rebuild the runtime.
 
 Then start a hidden session and keep the id:
 
@@ -64,8 +66,9 @@ to override that default.
 
 `session status` and `session close` take that id. Close is idempotent. Dead
 PIDs are removed on status and close. `session close`, `reload`, and `run`
-accept `--dry-run`. Do not pass `--dry-run` on click, fill, press, scroll, or
-drag. Use `interactive` only when a person asked to look at the window.
+accept `--dry-run`. Do not pass `--dry-run` on pointer, keyboard, scroll, or
+drag commands. Use `interactive` only when a person asked to look at the
+window.
 
 ## Drive it over JSON
 
@@ -76,6 +79,8 @@ One-shot commands need `--session`. They print one JSON document.
 ./xui-lab tree --session "$SESSION" --fields tree.path,tree.control_id
 ./xui-lab get --session "$SESSION" --label OK --jq .data.locator
 ./xui-lab click --session "$SESSION" --control-id CONTROL
+./xui-lab double-click --session "$SESSION" --model-id MODEL_UUID
+./xui-lab right-click --session "$SESSION" --model-id MODEL_UUID
 ./xui-lab fill --session "$SESSION" --control-id EDITOR --value "hello"
 ./xui-lab press --session "$SESSION" --control-id EDITOR --key Enter
 ./xui-lab scroll --session "$SESSION" --control-id SPINNER --clicks -2
@@ -108,8 +113,9 @@ jq -nc --arg s "$SESSION" '{schemaVersion:1,command:"tree",session:$s}' \
 
 Query layout findings through `.data.layout` and gate on
 `.data.layout.actionableCount`. Findings carry their source location,
-rectangles, and ancestor chain. The lab suppresses intentionally offscreen
-scroll content, generated composite children, and host root overlap.
+rectangles, and ancestor chain. The lab ignores one-pixel parent-edge rounding,
+scroll content clipped at the viewport edge, generated composite children, and
+host root overlap.
 
 Call `window.expect_no_layout_diagnostics()` in a Python scenario. Pass
 `path_prefix="/…"` to limit the assertion to one production subtree, or pass
@@ -123,6 +129,12 @@ layout findings even when strict mode is off.
 path to Codex's `view_image` tool. Start with `detail: high`. Use
 `detail: original` only when the resized image hides needed detail. Never print
 or inline image bytes.
+
+If `view_image` shows a solid black frame, load the same path once more before
+recapturing. If it stays black, inspect the PNG dimensions and pixel range.
+After the session closes, compare its size and SHA-256 in
+`artifact-manifest.json`. An unchanged file that displays correctly on retry
+points to the image viewer, not XUI Lab's capture.
 
 For each edit:
 

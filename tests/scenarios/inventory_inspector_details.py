@@ -91,6 +91,7 @@ def run(window: Window) -> None:
     window.resize_subject(1024, 360)
     window.wait_for_stable()
     _assert_details_width(window.query_tree())
+    window.expect_no_layout_diagnostics(path_prefix=INSPECTOR)
 
     window.resize_subject(1024, 700)
     window.wait_for_stable()

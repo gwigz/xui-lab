@@ -6,12 +6,16 @@ import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from xui_lab.api import Lab, default_artifact_root
 from xui_lab.contracts import (
     ArtifactManifest,
     ClickCliCommand,
+    DoubleClickCliCommand,
     GetCliCommand,
+    RightClickCliCommand,
+    RuntimeMetadataContract,
     TreeCliCommand,
 )
 from xui_lab.domain import Capability, Viewport
@@ -27,7 +31,7 @@ from xui_lab.interactive import (
     capture_context_label,
     recorded_python,
 )
-from xui_lab.io import parse_manifest, read_json
+from xui_lab.io import git_commit, parse_manifest, read_json
 from xui_lab.oneshot import apply_window_command
 from xui_lab.scenarios import load_scenario
 
@@ -78,7 +82,7 @@ class CaptureContextLabelTests(unittest.TestCase):
         )
 
 
-def fake_runtime(directory: Path, command_log: Path) -> Path:
+def fake_runtime(directory: Path, command_log: Path, fork_commit: str) -> Path:
     executable = directory / "fake-api-runtime"
     executable.write_text(
         "#!/usr/bin/env python3\n"
@@ -86,6 +90,14 @@ def fake_runtime(directory: Path, command_log: Path) -> Path:
             import json
             import sys
             from pathlib import Path
+
+            if sys.argv[1:] == ["--metadata"]:
+                print(json.dumps({{
+                    "fork": "alchemy",
+                    "forkCommit": {fork_commit!r},
+                    "protocolVersion": 1,
+                }}))
+                raise SystemExit(0)
 
             checked = False
             subject = ""
@@ -268,11 +280,12 @@ class PlaywrightApiTests(unittest.TestCase):
         self.command_log = self.directory / "commands.jsonl"
         manifest = parse_manifest(ROOT, read_json(ROOT / "forks.json"))
         self.fork = manifest.forks[manifest.default_fork]
+        self.fork_commit = git_commit(self.fork.source.path)
         self.lab = Lab(
             ROOT,
             self.fork,
             self.fork.source.path,
-            fake_runtime(self.directory, self.command_log),
+            fake_runtime(self.directory, self.command_log, self.fork_commit),
             self.directory / "artifacts",
         )
 
@@ -304,6 +317,35 @@ class PlaywrightApiTests(unittest.TestCase):
             json.loads(line)
             for line in self.command_log.read_text(encoding="utf-8").splitlines()
         ]
+
+    def test_initializes_an_equivalent_reworded_runtime_with_its_commit(self) -> None:
+        runtime_commit = "a" * 40
+        metadata = RuntimeMetadataContract.model_validate(
+            {
+                "fork": "alchemy",
+                "forkCommit": runtime_commit,
+                "protocolVersion": 1,
+            }
+        )
+        with (
+            patch("xui_lab.api.read_runtime_metadata", return_value=metadata),
+            patch("xui_lab.api.matching_runtime_commit", return_value=runtime_commit),
+        ):
+            with self.open():
+                pass
+
+        initialize = self.commands()[0]
+        self.assertEqual("initialize", initialize["op"])
+        self.assertEqual(runtime_commit, initialize["forkCommit"])
+        manifest = ArtifactManifest.model_validate_json(
+            (
+                self.directory
+                / "artifacts"
+                / "python_api_test_widgets"
+                / "artifact-manifest.json"
+            ).read_text(encoding="utf-8")
+        )
+        self.assertEqual(self.fork_commit, manifest.fork_commit)
 
     def test_locator_resolves_before_each_action_and_expectation(self) -> None:
         with self.open() as window:
@@ -448,7 +490,7 @@ class PlaywrightApiTests(unittest.TestCase):
         self.assertIn("path", data["tree"])
         self.assertTrue(Path(data["treeArtifact"]["path"]).is_file())
 
-    def test_oneshot_get_and_click_use_a_path_selector(self) -> None:
+    def test_oneshot_get_and_pointer_clicks_use_a_path_selector(self) -> None:
         with self.open() as window:
             got = apply_window_command(
                 window,
@@ -484,10 +526,52 @@ class PlaywrightApiTests(unittest.TestCase):
                     }
                 ),
             )
+            double_clicked = apply_window_command(
+                window,
+                DoubleClickCliCommand.model_validate(
+                    {
+                        "schemaVersion": 1,
+                        "command": "double-click",
+                        "fork": None,
+                        "viewerSource": [],
+                        "requestId": "req_double_click",
+                        "timeout": None,
+                        "session": "sess_test",
+                        "includeTree": False,
+                        "fields": None,
+                        "path": CHECKBOX_PATH,
+                    }
+                ),
+            )
+            right_clicked = apply_window_command(
+                window,
+                RightClickCliCommand.model_validate(
+                    {
+                        "schemaVersion": 1,
+                        "command": "right-click",
+                        "fork": None,
+                        "viewerSource": [],
+                        "requestId": "req_right_click",
+                        "timeout": None,
+                        "session": "sess_test",
+                        "includeTree": False,
+                        "fields": None,
+                        "path": CHECKBOX_PATH,
+                    }
+                ),
+            )
         self.assertEqual(CHECKBOX_PATH, got["data"]["control"]["path"])
         self.assertIn("python", got["data"]["locator"])
         self.assertEqual("click", clicked["operation"])
+        self.assertEqual("double-click", double_clicked["operation"])
+        self.assertEqual("right-click", right_clicked["operation"])
         self.assertEqual("result", clicked["type"])
+
+        inputs = [command for command in self.commands() if command["op"] == "input"]
+        self.assertEqual(
+            [("click", "left"), ("doubleClick", "left"), ("click", "right")],
+            [(command["event"], command["button"]) for command in inputs],
+        )
 
     def test_supported_pointer_actions_use_the_same_input_operation(self) -> None:
         with self.open() as window:

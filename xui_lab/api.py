@@ -38,7 +38,13 @@ from .errors import (
     InputError,
     RuntimeFailure,
 )
-from .io import git_commit, read_json, write_json
+from .io import (
+    git_commit,
+    matching_runtime_commit,
+    read_json,
+    read_runtime_metadata,
+    write_json,
+)
 from .layout import analyze_layout_diagnostics
 from .operations import (
     Capture,
@@ -257,6 +263,16 @@ class Lab:
                 mode="json", by_alias=True, exclude_none=True
             )
         fork_commit = git_commit(self.viewer_source)
+        runtime_metadata = read_runtime_metadata(self.executable)
+        initialize_commit = (
+            matching_runtime_commit(
+                self.viewer_source,
+                self.fork.id,
+                fork_commit,
+                runtime_metadata,
+            )
+            or fork_commit
+        )
         artifact_dir = artifact_directory(self.artifact_root, artifact_id)
         if artifact_dir.exists():
             shutil.rmtree(artifact_dir)
@@ -284,7 +300,7 @@ class Lab:
             initialize = {
                 "op": "initialize",
                 "fork": self.fork.id,
-                "forkCommit": fork_commit,
+                "forkCommit": initialize_commit,
                 "resourceRoot": str(
                     self.viewer_source.joinpath(*self.fork.resource_root.parts)
                 ),
