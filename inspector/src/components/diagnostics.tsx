@@ -412,6 +412,11 @@ function Snapshot({
           >
             <Crosshair aria-hidden size={14} />
           </Button>
+        </div>
+        <fieldset
+          aria-label="Snapshot controls"
+          className="m-0 flex items-center gap-1 border-0 p-0"
+        >
           <input
             accept="image/*"
             className="hidden"
@@ -423,8 +428,6 @@ function Snapshot({
             <ImagePlus aria-hidden size={14} />
             Reference
           </Button>
-        </div>
-        <div className="flex gap-1">
           <DisplaySettings runAction={runAction} state={state} />
           <Button
             aria-pressed={expanded}
@@ -435,7 +438,7 @@ function Snapshot({
             {expanded ? <Minimize2 aria-hidden size={14} /> : <Maximize2 aria-hidden size={14} />}
             {expanded ? "Exit Fullscreen" : "Fullscreen"}
           </Button>
-        </div>
+        </fieldset>
       </div>
       {reference === null ? null : (
         <fieldset

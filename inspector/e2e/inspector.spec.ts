@@ -207,6 +207,9 @@ test("renders the production tree and capture from the inspector API", async ({ 
   await expect(page.getByRole("button", { name: "Save · LLButton" })).toBeVisible();
   await expect(page.getByRole("img", { name: "xui-lab screenshot" })).toBeVisible();
   await expect(page.getByText("/tmp/artifacts")).toHaveCount(0);
+  const snapshotControls = page.getByRole("group", { name: "Snapshot controls" });
+  await expect(snapshotControls.getByRole("button").nth(0)).toHaveAccessibleName("Reference");
+  await expect(snapshotControls.getByRole("button").nth(1)).toHaveAccessibleName("Settings");
   await page.getByRole("button", { name: "Settings" }).click();
   await expect(page.getByRole("heading", { name: "Display" })).toBeVisible();
   await expect(page.getByLabel("Viewport width")).toBeVisible();
