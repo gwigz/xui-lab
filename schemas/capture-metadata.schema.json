@@ -380,6 +380,19 @@
       "title": "Graphics",
       "type": "object"
     },
+    "layout": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Layout"
+    },
     "overlay": {
       "$ref": "#/$defs/CaptureOverlayContract"
     },

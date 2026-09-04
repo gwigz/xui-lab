@@ -85,6 +85,7 @@ def run(window: Window) -> None:
             )
         for name in TEXT_NAMES:
             _assert_unclipped(_node(tree, name), width)
+        window.expect_no_layout_diagnostics(path_prefix=str(empty_panel["path"]))
 
         window.capture(f"empty-inspector-{width}")
 

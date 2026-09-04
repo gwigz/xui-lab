@@ -77,6 +77,11 @@ class CommandLineTests(unittest.TestCase):
             self.assertEqual(0, dispatch(command))
         handler.assert_called_once_with(command)
 
+    def test_run_can_enable_strict_layout_diagnostics(self) -> None:
+        command = parse_command(["run", "--strict-layout-diagnostics"])
+
+        self.assertTrue(command.strict_layout_diagnostics)
+
     def test_operations_json_discovers_queries_inputs_and_arguments(self) -> None:
         stdout = StringIO()
         stderr = StringIO()

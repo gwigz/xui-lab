@@ -310,9 +310,12 @@ def cmd_run(command: RunCliCommand) -> int:
                 viewport=scenario.viewport,
                 capabilities=scenario.capabilities,
                 fixture=scenario.fixture,
+                strict_layout_diagnostics=command.strict_layout_diagnostics,
                 request_id=command.request_id,
             ) as window:
                 scenario.run(window)
+                if command.strict_layout_diagnostics:
+                    window.expect_no_layout_diagnostics()
         except Exception as error:
             message = str(error) or error.__class__.__name__
             print(f"{scenario.id}: {message} [{artifact_dir}]")
@@ -561,6 +564,7 @@ def parser() -> argparse.ArgumentParser:
     run.add_argument("scenarios", nargs="*")
     run.add_argument("--runtime")
     run.add_argument("--artifacts", default=str(default_artifact_root()))
+    run.add_argument("--strict-layout-diagnostics", action="store_true")
     _add_dry_run(run)
     interactive = commands.add_parser("interactive")
     interactive.add_argument("subject")

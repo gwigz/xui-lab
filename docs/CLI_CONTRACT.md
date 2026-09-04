@@ -88,7 +88,21 @@ that would have been printed. String results are raw, without quotes, so
 are written one per line. `--jq` does not rewrite `ErrorRecord` output.
 An invalid expression fails with status `2` before the command runs.
 `--timeout` bounds session startup, socket waits, and runtime requests.
-Capture results return file paths, never image bytes.
+Capture results return file paths, never image bytes. Each capture sidecar
+includes the actionable layout diagnostics collected for that frame.
+
+`diagnostics` enriches each actionable layout finding with its control path,
+source location, local, screen, and clipping rectangles, and ancestor chain.
+It suppresses generated child overflow, intentionally offscreen scroll
+content, and lab host-root overlap. `layout.actionableCount` is the stable
+summary for automation. Python scenarios can call
+`Window.expect_no_layout_diagnostics()` directly. Pass `path_prefix="/…"` to
+limit an assertion to one production subtree.
+
+Pass `--strict-layout-diagnostics` to `run` to fail on the first captured frame
+with actionable findings and to check once more when the scenario finishes.
+The failing capture and its sidecar remain available in the scenario artifact
+directory.
 
 `record --session SESSION_ID --output FILE` reads the runtime's input history
 and current production tree. It ranks each transient control ID into the same

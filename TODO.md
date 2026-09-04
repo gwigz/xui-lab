@@ -16,21 +16,21 @@ Explorer. The changes belong in XUI Lab or its Alchemy adapter.
 
 ## Turn layout diagnostics into a reliable gate
 
-- [ ] Report a visible control whose local or clipped rectangle has a negative
+- [x] Report a visible control whose local or clipped rectangle has a negative
   width or height.
-- [ ] Report a visible control that lies outside its intended parent clipping
+- [x] Report a visible control that lies outside its intended parent clipping
   rectangle.
-- [ ] Suppress clipping reports for descendants that are intentionally
+- [x] Suppress clipping reports for descendants that are intentionally
   offscreen inside a scroll container.
-- [ ] Suppress expected host-root overlaps such as Menu Holder against Floater
+- [x] Suppress expected host-root overlaps such as Menu Holder against Floater
   View.
-- [ ] Preserve the control path, source location, rectangles, and ancestor
+- [x] Preserve the control path, source location, rectangles, and ancestor
   chain in every actionable diagnostic.
-- [ ] Add `Window.expect_no_layout_diagnostics()` for scenario assertions.
-- [ ] Add a scenario or CLI option that fails on actionable layout diagnostics.
-- [ ] Let captures collect the diagnostics for the captured frame and fail when
+- [x] Add `Window.expect_no_layout_diagnostics()` for scenario assertions.
+- [x] Add a scenario or CLI option that fails on actionable layout diagnostics.
+- [x] Let captures collect the diagnostics for the captured frame and fail when
   the strict option is active.
-- [ ] Add layout assertions to the Inventory Explorer width scenarios.
+- [x] Add layout assertions to the Inventory Explorer width scenarios.
 
 ## Improve selectors and inspection
 

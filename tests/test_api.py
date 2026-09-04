@@ -111,8 +111,8 @@ def fake_runtime(directory: Path, command_log: Path) -> Path:
                         children = [node({CHECKBOX_PATH!r}, value)]
                         if subject != "unstable":
                             children.extend([
-                                node({PRODUCTION_CHECKBOX!r}, value),
-                                node({PRODUCTION_CHECKBOX_BUTTON!r}, value, runtime_class="LLButton"),
+                                node({PRODUCTION_CHECKBOX!r}, value, source_line=13),
+                                node({PRODUCTION_CHECKBOX_BUTTON!r}, value, runtime_class="LLButton", source_line=14),
                             ])
                     result = {{"control_id": "root", "path": "/root", "class": "LLPanel", "children": children}}
                 elif op == "query" and command["kind"] == "menus":
@@ -166,6 +166,17 @@ def fake_runtime(directory: Path, command_log: Path) -> Path:
                     result = {{"subject": subject}}
                 elif op == "diagnostics":
                     result = {{"effects": [{{"kind": "url", "value": "https://example.test"}}]}}
+                    if subject == "layout_issue":
+                        result["layout"] = {{
+                            "overlaps": [],
+                            "textClipping": [{{
+                                "controlId": "control-12",
+                                "path": {CHECKBOX_PATH!r},
+                                "textWidth": 14,
+                                "textHeight": 12,
+                                "clippingRect": {{"left": 5, "right": 15, "top": 15, "bottom": 5}},
+                            }}],
+                        }}
                 elif op == "capture":
                     result = {{
                         "path": str(Path(command.get("name", "frame")).with_suffix(".png")),
@@ -224,7 +235,13 @@ class PlaywrightApiTests(unittest.TestCase):
             self.directory / "artifacts",
         )
 
-    def open(self, subject: str = "test_widgets", request_id: str | None = None):
+    def open(
+        self,
+        subject: str = "test_widgets",
+        request_id: str | None = None,
+        *,
+        strict_layout_diagnostics: bool = False,
+    ):
         return self.lab.open(
             artifact_id=f"python_api_{subject}",
             subject=subject,
@@ -238,6 +255,7 @@ class PlaywrightApiTests(unittest.TestCase):
                 }
             ),
             request_id=request_id,
+            strict_layout_diagnostics=strict_layout_diagnostics,
         )
 
     def commands(self) -> list[dict[str, object]]:
@@ -581,6 +599,29 @@ class PlaywrightApiTests(unittest.TestCase):
         self.assertTrue(
             all(command["schemaVersion"] == 1 for command in self.commands())
         )
+
+    def test_layout_diagnostics_are_enriched_and_assertable(self) -> None:
+        with self.open("layout_issue") as window:
+            diagnostics = window.diagnostics()
+            layout = diagnostics["layout"]
+            self.assertEqual(1, layout["actionableCount"])
+            self.assertEqual(
+                "floater_test.xml", layout["textClipping"][0]["sourceFile"]
+            )
+            window.expect_no_layout_diagnostics(path_prefix="/root/other")
+            with self.assertRaisesRegex(
+                AssertionFailure, r"textClipping.*?/root/checkbox"
+            ):
+                window.expect_no_layout_diagnostics(path_prefix="/root")
+
+    def test_capture_records_layout_and_strict_mode_fails_the_frame(self) -> None:
+        with self.open("layout_issue", strict_layout_diagnostics=True) as window:
+            with self.assertRaisesRegex(
+                AssertionFailure, r"textClipping.*?/root/checkbox"
+            ):
+                window.capture("strict-layout")
+            metadata = read_json(window.artifact_dir / "strict-layout.png.json")
+            self.assertEqual(1, metadata["layout"]["actionableCount"])
 
     def test_recorded_actions_render_as_editable_locator_calls(self) -> None:
         self.assertEqual(

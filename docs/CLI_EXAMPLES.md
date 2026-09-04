@@ -87,6 +87,16 @@ Run the documented scenario in its own viewer process:
   --runtime "$RUNTIME" --artifacts artifacts/readme-example
 ```
 
+Run the same scenario as a layout gate. Captures record their frame's findings,
+and any actionable finding makes the command exit with status `1`:
+
+```sh
+./xui-lab --viewer-source alchemy="$SOURCE" \
+  run tests/scenarios/readme_example.py \
+  --strict-layout-diagnostics \
+  --runtime "$RUNTIME" --artifacts artifacts/readme-example
+```
+
 ## Clean up
 
 Close the session. Repeating this command is safe.

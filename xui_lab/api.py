@@ -39,6 +39,7 @@ from .errors import (
     RuntimeFailure,
 )
 from .io import git_commit, read_json, write_json
+from .layout import analyze_layout_diagnostics
 from .operations import (
     Capture,
     CoordinatePointerAction,
@@ -244,6 +245,7 @@ class Lab:
         fixture: Path | None = None,
         stability: WaitForStable = WaitForStable(),
         interactive: bool = False,
+        strict_layout_diagnostics: bool = False,
         request_id: str | None = None,
         request_timeout: float = 10.0,
         shutdown_timeout: float = 10.0,
@@ -275,6 +277,7 @@ class Lab:
             fork_commit=fork_commit,
             subject=subject,
             fixture=fixture_contract.id if fixture is not None else None,
+            strict_layout_diagnostics=strict_layout_diagnostics,
             request_id=request_id,
         )
         try:
@@ -338,6 +341,7 @@ class Window:
         fork_commit: str,
         subject: str,
         fixture: str | None,
+        strict_layout_diagnostics: bool = False,
         request_id: str | None = None,
     ):
         self.runtime = runtime
@@ -352,6 +356,7 @@ class Window:
         self._fork_commit = fork_commit
         self._subject = subject
         self._fixture = fixture
+        self._strict_layout_diagnostics = strict_layout_diagnostics
         self._request_id = request_id
         self._finished = False
         self._capture_sequence = 0
@@ -521,7 +526,66 @@ class Window:
         return self._request(QueryTree().to_command())
 
     def diagnostics(self) -> dict[str, Any]:
-        return self._request(Diagnostics().to_command())
+        result = self._request(Diagnostics().to_command())
+        raw_layout = result.get("layout")
+        if isinstance(raw_layout, dict):
+            tree = self._request(QueryTree().to_command())
+            result["layout"] = analyze_layout_diagnostics(tree, raw_layout)
+        return result
+
+    @staticmethod
+    def _assert_no_layout_diagnostics(
+        layout: dict[str, Any], path_prefix: str | None = None
+    ) -> None:
+        issues: list[tuple[str, dict[str, Any]]] = []
+        for category in (
+            "invalidRectangles",
+            "outsideParent",
+            "textClipping",
+            "overlaps",
+        ):
+            values = layout.get(category, [])
+            if not isinstance(values, list):
+                continue
+            for issue in values:
+                if not isinstance(issue, dict):
+                    continue
+                if path_prefix is not None:
+                    paths = (issue.get("path"), issue.get("otherPath"))
+                    if not any(
+                        isinstance(path, str)
+                        and (path == path_prefix or path.startswith(f"{path_prefix}/"))
+                        for path in paths
+                    ):
+                        continue
+                issues.append((category, issue))
+        if not issues:
+            return
+        summaries: list[str] = []
+        for category, issue in issues[:6]:
+            path = str(issue.get("path", "unknown control"))
+            source = str(issue.get("sourceFile", ""))
+            line = issue.get("sourceLine", 0)
+            location = f" ({source}:{line})" if source else ""
+            summaries.append(f"{category}: {path}{location}")
+        detail = "; ".join(summaries)
+        raise AssertionFailure(f"{len(issues)} actionable layout diagnostics: {detail}")
+
+    def expect_no_layout_diagnostics(
+        self, *, path_prefix: str | None = None
+    ) -> dict[str, Any]:
+        if path_prefix is not None and (
+            not isinstance(path_prefix, str) or not path_prefix.startswith("/")
+        ):
+            raise InputError("layout diagnostic path prefix must start with '/'")
+        self._require_capability("inspection")
+        self.wait_for_stable()
+        diagnostics = self.diagnostics()
+        layout = diagnostics.get("layout")
+        if not isinstance(layout, dict):
+            raise AssertionFailure("runtime diagnostics omitted layout findings")
+        self._assert_no_layout_diagnostics(layout, path_prefix)
+        return layout
 
     def capture(
         self,
@@ -562,13 +626,21 @@ class Window:
                 action=capture_action,
             ).to_command()
         )
-        return self._record_capture(
+        diagnostics = self.diagnostics()
+        layout = diagnostics.get("layout")
+        recorded = self._record_capture(
             result,
             action=capture_action,
             selector=capture_selector,
             sequence=sequence,
             step=capture_step,
+            layout=layout if isinstance(layout, dict) else None,
         )
+        if self._strict_layout_diagnostics:
+            if not isinstance(layout, dict):
+                raise AssertionFailure("runtime diagnostics omitted layout findings")
+            self._assert_no_layout_diagnostics(layout)
+        return recorded
 
     def pick(self, x: int, y: int) -> Control:
         self._require_capability("inspection")
@@ -779,6 +851,7 @@ class Window:
         selector: Selector | None,
         sequence: int,
         step: str,
+        layout: dict[str, Any] | None,
     ) -> dict[str, Any]:
         raw_path = result.get("path")
         if not isinstance(raw_path, str) or not raw_path:
@@ -804,6 +877,8 @@ class Window:
         metadata["sequence"] = sequence
         if selector is not None:
             metadata["selector"] = selector.model_dump(mode="json", by_alias=True)
+        if layout is not None:
+            metadata["layout"] = layout
         metadata = parse_capture_metadata(metadata).model_dump(
             mode="json", by_alias=True, exclude_none=True
         )

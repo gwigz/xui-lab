@@ -58,6 +58,10 @@ SESSION=$(./xui-lab --viewer-source alchemy="$SOURCE" \
   session start test_widgets --runtime "$RUNTIME" --jq .sessionId)
 ```
 
+Subjects can declare a default fixture. Preflight reports it at `.fixture`, and
+launch commands load it when `--fixture` is absent. Use `--fixture PATH` only
+to override that default.
+
 `session status` and `session close` take that id. Close is idempotent. Dead
 PIDs are removed on status and close. `session close`, `reload`, and `run`
 accept `--dry-run`. Do not pass `--dry-run` on click, fill, press, scroll, or
@@ -101,6 +105,17 @@ jq -nc --arg s "$SESSION" '{schemaVersion:1,command:"tree",session:$s}' \
 
 `--timeout` bounds startup, socket waits, and runtime requests. Use
 `operations --json` for argument shapes and `schema` when you change contracts.
+
+Query layout findings through `.data.layout` and gate on
+`.data.layout.actionableCount`. Findings carry their source location,
+rectangles, and ancestor chain. The lab suppresses intentionally offscreen
+scroll content, generated composite children, and host root overlap.
+
+Call `window.expect_no_layout_diagnostics()` in a Python scenario. Pass
+`path_prefix="/…"` to limit the assertion to one production subtree, or pass
+`--strict-layout-diagnostics` to `run` for the whole subject. Strict runs check
+each captured frame and the final frame. Capture sidecars include the frame's
+layout findings even when strict mode is off.
 
 ## Inspect screenshots without filling context
 

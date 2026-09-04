@@ -84,7 +84,9 @@ request IDs. It is ordinary JSON intended for review and editing.
 `tree` and `get` return a short excerpt by default. The full tree lands in an
 artifact with path, size, and hash. `--include-tree` inlines the whole tree.
 `--fields` keeps a few keys. `--jq` runs a jq expression on the JSON
-document. Captures return PNG paths, never image bytes.
+document. Captures return PNG paths, never image bytes. Their JSON sidecars
+include actionable layout diagnostics for the captured frame. Add
+`--strict-layout-diagnostics` to `run` to fail a scenario on those findings.
 
 Selectors are `--control-id`, `--model-id`, `--path`, `--role`, `--label`,
 `--placeholder`, and `--text`. Pick one. Conflicting flags fail at parse time.

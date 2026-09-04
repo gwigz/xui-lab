@@ -328,6 +328,7 @@ class CaptureMetadataContract(VersionedContract):
     viewport: CaptureViewportContract
     overlay: CaptureOverlayContract
     graphics: dict[str, Any] = Field(min_length=1)
+    layout: dict[str, Any] | None = None
     scenario_step: NonEmptyString | None = Field(default=None, alias="scenarioStep")
     action: NonEmptyString | None = None
     sequence: NonNegativeInt | None = None
@@ -630,6 +631,9 @@ class RunCliCommand(CliCommandBase):
     runtime: str | None
     artifacts: NonEmptyString
     dry_run: bool = Field(default=False, alias="dryRun")
+    strict_layout_diagnostics: bool = Field(
+        default=False, alias="strictLayoutDiagnostics"
+    )
 
 
 class InteractiveCliCommand(CliCommandBase):
