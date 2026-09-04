@@ -26,53 +26,104 @@ export function InspectorToolbar({ state, runAction }: InspectorToolbarProps) {
     }
   }, [scenario, state]);
 
+  function switchSubject(subject: string | null): void {
+    if (state === null || subject === null || subject === state.subject) {
+      return;
+    }
+    void runAction({ schemaVersion: 1, action: "switch", subject, fixture: "" });
+  }
+
+  function switchFixture(value: string | null): void {
+    if (state === null) {
+      return;
+    }
+    const fixture = value ?? "";
+    if (fixture === state.fixture) {
+      return;
+    }
+    void runAction({ schemaVersion: 1, action: "switch", subject: state.subject, fixture });
+  }
+
   return (
-    <div className="shrink-0 rounded-xl border border-border bg-card p-1.5">
-      <Toolbar
-        aria-label="Runtime controls"
-        className="flex-wrap gap-1 border-0 bg-transparent p-0"
-      >
-        <ToolbarGroup>
-          <Button
-            onClick={() => void runAction({ schemaVersion: 1, action: "reload" })}
-            size="xs"
-            variant="outline"
-          >
-            <RefreshCw aria-hidden size={14} /> Reload XUI
-          </Button>
-          <Button
-            onClick={() => void runAction({ schemaVersion: 1, action: "export" })}
-            size="xs"
-            variant="outline"
-          >
-            <FileJson aria-hidden size={14} /> Export Tree
-          </Button>
-          <Select
-            disabled={state === null}
-            onValueChange={(value) => setScenario(value ?? "")}
-            value={scenario === "" ? null : scenario}
-          >
-            <SelectTrigger aria-label="Scenario" className="w-40" size="xs">
-              <SelectValue placeholder="No scenarios" />
-            </SelectTrigger>
-            <SelectPopup>
-              {(state?.scenarios ?? []).map((value) => (
-                <SelectItem key={value} value={value}>
-                  {value}
-                </SelectItem>
-              ))}
-            </SelectPopup>
-          </Select>
-          <Button
-            disabled={scenario === ""}
-            onClick={() => void runAction({ schemaVersion: 1, action: "replay", scenario })}
-            size="xs"
-            variant="outline"
-          >
-            <Play aria-hidden size={13} /> Replay
-          </Button>
-        </ToolbarGroup>
-      </Toolbar>
-    </div>
+    <Toolbar
+      aria-label="Runtime controls"
+      className="w-full shrink-0 flex-wrap gap-1 rounded-none border-0 border-border border-b bg-card px-3 py-2"
+    >
+      <ToolbarGroup className="min-w-0 flex-wrap">
+        <Select
+          disabled={state === null}
+          onValueChange={switchSubject}
+          value={state?.subject ?? null}
+        >
+          <SelectTrigger aria-label="Subject" className="w-44" size="xs">
+            <SelectValue placeholder="No subjects" />
+          </SelectTrigger>
+          <SelectPopup>
+            {(state?.subjects ?? []).map((value) => (
+              <SelectItem key={value} value={value}>
+                {value}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+        <Select
+          disabled={state === null}
+          onValueChange={switchFixture}
+          value={state === null || state.fixture === "" ? null : state.fixture}
+        >
+          <SelectTrigger aria-label="Fixture" className="w-44" size="xs">
+            <SelectValue placeholder="No fixture" />
+          </SelectTrigger>
+          <SelectPopup>
+            <SelectItem value={null}>No fixture</SelectItem>
+            {(state?.fixtures ?? []).map((value) => (
+              <SelectItem key={value} value={value}>
+                {value}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+        <Select
+          disabled={state === null}
+          onValueChange={(value) => setScenario(value ?? "")}
+          value={scenario === "" ? null : scenario}
+        >
+          <SelectTrigger aria-label="Scenario" className="w-40" size="xs">
+            <SelectValue placeholder="No scenarios" />
+          </SelectTrigger>
+          <SelectPopup>
+            {(state?.scenarios ?? []).map((value) => (
+              <SelectItem key={value} value={value}>
+                {value}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+        <Button
+          disabled={scenario === ""}
+          onClick={() => void runAction({ schemaVersion: 1, action: "replay", scenario })}
+          size="xs"
+          variant="outline"
+        >
+          <Play aria-hidden size={13} /> Replay
+        </Button>
+      </ToolbarGroup>
+      <ToolbarGroup className="ml-auto shrink-0">
+        <Button
+          onClick={() => void runAction({ schemaVersion: 1, action: "reload" })}
+          size="xs"
+          variant="outline"
+        >
+          <RefreshCw aria-hidden size={14} /> Reload XUI
+        </Button>
+        <Button
+          onClick={() => void runAction({ schemaVersion: 1, action: "export" })}
+          size="xs"
+          variant="outline"
+        >
+          <FileJson aria-hidden size={14} /> Export Tree
+        </Button>
+      </ToolbarGroup>
+    </Toolbar>
   );
 }

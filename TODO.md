@@ -34,13 +34,13 @@ Explorer. The changes belong in XUI Lab or its Alchemy adapter.
 
 ## Improve selectors and inspection
 
-- [ ] Expose button tooltips or explicit LLUI accessibility metadata as the
+- [x] Expose button tooltips or explicit LLUI accessibility metadata as the
   accessible name used by role selectors.
-- [ ] Verify that icon-only buttons can be selected by role and name without a
+- [x] Verify that icon-only buttons can be selected by role and name without a
   control ID or XUI path.
-- [ ] Default the browser tree to the visible subject subtree.
-- [ ] Add toggles for hidden controls, menus, and lab-owned root views.
-- [ ] Keep the selected control visible when the tree filter changes.
+- [x] Default the browser tree to the visible subject subtree.
+- [x] Add toggles for hidden controls, menus, and lab-owned root views.
+- [x] Keep the selected control visible when the tree filter changes.
 
 ## Add useful visual test data
 

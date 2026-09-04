@@ -96,6 +96,9 @@ accessible name, then a label, placeholder, visible text, or model ID. Use a
 control ID only when no user-visible selector is unique. `--path` records XUI
 provenance and is the last fallback.
 
+For icon-only buttons, the Alchemy adapter uses a nonempty tooltip as the
+accessible name. Query these controls with `--role button --name "…"`.
+
 After the CLI accepts a JSON command, a failure also writes an `ErrorRecord`.
 `session close`, `reload`, and `run` accept `--dry-run`. Clicks and other input
 gestures do not. Field lists and exit statuses live in
@@ -139,6 +142,10 @@ Tabs, Toolbar, Toast, and Popover come from the Coss UI registry. They use
 Base UI behavior and Coss neutral tokens. The resizable sidebar uses the
 shadcn Base UI Resizable wrapper around react-resizable-panels. Tailwind CSS
 supplies the generated utilities.
+
+The view tree starts at the visible subject subtree. Use **Hidden**, **Menus**,
+and **Lab roots** to inspect controls outside that default view. The tree keeps
+a selected hidden control visible when you turn **Hidden** off.
 
 ```sh
 npm ci --prefix inspector

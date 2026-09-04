@@ -131,46 +131,47 @@ export function App() {
       : state;
 
   return (
-    <ResizablePanelGroup
-      className="h-dvh min-h-0 bg-background text-foreground"
-      defaultLayout={defaultLayout}
-      id="xui-lab-inspector-shell"
-      onLayoutChanged={onLayoutChanged}
-      orientation="horizontal"
-    >
-      <ResizablePanel
-        className="min-h-0"
-        defaultSize={230}
-        id="inspector-sidebar"
-        maxSize="50%"
-        minSize={230}
+    <div className="flex h-dvh min-h-0 flex-col bg-background text-foreground">
+      <InspectorToolbar runAction={runAction} state={displayedState} />
+      <ResizablePanelGroup
+        className="min-h-0 min-w-0 flex-1"
+        defaultLayout={defaultLayout}
+        id="xui-lab-inspector-shell"
+        onLayoutChanged={onLayoutChanged}
+        orientation="horizontal"
       >
-        <Sidebar
-          onSelect={(controlId) => void selectControl(controlId)}
-          onSwitch={(subject, fixture) =>
-            void runAction({ schemaVersion: 1, action: "switch", subject, fixture })
-          }
-          selectedControlId={selectedControlId}
-          state={displayedState}
-        />
-      </ResizablePanel>
-      <ResizableHandle />
-      <ResizablePanel className="min-h-0 min-w-0" id="inspector-main" minSize={360}>
-        <main className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden p-3">
-          <InspectorToolbar runAction={runAction} state={displayedState} />
-          <Diagnostics
-            filmstripVersion={filmstripVersion}
-            historical={historical}
-            onFilmstripVersion={setFilmstripVersion}
-            onSelectedControlId={setSelectedControlId}
-            onTab={setTab}
-            runAction={runAction}
+        <ResizablePanel
+          className="min-h-0"
+          defaultSize={230}
+          id="inspector-sidebar"
+          maxSize="50%"
+          minSize={230}
+        >
+          <Sidebar
+            onSelect={(controlId) => void selectControl(controlId)}
             selectedControlId={selectedControlId}
             state={displayedState}
-            tab={tab}
           />
-        </main>
-      </ResizablePanel>
-    </ResizablePanelGroup>
+        </ResizablePanel>
+        <ResizableHandle />
+        <ResizablePanel className="min-h-0 min-w-0" id="inspector-main" minSize={360}>
+          <main className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col px-3 pb-3">
+              <Diagnostics
+                filmstripVersion={filmstripVersion}
+                historical={historical}
+                onFilmstripVersion={setFilmstripVersion}
+                onSelectedControlId={setSelectedControlId}
+                onTab={setTab}
+                runAction={runAction}
+                selectedControlId={selectedControlId}
+                state={displayedState}
+                tab={tab}
+              />
+            </div>
+          </main>
+        </ResizablePanel>
+      </ResizablePanelGroup>
+    </div>
   );
 }

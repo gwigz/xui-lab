@@ -15,21 +15,67 @@ const largePng = readFileSync(
 const inspectorState = {
   tree: {
     control_id: "root",
-    path: "/root",
+    path: "",
     class: "LLView",
+    visible_chain: true,
     children: [
       {
-        control_id: "save-button",
-        path: "/root/button",
-        name: "Save",
-        class: "8LLButton",
-        children: [],
+        control_id: "menu-holder",
+        path: "/Menu Holder",
+        name: "Menu Holder",
+        class: "LLMenuHolderGL",
+        visible_chain: true,
+        children: [
+          {
+            control_id: "inventory-menu",
+            path: "/Menu Holder/Inventory",
+            name: "Inventory menu",
+            class: "LLMenuGL",
+            visible_chain: true,
+            children: [],
+          },
+        ],
+      },
+      {
+        control_id: "floater-view",
+        path: "/Floater View",
+        name: "Floater View",
+        class: "LLFloaterView",
+        visible_chain: true,
+        children: [
+          {
+            control_id: "subject",
+            path: "/Floater View/test_widgets",
+            name: "Test widgets",
+            class: "LLFloater",
+            visible_chain: true,
+            children: [
+              {
+                control_id: "save-button",
+                path: "/Floater View/test_widgets/button",
+                name: "Save",
+                class: "8LLButton",
+                visible_chain: true,
+                children: [],
+              },
+              {
+                control_id: "hidden-button",
+                path: "/Floater View/test_widgets/hidden",
+                name: "Hidden action",
+                class: "8LLButton",
+                visible_chain: false,
+                children: [],
+              },
+            ],
+          },
+        ],
       },
     ],
   },
   diagnostics: {
     processId: 42,
     viewport: { lluiWidth: 800, lluiHeight: 600, windowWidth: 800, windowHeight: 600, uiScale: 1 },
+    subject: { view: { path: "/Floater View/test_widgets" } },
   },
   recording: ["window.get_by_role('button', name='Save').click()"],
   locators: {
@@ -165,21 +211,93 @@ test("renders the production tree and capture from the inspector API", async ({ 
   expect(pageErrors).toEqual([]);
 });
 
-test("shows the active subject and fixture", async ({ page }) => {
-  await mockInspectorApi(page, [], {
+test("filters the view tree while retaining the selected control", async ({ page }) => {
+  const actions: unknown[] = [];
+  await mockInspectorApi(page, actions);
+  await page.goto("/");
+
+  const sidebar = page.getByRole("complementary");
+  const hiddenToggle = sidebar.getByRole("button", { name: "Hidden", exact: true });
+  const menuToggle = sidebar.getByRole("button", { name: "Menus", exact: true });
+  const rootsToggle = sidebar.getByRole("button", { name: "Lab roots", exact: true });
+
+  await expect(sidebar.getByRole("button", { name: "Test widgets · LLFloater" })).toBeVisible();
+  await expect(sidebar.getByRole("button", { name: "Save · LLButton" })).toBeVisible();
+  await expect(sidebar.getByRole("button", { name: "Floater View · LLFloaterView" })).toHaveCount(
+    0,
+  );
+  await expect(sidebar.getByRole("button", { name: "Menu Holder · LLMenuHolderGL" })).toHaveCount(
+    0,
+  );
+  await expect(sidebar.getByRole("button", { name: "Hidden action · LLButton" })).toHaveCount(0);
+
+  await hiddenToggle.click();
+  const hiddenControl = sidebar.getByRole("button", { name: "Hidden action · LLButton" });
+  await expect(hiddenControl).toBeVisible();
+  await hiddenControl.click();
+  await expect(hiddenControl).toHaveAttribute("aria-current", "true");
+  await hiddenToggle.click();
+  await expect(hiddenToggle).toHaveAttribute("aria-pressed", "false");
+  await expect(hiddenControl).toBeVisible();
+  await expect(hiddenControl).toBeInViewport();
+
+  await menuToggle.click();
+  await expect(sidebar.getByRole("button", { name: "Menu Holder · LLMenuHolderGL" })).toBeVisible();
+  await rootsToggle.click();
+  await expect(sidebar.getByRole("button", { name: "Floater View · LLFloaterView" })).toBeVisible();
+});
+
+test("uses a full-width toolbar and switches selections immediately", async ({ page }) => {
+  const actions: unknown[] = [];
+  await mockInspectorApi(page, actions, {
     state: {
       ...inspectorState,
       subject: "inventory_explorer",
       fixture: "inventory_explorer",
       subjects: ["inventory_explorer", "test_widgets"],
-      fixtures: ["inventory_explorer"],
+      fixtures: ["inventory_explorer", "empty_inventory"],
     },
   });
 
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/");
 
-  await expect(page.getByLabel("Subject")).toContainText("inventory_explorer");
-  await expect(page.getByLabel("Fixture")).toContainText("inventory_explorer");
+  const toolbar = page.getByRole("toolbar", { name: "Runtime controls" });
+  await expect(toolbar.getByLabel("Subject")).toContainText("inventory_explorer");
+  await expect(toolbar.getByLabel("Fixture")).toContainText("inventory_explorer");
+  await expect(page.getByRole("button", { name: "Open" })).toHaveCount(0);
+
+  const toolbarBox = await toolbar.boundingBox();
+  expect(toolbarBox?.x).toBe(0);
+  expect(toolbarBox?.width).toBe(1280);
+
+  const replayBox = await toolbar.getByRole("button", { name: "Replay" }).boundingBox();
+  const reloadBox = await toolbar.getByRole("button", { name: "Reload XUI" }).boundingBox();
+  const exportBox = await toolbar.getByRole("button", { name: "Export Tree" }).boundingBox();
+  expect(reloadBox?.x).toBeGreaterThan(replayBox?.x ?? Number.POSITIVE_INFINITY);
+  expect(exportBox?.x).toBeGreaterThan(reloadBox?.x ?? Number.POSITIVE_INFINITY);
+
+  await toolbar.getByLabel("Fixture").click();
+  await page.getByRole("option", { name: "empty_inventory" }).click();
+  await expect
+    .poll(() => actions.at(-1))
+    .toMatchObject({
+      schemaVersion: 1,
+      action: "switch",
+      subject: "inventory_explorer",
+      fixture: "empty_inventory",
+    });
+
+  await toolbar.getByLabel("Subject").click();
+  await page.getByRole("option", { name: "test_widgets" }).click();
+  await expect
+    .poll(() => actions.at(-1))
+    .toMatchObject({
+      schemaVersion: 1,
+      action: "switch",
+      subject: "test_widgets",
+      fixture: "",
+    });
 });
 
 test("shows an error toast when an inspector action fails", async ({ page }) => {
