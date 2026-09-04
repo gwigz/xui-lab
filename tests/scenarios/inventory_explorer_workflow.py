@@ -74,6 +74,7 @@ def _path_visible(window: Window, path: str) -> bool:
 
 def _assert_selection(window: Window, view_button: str) -> None:
     window.get_by_path(view_button).click().expect_handled()
+    window.wait_for_stable()
     notecard = window.get_by_model_id(KNOWN_NOTECARD)
     notecard.expect_visible()
     notecard.expect_selected()

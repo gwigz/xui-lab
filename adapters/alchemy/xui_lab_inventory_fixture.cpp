@@ -12,6 +12,7 @@
 #include "llsdutil.h"
 #include "llviewerfoldertype.h"
 #include "llviewerinventory.h"
+#include "llwearabletype.h"
 
 #include <map>
 #include <set>
@@ -58,6 +59,63 @@ LLUUID requireUuid(const LLSD& object, const std::string& key, const std::string
         throw xui_lab::Error("fixture", label + "." + key + " must not be null");
     }
     return id;
+}
+
+LLUUID optionalUuid(const LLSD& object, const std::string& key, const std::string& label)
+{ return object.has(key) ? requireUuid(object, key, label) : LLUUID::null; }
+
+bool optionalBoolean(const LLSD& object, const std::string& key, const std::string& label)
+{
+    if (!object.has(key))
+        return false;
+    if (!object[key].isBoolean())
+        throw xui_lab::Error("fixture", label + "." + key + " must be a boolean");
+    return object[key].asBoolean();
+}
+
+xui_lab::InventoryItemKind requireItemKind(const std::string& kind)
+{
+    static const std::map<std::string, xui_lab::InventoryItemKind, std::less<>> kinds{
+        { "animation", xui_lab::InventoryItemKind::Animation }, { "gesture", xui_lab::InventoryItemKind::Gesture },
+        { "landmark", xui_lab::InventoryItemKind::Landmark },   { "material", xui_lab::InventoryItemKind::Material },
+        { "notecard", xui_lab::InventoryItemKind::Notecard },   { "object", xui_lab::InventoryItemKind::Object },
+        { "script", xui_lab::InventoryItemKind::Script },       { "sound", xui_lab::InventoryItemKind::Sound },
+        { "texture", xui_lab::InventoryItemKind::Texture },     { "wearable", xui_lab::InventoryItemKind::Wearable },
+    };
+    const auto found = kinds.find(kind);
+    if (found == kinds.end())
+        throw xui_lab::Error("fixture", "unsupported inventory kind: " + kind);
+    return found->second;
+}
+
+std::pair<LLAssetType::EType, LLInventoryType::EType> itemTypes(xui_lab::InventoryItemKind kind)
+{
+    using enum xui_lab::InventoryItemKind;
+    switch (kind)
+    {
+        case Animation:
+            return { LLAssetType::AT_ANIMATION, LLInventoryType::IT_ANIMATION };
+        case Gesture:
+            return { LLAssetType::AT_GESTURE, LLInventoryType::IT_GESTURE };
+        case Landmark:
+            return { LLAssetType::AT_LANDMARK, LLInventoryType::IT_LANDMARK };
+        case Material:
+            return { LLAssetType::AT_MATERIAL, LLInventoryType::IT_MATERIAL };
+        case Notecard:
+            return { LLAssetType::AT_NOTECARD, LLInventoryType::IT_NOTECARD };
+        case Object:
+            return { LLAssetType::AT_OBJECT, LLInventoryType::IT_OBJECT };
+        case Script:
+            return { LLAssetType::AT_LSL_TEXT, LLInventoryType::IT_LSL };
+        case Sound:
+            return { LLAssetType::AT_SOUND, LLInventoryType::IT_SOUND };
+        case Texture:
+            return { LLAssetType::AT_TEXTURE, LLInventoryType::IT_TEXTURE };
+        case Wearable:
+            return { LLAssetType::AT_CLOTHING, LLInventoryType::IT_WEARABLE };
+    }
+    llassert(false);
+    return { LLAssetType::AT_NONE, LLInventoryType::IT_NONE };
 }
 } // namespace
 
@@ -126,30 +184,32 @@ InventoryFixtureData parseInventoryFixture(const LLSD& fixture)
                 root_id = id;
             }
             result.inventory.emplace_back(InventoryCategoryFixture{
-                .kind      = kind == "root" ? InventoryCategoryKind::Root : InventoryCategoryKind::Folder,
-                .id        = id,
-                .parent_id = parent_id,
-                .name      = name,
-            });
-        }
-        else if (kind == "notecard")
-        {
-            result.inventory.emplace_back(InventoryNotecardFixture{
-                .id        = id,
-                .parent_id = parent_id,
-                .name      = name,
+                .kind         = kind == "root" ? InventoryCategoryKind::Root : InventoryCategoryKind::Folder,
+                .id           = id,
+                .parent_id    = parent_id,
+                .name         = name,
+                .thumbnail_id = optionalUuid(entry, "thumbnailId", "fixture.inventory entry"),
+                .favorite     = optionalBoolean(entry, "favorite", "fixture.inventory entry"),
             });
         }
         else
         {
-            throw Error("fixture", "unsupported inventory kind: " + kind);
+            result.inventory.emplace_back(InventoryItemFixture{
+                .kind         = requireItemKind(kind),
+                .id           = id,
+                .parent_id    = parent_id,
+                .name         = name,
+                .thumbnail_id = optionalUuid(entry, "thumbnailId", "fixture.inventory entry"),
+                .favorite     = optionalBoolean(entry, "favorite", "fixture.inventory entry"),
+                .worn         = optionalBoolean(entry, "worn", "fixture.inventory entry"),
+            });
         }
     }
     if (root_id.isNull())
         throw Error("fixture", "fixture.inventory must contain one root");
     for (const auto& object : result.inventory)
     {
-        if (const auto* item = std::get_if<InventoryNotecardFixture>(&object); item && !category_ids.contains(item->parent_id))
+        if (const auto* item = std::get_if<InventoryItemFixture>(&object); item && !category_ids.contains(item->parent_id))
         {
             throw Error("fixture", "inventory item parent is not a fixture folder: " + item->parent_id.asString());
         }
@@ -208,22 +268,27 @@ InventoryFixture::InventoryFixture(InventoryFixtureData fixture) : mId(std::move
                 category_fixture->name, fixture.agent.id);
             category->setVersion(LLViewerInventoryCategory::VERSION_INITIAL);
             category->setDescendentCount(descendant_counts[category_fixture->id]);
+            category->setThumbnailUUID(category_fixture->thumbnail_id);
+            category->setFavorite(category_fixture->favorite);
             LLInventoryModelTestAccess::addCategory(gInventory, category);
         }
 
         for (const auto& object : fixture.inventory)
         {
-            const auto* item_fixture = std::get_if<InventoryNotecardFixture>(&object);
+            const auto* item_fixture = std::get_if<InventoryItemFixture>(&object);
             if (!item_fixture)
                 continue;
+            const auto [asset_type, inventory_type] = itemTypes(item_fixture->kind);
             mObjectIds.push_back(item_fixture->id);
             LLPermissions permissions;
             permissions.init(fixture.agent.id, fixture.agent.id, LLUUID::null, LLUUID::null);
             permissions.initMasks(PERM_ALL, PERM_ALL, PERM_NONE, PERM_NONE, PERM_MOVE | PERM_TRANSFER);
             LLPointer<LLViewerInventoryItem> item = new LLViewerInventoryItem(
-                item_fixture->id, item_fixture->parent_id, permissions, item_fixture->id.combine(fixture.agent.id),
-                LLAssetType::AT_NOTECARD, LLInventoryType::IT_NOTECARD, item_fixture->name, "xui-lab deterministic notecard", LLSaleInfo(),
-                0, 1700000000);
+                item_fixture->id, item_fixture->parent_id, permissions, item_fixture->id.combine(fixture.agent.id), asset_type,
+                inventory_type, item_fixture->name, "xui-lab deterministic inventory item", LLSaleInfo(),
+                item_fixture->kind == InventoryItemKind::Wearable ? static_cast<U32>(LLWearableType::WT_JACKET) : 0, 1700000000);
+            item->setThumbnailUUID(item_fixture->thumbnail_id);
+            item->setFavorite(item_fixture->favorite);
             item->setComplete(true);
             LLInventoryModelTestAccess::addItem(gInventory, item);
             ++descendant_counts[item_fixture->parent_id];
@@ -239,6 +304,7 @@ InventoryFixture::InventoryFixture(InventoryFixtureData fixture) : mId(std::move
         library_root->setDescendentCount(0);
         LLInventoryModelTestAccess::addCategory(gInventory, library_root);
 
+        LLUUID current_outfit_id;
         for (S32 value = LLFolderType::FT_TEXTURE; value < LLFolderType::FT_COUNT; ++value)
         {
             const auto folder_type = static_cast<LLFolderType::EType>(value);
@@ -255,6 +321,30 @@ InventoryFixture::InventoryFixture(InventoryFixtureData fixture) : mId(std::move
             LLInventoryModelTestAccess::addCategory(gInventory, category);
             category_ids.insert(id);
             ++descendant_counts[root_id];
+            if (folder_type == LLFolderType::FT_CURRENT_OUTFIT)
+                current_outfit_id = id;
+        }
+
+        for (const auto& object : fixture.inventory)
+        {
+            const auto* item_fixture = std::get_if<InventoryItemFixture>(&object);
+            if (!item_fixture || !item_fixture->worn)
+                continue;
+            if (current_outfit_id.isNull())
+                throw Error("inventory_model", "worn fixture items require the Current Outfit system folder");
+
+            const LLInventoryType::EType inventory_type = itemTypes(item_fixture->kind).second;
+            const LLUUID                 link_id        = LLUUID::generateNewID(mId + ":worn:" + item_fixture->id.asString());
+            LLPermissions                permissions;
+            permissions.init(fixture.agent.id, fixture.agent.id, LLUUID::null, LLUUID::null);
+            permissions.initMasks(PERM_ALL, PERM_ALL, PERM_NONE, PERM_NONE, PERM_MOVE | PERM_TRANSFER);
+            LLPointer<LLViewerInventoryItem> link = new LLViewerInventoryItem(
+                link_id, current_outfit_id, permissions, item_fixture->id, LLAssetType::AT_LINK, inventory_type, item_fixture->name,
+                "xui-lab deterministic worn link", LLSaleInfo(),
+                item_fixture->kind == InventoryItemKind::Wearable ? static_cast<U32>(LLWearableType::WT_JACKET) : 0, 1700000000);
+            link->setComplete(true);
+            LLInventoryModelTestAccess::addItem(gInventory, link);
+            ++descendant_counts[current_outfit_id];
         }
 
         for (const LLUUID& category_id : category_ids)

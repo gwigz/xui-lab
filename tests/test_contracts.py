@@ -184,9 +184,53 @@ class StrictContractTests(unittest.TestCase):
         fixture["inventory"][0]["surprise"] = True
         with self.assertRaises(ValidationError):
             FixtureContract.model_validate(fixture)
-
         fixture["inventory"][0].pop("surprise")
         fixture["inventory"][1]["id"] = fixture["inventory"][0]["id"]
+        with self.assertRaises(ValidationError):
+            FixtureContract.model_validate(fixture)
+
+    def test_fixture_accepts_visual_inventory_item_metadata(self) -> None:
+        fixture = json.loads((ROOT / "fixtures/inventory-explorer.json").read_text())
+        fixture["inventory"].extend(
+            [
+                {
+                    "id": "30000000-0000-4000-8000-000000000099",
+                    "parentId": "20000000-0000-4000-8000-000000000002",
+                    "kind": "texture",
+                    "name": "Thumbnail texture",
+                    "favorite": True,
+                    "thumbnailId": "40000000-0000-4000-8000-000000000001",
+                },
+                {
+                    "id": "30000000-0000-4000-8000-000000000100",
+                    "parentId": "20000000-0000-4000-8000-000000000002",
+                    "kind": "wearable",
+                    "name": "Worn shirt",
+                    "worn": True,
+                },
+            ]
+        )
+
+        parsed = FixtureContract.model_validate(fixture)
+
+        texture = parsed.inventory[-2].model_dump(mode="json", by_alias=True)
+        worn = parsed.inventory[-1].model_dump(mode="json", by_alias=True)
+        self.assertEqual("texture", texture["kind"])
+        self.assertTrue(texture["favorite"])
+        self.assertEqual(
+            "40000000-0000-4000-8000-000000000001",
+            texture["thumbnailId"],
+        )
+        self.assertEqual("wearable", worn["kind"])
+        self.assertTrue(worn["worn"])
+
+    def test_fixture_rejects_inventory_names_over_viewer_byte_limit(self) -> None:
+        fixture = json.loads((ROOT / "fixtures/inventory-explorer.json").read_text())
+        fixture["inventory"][1]["name"] = "x" * 64
+        with self.assertRaises(ValidationError):
+            FixtureContract.model_validate(fixture)
+
+        fixture["inventory"][1]["name"] = "é" * 32
         with self.assertRaises(ValidationError):
             FixtureContract.model_validate(fixture)
 

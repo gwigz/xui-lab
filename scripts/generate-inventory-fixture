@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+"""Generate the deterministic Inventory Explorer visual fixture."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from xui_lab.contracts import parse_fixture  # noqa: E402
+
+OUTPUT = ROOT / "fixtures/inventory-explorer.json"
+ROOT_ID = "20000000-0000-4000-8000-000000000001"
+LAB_FIXTURES_ID = "20000000-0000-4000-8000-000000000002"
+
+
+def folder(sequence: int, parent_id: str, name: str, **state: Any) -> dict[str, Any]:
+    return {
+        "id": f"20000000-0000-4000-8000-{sequence:012d}",
+        "parentId": parent_id,
+        "kind": "folder",
+        "name": name,
+        **state,
+    }
+
+
+def item(
+    sequence: int,
+    parent_id: str,
+    kind: str,
+    name: str,
+    **state: Any,
+) -> dict[str, Any]:
+    return {
+        "id": f"30000000-0000-4000-8000-{sequence:012d}",
+        "parentId": parent_id,
+        "kind": kind,
+        "name": name,
+        **state,
+    }
+
+
+def document() -> dict[str, Any]:
+    visual_samples_id = "20000000-0000-4000-8000-000000000003"
+    clothing_id = "20000000-0000-4000-8000-000000000004"
+    assets_id = "20000000-0000-4000-8000-000000000005"
+    nested_id = "20000000-0000-4000-8000-000000000006"
+    archive_id = "20000000-0000-4000-8000-000000000007"
+    inventory = [
+        {
+            "id": ROOT_ID,
+            "parentId": "00000000-0000-0000-0000-000000000000",
+            "kind": "root",
+            "name": "My Inventory",
+        },
+        folder(2, ROOT_ID, "Lab Fixtures"),
+        folder(3, LAB_FIXTURES_ID, "Visual Samples"),
+        folder(4, visual_samples_id, "Clothing & Wearables"),
+        folder(5, visual_samples_id, "Media & Assets", favorite=True),
+        folder(6, visual_samples_id, "Nested Projects"),
+        folder(7, nested_id, "Archive 2026"),
+        item(1, LAB_FIXTURES_ID, "notecard", "Known Notecard"),
+        item(2, assets_id, "landmark", "Favorite Sandbox Landmark", favorite=True),
+        item(3, clothing_id, "wearable", "Worn Indigo Field Jacket", worn=True),
+        item(4, clothing_id, "object", "Canvas Satchel Attachment", worn=True),
+        item(5, assets_id, "texture", "Cobalt Fabric Swatch"),
+        item(6, assets_id, "sound", "Rain on the Studio Roof"),
+        item(7, assets_id, "animation", "Careful Wave Animation"),
+        item(8, assets_id, "gesture", "Friendly Hello Gesture"),
+        item(9, assets_id, "script", "Gallery Lighting Controller"),
+        item(10, assets_id, "material", "Brushed Copper PBR Material"),
+        item(
+            11,
+            nested_id,
+            "notecard",
+            "WWWWWWWW Wide inventory item name for truncation testing WWWWWW",
+        ),
+    ]
+    inventory.extend(
+        item(
+            12 + index,
+            archive_id,
+            "notecard" if index % 2 == 0 else "object",
+            f"Archive sample {index + 1:02d} — deterministic scrolling row",
+        )
+        for index in range(32)
+    )
+    return {
+        "$schema": "../schemas/fixture.schema.json",
+        "schemaVersion": 1,
+        "id": "inventory_explorer",
+        "agent": {
+            "id": "11111111-1111-4111-8111-111111111111",
+            "name": "Lab Resident",
+        },
+        "inventory": inventory,
+        "avatarNames": [
+            {
+                "id": "11111111-1111-4111-8111-111111111111",
+                "displayName": "Lab Resident",
+                "userName": "lab.resident",
+            }
+        ],
+    }
+
+
+def rendered() -> str:
+    fixture = document()
+    parse_fixture(fixture)
+    return json.dumps(fixture, indent=2, ensure_ascii=False) + "\n"
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--check", action="store_true")
+    args = parser.parse_args()
+    expected = rendered()
+    if args.check:
+        actual = OUTPUT.read_text(encoding="utf-8") if OUTPUT.is_file() else ""
+        if actual != expected:
+            print("generated inventory fixture is stale")
+            print("run: ./scripts/generate-inventory-fixture")
+            return 1
+        return 0
+    OUTPUT.write_text(expected, encoding="utf-8")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

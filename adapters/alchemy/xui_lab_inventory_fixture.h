@@ -28,22 +28,42 @@ enum class InventoryCategoryKind
     Folder
 };
 
+enum class InventoryItemKind
+{
+    Animation,
+    Gesture,
+    Landmark,
+    Material,
+    Notecard,
+    Object,
+    Script,
+    Sound,
+    Texture,
+    Wearable
+};
+
 struct InventoryCategoryFixture
 {
     InventoryCategoryKind kind;
     LLUUID                id;
     LLUUID                parent_id;
     std::string           name;
+    LLUUID                thumbnail_id;
+    bool                  favorite;
 };
 
-struct InventoryNotecardFixture
+struct InventoryItemFixture
 {
-    LLUUID      id;
-    LLUUID      parent_id;
-    std::string name;
+    InventoryItemKind kind;
+    LLUUID            id;
+    LLUUID            parent_id;
+    std::string       name;
+    LLUUID            thumbnail_id;
+    bool              favorite;
+    bool              worn;
 };
 
-using InventoryObjectFixture = std::variant<InventoryCategoryFixture, InventoryNotecardFixture>;
+using InventoryObjectFixture = std::variant<InventoryCategoryFixture, InventoryItemFixture>;
 
 struct InventoryFixtureData
 {

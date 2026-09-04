@@ -6,6 +6,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from typing import Annotated, Any, Final, Literal, TypeAlias, TypeVar
 
 from pydantic import (
+    AfterValidator,
     BaseModel,
     BeforeValidator,
     ConfigDict,
@@ -40,6 +41,19 @@ PositiveInt = Annotated[int, Field(strict=True, gt=0)]
 NonNegativeInt = Annotated[int, Field(strict=True, ge=0)]
 PositiveFloat = Annotated[float, Field(strict=True, gt=0)]
 Item = TypeVar("Item")
+
+
+def _inventory_name(value: str) -> str:
+    if len(value.encode("utf-8")) > 63:
+        raise ValueError("inventory names must be at most 63 UTF-8 bytes")
+    return value
+
+
+InventoryName = Annotated[
+    str,
+    StringConstraints(min_length=1, max_length=63),
+    AfterValidator(_inventory_name),
+]
 
 
 def _freeze_sequence(value: Any) -> Any:
@@ -134,11 +148,51 @@ class AgentFixtureContract(ContractModel):
     name: NonEmptyString
 
 
-class InventoryEntryContract(ContractModel):
+class InventoryEntryBase(ContractModel):
     id: UuidString
     parent_id: UuidString = Field(alias="parentId")
-    kind: Literal["root", "folder", "notecard"]
-    name: NonEmptyString
+    name: InventoryName
+
+
+class InventoryRootEntryContract(InventoryEntryBase):
+    kind: Literal["root"]
+
+
+class InventoryFolderEntryContract(InventoryEntryBase):
+    kind: Literal["folder"]
+    favorite: bool = False
+    thumbnail_id: UuidString | None = Field(default=None, alias="thumbnailId")
+
+
+class InventoryItemEntryContract(InventoryEntryBase):
+    kind: Literal[
+        "animation",
+        "gesture",
+        "landmark",
+        "material",
+        "notecard",
+        "script",
+        "sound",
+        "texture",
+    ]
+    favorite: bool = False
+    thumbnail_id: UuidString | None = Field(default=None, alias="thumbnailId")
+
+
+class InventoryWornItemEntryContract(InventoryEntryBase):
+    kind: Literal["object", "wearable"]
+    favorite: bool = False
+    thumbnail_id: UuidString | None = Field(default=None, alias="thumbnailId")
+    worn: bool = False
+
+
+InventoryEntryContract: TypeAlias = Annotated[
+    InventoryRootEntryContract
+    | InventoryFolderEntryContract
+    | InventoryItemEntryContract
+    | InventoryWornItemEntryContract,
+    Field(discriminator="kind"),
+]
 
 
 class AvatarNameFixtureContract(ContractModel):
@@ -163,7 +217,9 @@ class FixtureContract(VersionedContract):
         if len(roots) != 1 or int(roots[0].parent_id.replace("-", ""), 16) != 0:
             raise ValueError("inventory must contain one root with a null parent")
         folders = {
-            entry.id.lower() for entry in self.inventory if entry.kind != "notecard"
+            entry.id.lower()
+            for entry in self.inventory
+            if entry.kind in ("root", "folder")
         }
         for entry in self.inventory:
             if entry.kind != "root" and entry.parent_id.lower() not in folders:

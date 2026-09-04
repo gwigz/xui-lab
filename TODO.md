@@ -44,12 +44,12 @@ Explorer. The changes belong in XUI Lab or its Alchemy adapter.
 
 ## Add useful visual test data
 
-- [ ] Expand the Inventory Explorer fixture with nested folders, long names,
+- [x] Expand the Inventory Explorer fixture with nested folders, long names,
   several item types, folder counts, worn items, favorites, and enough entries
   to exercise scrolling.
 - [ ] Provide deterministic local thumbnails through the texture-fetch system
   boundary.
-- [ ] Keep all fixture identifiers stable for scenario selectors.
+- [x] Keep all fixture identifiers stable for scenario selectors.
 - [ ] Add scenarios that cover real thumbnails, fallback artwork, count badges,
   long labels, and scroll boundaries.
 

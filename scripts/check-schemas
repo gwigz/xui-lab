@@ -5,6 +5,7 @@ repository_root=$(git rev-parse --show-toplevel)
 cd "$repository_root"
 
 ./scripts/generate-schemas --check
+./scripts/generate-inventory-fixture --check
 check-jsonschema --check-metaschema schemas/*.schema.json
 check-jsonschema --schemafile schemas/forks.schema.json forks.json
 check-jsonschema --schemafile schemas/adapter.schema.json adapters/*/adapter.json

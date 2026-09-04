@@ -407,7 +407,37 @@
         },
         "inventory": {
           "items": {
-            "$ref": "#/$defs/InventoryEntryContract"
+            "discriminator": {
+              "mapping": {
+                "animation": "#/$defs/InventoryItemEntryContract",
+                "folder": "#/$defs/InventoryFolderEntryContract",
+                "gesture": "#/$defs/InventoryItemEntryContract",
+                "landmark": "#/$defs/InventoryItemEntryContract",
+                "material": "#/$defs/InventoryItemEntryContract",
+                "notecard": "#/$defs/InventoryItemEntryContract",
+                "object": "#/$defs/InventoryWornItemEntryContract",
+                "root": "#/$defs/InventoryRootEntryContract",
+                "script": "#/$defs/InventoryItemEntryContract",
+                "sound": "#/$defs/InventoryItemEntryContract",
+                "texture": "#/$defs/InventoryItemEntryContract",
+                "wearable": "#/$defs/InventoryWornItemEntryContract"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/InventoryRootEntryContract"
+              },
+              {
+                "$ref": "#/$defs/InventoryFolderEntryContract"
+              },
+              {
+                "$ref": "#/$defs/InventoryItemEntryContract"
+              },
+              {
+                "$ref": "#/$defs/InventoryWornItemEntryContract"
+              }
+            ]
           },
           "minItems": 1,
           "title": "Inventory",
@@ -592,24 +622,26 @@
       "title": "InstallCapabilitiesCommand",
       "type": "object"
     },
-    "InventoryEntryContract": {
+    "InventoryFolderEntryContract": {
       "additionalProperties": false,
       "properties": {
+        "favorite": {
+          "default": false,
+          "title": "Favorite",
+          "type": "boolean"
+        },
         "id": {
           "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
           "title": "Id",
           "type": "string"
         },
         "kind": {
-          "enum": [
-            "root",
-            "folder",
-            "notecard"
-          ],
+          "const": "folder",
           "title": "Kind",
           "type": "string"
         },
         "name": {
+          "maxLength": 63,
           "minLength": 1,
           "title": "Name",
           "type": "string"
@@ -618,15 +650,89 @@
           "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
           "title": "Parentid",
           "type": "string"
+        },
+        "thumbnailId": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Thumbnailid"
         }
       },
       "required": [
         "id",
         "parentId",
-        "kind",
-        "name"
+        "name",
+        "kind"
       ],
-      "title": "InventoryEntryContract",
+      "title": "InventoryFolderEntryContract",
+      "type": "object"
+    },
+    "InventoryItemEntryContract": {
+      "additionalProperties": false,
+      "properties": {
+        "favorite": {
+          "default": false,
+          "title": "Favorite",
+          "type": "boolean"
+        },
+        "id": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "animation",
+            "gesture",
+            "landmark",
+            "material",
+            "notecard",
+            "script",
+            "sound",
+            "texture"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 63,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "parentId": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "title": "Parentid",
+          "type": "string"
+        },
+        "thumbnailId": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Thumbnailid"
+        }
+      },
+      "required": [
+        "id",
+        "parentId",
+        "name",
+        "kind"
+      ],
+      "title": "InventoryItemEntryContract",
       "type": "object"
     },
     "InventoryQueryCommand": {
@@ -654,6 +760,100 @@
         "kind"
       ],
       "title": "InventoryQueryCommand",
+      "type": "object"
+    },
+    "InventoryRootEntryContract": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "root",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 63,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "parentId": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "title": "Parentid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "parentId",
+        "name",
+        "kind"
+      ],
+      "title": "InventoryRootEntryContract",
+      "type": "object"
+    },
+    "InventoryWornItemEntryContract": {
+      "additionalProperties": false,
+      "properties": {
+        "favorite": {
+          "default": false,
+          "title": "Favorite",
+          "type": "boolean"
+        },
+        "id": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "object",
+            "wearable"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 63,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "parentId": {
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "title": "Parentid",
+          "type": "string"
+        },
+        "thumbnailId": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Thumbnailid"
+        },
+        "worn": {
+          "default": false,
+          "title": "Worn",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "parentId",
+        "name",
+        "kind"
+      ],
+      "title": "InventoryWornItemEntryContract",
       "type": "object"
     },
     "KeyInputCommand": {

@@ -20,10 +20,296 @@
       "name": "Lab Fixtures"
     },
     {
+      "id": "20000000-0000-4000-8000-000000000003",
+      "parentId": "20000000-0000-4000-8000-000000000002",
+      "kind": "folder",
+      "name": "Visual Samples"
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000004",
+      "parentId": "20000000-0000-4000-8000-000000000003",
+      "kind": "folder",
+      "name": "Clothing & Wearables"
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000005",
+      "parentId": "20000000-0000-4000-8000-000000000003",
+      "kind": "folder",
+      "name": "Media & Assets",
+      "favorite": true
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000006",
+      "parentId": "20000000-0000-4000-8000-000000000003",
+      "kind": "folder",
+      "name": "Nested Projects"
+    },
+    {
+      "id": "20000000-0000-4000-8000-000000000007",
+      "parentId": "20000000-0000-4000-8000-000000000006",
+      "kind": "folder",
+      "name": "Archive 2026"
+    },
+    {
       "id": "30000000-0000-4000-8000-000000000001",
       "parentId": "20000000-0000-4000-8000-000000000002",
       "kind": "notecard",
       "name": "Known Notecard"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000002",
+      "parentId": "20000000-0000-4000-8000-000000000005",
+      "kind": "landmark",
+      "name": "Favorite Sandbox Landmark",
+      "favorite": true
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000003",
+      "parentId": "20000000-0000-4000-8000-000000000004",
+      "kind": "wearable",
+      "name": "Worn Indigo Field Jacket",
+      "worn": true
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000004",
+      "parentId": "20000000-0000-4000-8000-000000000004",
+      "kind": "object",
+      "name": "Canvas Satchel Attachment",
+      "worn": true
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000005",
+      "parentId": "20000000-0000-4000-8000-000000000005",
+      "kind": "texture",
+      "name": "Cobalt Fabric Swatch"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000006",
+      "parentId": "20000000-0000-4000-8000-000000000005",
+      "kind": "sound",
+      "name": "Rain on the Studio Roof"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000007",
+      "parentId": "20000000-0000-4000-8000-000000000005",
+      "kind": "animation",
+      "name": "Careful Wave Animation"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000008",
+      "parentId": "20000000-0000-4000-8000-000000000005",
+      "kind": "gesture",
+      "name": "Friendly Hello Gesture"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000009",
+      "parentId": "20000000-0000-4000-8000-000000000005",
+      "kind": "script",
+      "name": "Gallery Lighting Controller"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000010",
+      "parentId": "20000000-0000-4000-8000-000000000005",
+      "kind": "material",
+      "name": "Brushed Copper PBR Material"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000011",
+      "parentId": "20000000-0000-4000-8000-000000000006",
+      "kind": "notecard",
+      "name": "WWWWWWWW Wide inventory item name for truncation testing WWWWWW"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000012",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "notecard",
+      "name": "Archive sample 01 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000013",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "object",
+      "name": "Archive sample 02 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000014",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "notecard",
+      "name": "Archive sample 03 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000015",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "object",
+      "name": "Archive sample 04 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000016",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "notecard",
+      "name": "Archive sample 05 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000017",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "object",
+      "name": "Archive sample 06 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000018",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "notecard",
+      "name": "Archive sample 07 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000019",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "object",
+      "name": "Archive sample 08 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000020",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "notecard",
+      "name": "Archive sample 09 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000021",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "object",
+      "name": "Archive sample 10 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000022",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "notecard",
+      "name": "Archive sample 11 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000023",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "object",
+      "name": "Archive sample 12 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000024",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "notecard",
+      "name": "Archive sample 13 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000025",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "object",
+      "name": "Archive sample 14 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000026",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "notecard",
+      "name": "Archive sample 15 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000027",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "object",
+      "name": "Archive sample 16 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000028",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "notecard",
+      "name": "Archive sample 17 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000029",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "object",
+      "name": "Archive sample 18 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000030",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "notecard",
+      "name": "Archive sample 19 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000031",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "object",
+      "name": "Archive sample 20 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000032",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "notecard",
+      "name": "Archive sample 21 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000033",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "object",
+      "name": "Archive sample 22 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000034",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "notecard",
+      "name": "Archive sample 23 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000035",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "object",
+      "name": "Archive sample 24 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000036",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "notecard",
+      "name": "Archive sample 25 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000037",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "object",
+      "name": "Archive sample 26 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000038",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "notecard",
+      "name": "Archive sample 27 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000039",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "object",
+      "name": "Archive sample 28 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000040",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "notecard",
+      "name": "Archive sample 29 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000041",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "object",
+      "name": "Archive sample 30 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000042",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "notecard",
+      "name": "Archive sample 31 — deterministic scrolling row"
+    },
+    {
+      "id": "30000000-0000-4000-8000-000000000043",
+      "parentId": "20000000-0000-4000-8000-000000000007",
+      "kind": "object",
+      "name": "Archive sample 32 — deterministic scrolling row"
     }
   ],
   "avatarNames": [
