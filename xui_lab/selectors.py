@@ -42,6 +42,7 @@ from .operations import (
 
 CLASS_ROLES: dict[str, str] = {
     "LLButton": "button",
+    "LLMenuButton": "button",
     "LLCheckBoxCtrl": "checkbox",
     "LLRadioCtrl": "radio",
     "LLLineEditor": "textbox",
@@ -75,6 +76,7 @@ EXCERPT_KEYS = (
     "screen_rect",
     "local_rect",
     "clipping_rect",
+    "tooltip",
 )
 
 
@@ -123,6 +125,7 @@ def node_role(node: dict[str, Any]) -> str | None:
     runtime_class = node.get("class")
     if not isinstance(runtime_class, str) or not runtime_class:
         return None
+    runtime_class = runtime_class.lstrip("0123456789")
     mapped = CLASS_ROLES.get(runtime_class)
     if mapped is not None:
         return mapped
@@ -133,6 +136,14 @@ def node_role(node: dict[str, Any]) -> str | None:
 def node_label(node: dict[str, Any]) -> str | None:
     label = node.get("label")
     return label if isinstance(label, str) and label else None
+
+
+def node_accessible_name(node: dict[str, Any]) -> str | None:
+    label = node_label(node)
+    if label is not None:
+        return label
+    tooltip = node.get("tooltip")
+    return tooltip if isinstance(tooltip, str) and tooltip else None
 
 
 def node_placeholder(node: dict[str, Any]) -> str | None:
@@ -185,7 +196,9 @@ def match_nodes(
     if isinstance(selector, RoleSelector):
         matches = [node for node in nodes if node_role(node) == selector.role]
         if selector.name is not None:
-            matches = [node for node in matches if node_label(node) == selector.name]
+            matches = [
+                node for node in matches if node_accessible_name(node) == selector.name
+            ]
         return matches
     if isinstance(selector, LabelSelector):
         return [node for node in nodes if node_label(node) == selector.label]
@@ -226,19 +239,20 @@ def _count(tree: Any, selector: Selector) -> int:
 def rank_locator(node: dict[str, Any], tree: Any) -> RankedLocator:
     role = node_role(node)
     label = node_label(node)
+    accessible_name = node_accessible_name(node)
     placeholder = node_placeholder(node)
     text = node_text(node)
     model_id = node.get("model_id")
     control_id = node.get("control_id")
     path = node.get("path")
 
-    if role is not None and label is not None:
-        selector: Selector = role_selector(role, label)
+    if role is not None and accessible_name is not None:
+        selector: Selector = role_selector(role, accessible_name)
         count = _count(tree, selector)
         if count == 1:
             return RankedLocator(
                 selector=selector,
-                python=f"window.get_by_role({role!r}, name={label!r})",
+                python=f"window.get_by_role({role!r}, name={accessible_name!r})",
                 kind="role",
                 match_count=1,
                 signals=("role", "name"),

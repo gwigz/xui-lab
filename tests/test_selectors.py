@@ -23,6 +23,7 @@ def node(
     runtime_class: str,
     label: str | None = None,
     placeholder: str | None = None,
+    tooltip: str | None = None,
     model_id: str | None = None,
     visible_chain: bool = True,
     enabled_chain: bool = True,
@@ -40,6 +41,8 @@ def node(
         result["label"] = label
     if placeholder is not None:
         result["placeholder"] = placeholder
+    if tooltip is not None:
+        result["tooltip"] = tooltip
     if model_id is not None:
         result["model_id"] = model_id
     if value is not None:
@@ -107,6 +110,31 @@ class SelectorTests(unittest.TestCase):
             "fallback=no unique user-visible name",
             explain_ranked_locator(ranked),
         )
+
+    def test_icon_button_tooltip_is_its_accessible_role_name(self) -> None:
+        button = node(
+            path="/root/tree_view_button",
+            control_id="tree-view",
+            runtime_class="8LLButton",
+            tooltip="Tree view",
+        )
+        tree = {
+            "path": "/root",
+            "control_id": "root",
+            "class": "LLPanel",
+            "visible_chain": True,
+            "children": [button],
+        }
+
+        self.assertEqual(
+            button,
+            require_unique(tree, role_selector("button", "Tree view")),
+        )
+        ranked = rank_locator(button, tree)
+        self.assertEqual(
+            "window.get_by_role('button', name='Tree view')", ranked.python
+        )
+        self.assertEqual(("role", "name"), ranked.signals)
 
     def test_hidden_controls_do_not_match_label_locators(self) -> None:
         tree = {

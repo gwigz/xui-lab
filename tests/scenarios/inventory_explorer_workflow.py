@@ -85,6 +85,12 @@ def _assert_selection(window: Window, view_button: str) -> None:
 def run(window: Window) -> None:
     window.wait_for_stable()
 
+    tree_view = window.get_by_role("button", name="Tree view").resolve()
+    if tree_view.path != TREE_VIEW:
+        raise AssertionFailure(
+            f"Tree view role locator resolved to {tree_view.path}, expected {TREE_VIEW}"
+        )
+
     folder = window.get_by_model_id(LAB_FIXTURES)
     folder.double_click().expect_handled()
     folder.expect("open", True)

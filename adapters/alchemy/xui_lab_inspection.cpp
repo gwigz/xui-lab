@@ -63,6 +63,13 @@ void addGalleryState(LLSD& node, LLInventoryGalleryItem* item)
     node["model_id"] = item->getUUID();
 }
 
+void addAccessibleState(LLSD& node, const LLView& view)
+{
+    const std::string tooltip = view.getToolTip();
+    if (!tooltip.empty())
+        node["tooltip"] = tooltip;
+}
+
 LLInventoryGalleryItem* findGalleryItem(LLView* view, const LLUUID& id)
 {
     if (auto* item = dynamic_cast<LLInventoryGalleryItem*>(view); item && item->getUUID() == id)
@@ -160,6 +167,7 @@ LLSD buildFolderTree(LLFolderViewItem* item, const std::string& parent_path, con
 {
     LLSD node          = item->getInfo();
     node["control_id"] = requireControlId(control_ids, item);
+    addAccessibleState(node, *item);
     addFolderState(node, item);
     const std::string segment = node.has("model_id") ? "@" + node["model_id"].asString() : item->getName();
     node["path"]              = parent_path + "/" + segment;
@@ -189,6 +197,7 @@ LLSD buildTree(LLView* view, const ControlIds& control_ids)
 {
     LLSD node          = view->getInfo();
     node["control_id"] = requireControlId(control_ids, view);
+    addAccessibleState(node, *view);
     if (auto* control = dynamic_cast<LLUICtrl*>(view))
         node["value"] = control->getValue();
     if (auto* menu_item = dynamic_cast<LLMenuItemGL*>(view))
