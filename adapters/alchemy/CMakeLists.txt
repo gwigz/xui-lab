@@ -9,13 +9,25 @@ get_target_property(alchemy_newview_binary_dir ${VIEWER_BINARY_NAME} BINARY_DIR)
 get_target_property(alchemy_viewer_link_libraries ${VIEWER_BINARY_NAME} LINK_LIBRARIES)
 get_target_property(alchemy_viewer_runtime_dir ${VIEWER_BINARY_NAME} RUNTIME_OUTPUT_DIRECTORY)
 
-set(alchemy_xui_subject_sources
+set(alchemy_xui_inventory_explorer_sources
   alfloaterinventoryexplorer.cpp
   alpanelinventoryexplorer.cpp
   alpanelinventoryholdingtray.cpp
   alpanelinventoryinspector.cpp
   )
-list(TRANSFORM alchemy_xui_subject_sources PREPEND "${alchemy_newview_source_dir}/")
+list(TRANSFORM alchemy_xui_inventory_explorer_sources PREPEND "${alchemy_newview_source_dir}/")
+
+set(alchemy_xui_has_inventory_explorer TRUE)
+foreach (source IN LISTS alchemy_xui_inventory_explorer_sources)
+  if (NOT EXISTS "${source}")
+    set(alchemy_xui_has_inventory_explorer FALSE)
+  endif ()
+endforeach ()
+
+set(alchemy_xui_subject_sources)
+if (alchemy_xui_has_inventory_explorer)
+  set(alchemy_xui_subject_sources ${alchemy_xui_inventory_explorer_sources})
+endif ()
 
 set(alchemy_xui_support_sources)
 foreach (source IN LISTS alchemy_newview_sources)
@@ -35,9 +47,13 @@ list(REMOVE_ITEM alchemy_xui_support_sources
 
 list(FILTER alchemy_viewer_link_libraries EXCLUDE REGEX "llwebrtc")
 
-add_library(alchemy_xui_subjects OBJECT ${alchemy_xui_subject_sources})
 add_library(alchemy_xui_support STATIC ${alchemy_xui_support_sources})
-foreach (target alchemy_xui_subjects alchemy_xui_support)
+set(alchemy_xui_newview_targets alchemy_xui_support)
+if (alchemy_xui_has_inventory_explorer)
+  add_library(alchemy_xui_subjects OBJECT ${alchemy_xui_subject_sources})
+  list(APPEND alchemy_xui_newview_targets alchemy_xui_subjects)
+endif ()
+foreach (target IN LISTS alchemy_xui_newview_targets)
   target_include_directories(${target} PUBLIC
     "${alchemy_newview_source_dir}"
     "${alchemy_newview_binary_dir}"
@@ -52,7 +68,9 @@ target_include_directories(alchemy_newview_ui INTERFACE
   "${alchemy_newview_source_dir}"
   "${alchemy_newview_binary_dir}"
   )
-target_sources(alchemy_newview_ui INTERFACE $<TARGET_OBJECTS:alchemy_xui_subjects>)
+if (alchemy_xui_has_inventory_explorer)
+  target_sources(alchemy_newview_ui INTERFACE $<TARGET_OBJECTS:alchemy_xui_subjects>)
+endif ()
 target_link_libraries(alchemy_newview_ui INTERFACE
   alchemy_xui_support
   ${alchemy_viewer_link_libraries}
@@ -94,6 +112,7 @@ list(TRANSFORM alchemy_xui_adapter_sources PREPEND "${alchemy_xui_adapter_source
 
 add_executable(xui-lab ${alchemy_xui_adapter_sources} "${xui_lab_fork_identity_cpp}")
 target_compile_features(xui-lab PRIVATE cxx_std_20)
+target_compile_definitions(xui-lab PRIVATE XUI_LAB_HAS_INVENTORY_EXPLORER=$<BOOL:${alchemy_xui_has_inventory_explorer}>)
 target_include_directories(xui-lab PRIVATE
   "${alchemy_xui_adapter_source_dir}"
   "${alchemy_newview_source_dir}"

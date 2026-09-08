@@ -8,7 +8,9 @@
 
 #include "altextureslot.h"
 #include "llaccordionctrl.h"
+#if XUI_LAB_HAS_INVENTORY_EXPLORER
 #include "alfloaterinventoryexplorer.h"
+#endif
 #include "llcallbacklist.h"
 #include "llcontrol.h"
 #include "llcriticaldamp.h"
@@ -619,10 +621,17 @@ public:
         {
             LLFloaterReg::add("test_widgets", "floater_test_widgets.xml", &LLFloaterReg::build<LLFloater>);
         }
+#if XUI_LAB_HAS_INVENTORY_EXPLORER
         else
         {
             LLFloaterReg::add("inventory_explorer", "floater_al_inventory_explorer.xml", &LLFloaterReg::build<ALFloaterInventoryExplorer>);
         }
+#else
+        else
+        {
+            throw Error("subject", "selected viewer does not provide Inventory Explorer");
+        }
+#endif
         postEventApi("LLFloaterReg", LLSDMap("op", "showInstance")("name", std::string(subjectName(subject)))("focus", true));
         mFloater = LLFloaterReg::findInstance(std::string(subjectName(subject)));
         if (!mFloater)

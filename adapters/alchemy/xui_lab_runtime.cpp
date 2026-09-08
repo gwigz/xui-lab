@@ -130,7 +130,7 @@ private:
             throw LabError("subject", "subject must be a string");
         if (value.asString() == "test_widgets")
             return Subject::TestWidgets;
-        if (value.asString() == "inventory_explorer")
+        if (XUI_LAB_HAS_INVENTORY_EXPLORER && value.asString() == "inventory_explorer")
             return Subject::InventoryExplorer;
         throw LabError("subject", "unsupported registered subject: " + value.asString());
     }
