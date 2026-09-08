@@ -11,6 +11,8 @@ click it. The clicks go through normal LLUI.
 
 ![The inspector showing the production test floater in T3 Code](.github/assets/xui-lab-in-t3-code.png)
 
+![CLI actions and the captured test floater in T3 Code](.github/assets/xui-lab-cli-in-t3-code.png)
+
 ## Get a floater on screen
 
 You need an Alchemy checkout and a matching `xui-lab` binary. The binary embeds
