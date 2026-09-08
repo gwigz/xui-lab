@@ -707,7 +707,16 @@ class InteractiveCliCommand(CliCommandBase):
     no_browser: bool = Field(alias="noBrowser")
 
 
-class SessionStartCliCommand(CliCommandBase):
+class InspectorAttachFields(ContractModel):
+    """Shared fields for attaching the browser inspector to a session."""
+
+    inspector: bool = False
+    inspector_host: NonEmptyString = Field(default="127.0.0.1", alias="inspectorHost")
+    inspector_port: NonNegativeInt = Field(default=0, alias="inspectorPort")
+    open_browser: bool = Field(default=False, alias="openBrowser")
+
+
+class SessionStartCliCommand(CliCommandBase, InspectorAttachFields):
     command: Literal["session"]
     session_command: Literal["start"] = Field(alias="sessionCommand")
     subject: NonEmptyString
@@ -738,7 +747,7 @@ class SessionJsonlCliCommand(CliCommandBase):
     session_id: NonEmptyString = Field(alias="sessionId")
 
 
-class SessionServeCliCommand(CliCommandBase):
+class SessionServeCliCommand(CliCommandBase, InspectorAttachFields):
     command: Literal["session"]
     session_command: Literal["serve"] = Field(alias="sessionCommand")
     session_id: NonEmptyString = Field(alias="sessionId")

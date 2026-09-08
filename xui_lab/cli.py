@@ -399,6 +399,31 @@ def _add_dry_run(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_inspector_attach(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--inspector",
+        action="store_true",
+        help="Also serve the browser inspector against this session.",
+    )
+    parser.add_argument(
+        "--inspector-host",
+        default="127.0.0.1",
+        help="Loopback host for the inspector (default 127.0.0.1).",
+    )
+    parser.add_argument(
+        "--inspector-port",
+        type=int,
+        default=0,
+        help="Inspector port (default 0 picks a free port).",
+    )
+    parser.add_argument(
+        "--open",
+        dest="open_browser",
+        action="store_true",
+        help="Open the inspector URL in a browser on start.",
+    )
+
+
 def _add_selector_flags(parser: argparse.ArgumentParser) -> None:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--control-id")
@@ -523,6 +548,7 @@ def parser() -> argparse.ArgumentParser:
     start.add_argument("--height", type=int, default=800)
     start.add_argument("--ui-scale", type=float, default=1.0)
     start.add_argument("--artifacts", default=str(default_artifact_root()))
+    _add_inspector_attach(start)
     _add_jq(start)
     status = session_commands.add_parser(
         "status", help="Show one session or every session."
@@ -540,6 +566,7 @@ def parser() -> argparse.ArgumentParser:
     _add_jq(jsonl)
     serve = session_commands.add_parser("serve")
     serve.add_argument("--session-id", required=True)
+    _add_inspector_attach(serve)
     _add_oneshot_commands(commands)
     record = commands.add_parser("record", help="Save replayable session actions.")
     record.add_argument("--session", required=True)
@@ -605,6 +632,12 @@ def parse_command(argv: list[str] | None = None) -> CliCommand:
         command["artifactId"] = command.pop("artifact_id")
     if "no_browser" in command:
         command["noBrowser"] = command.pop("no_browser")
+    if "inspector_host" in command:
+        command["inspectorHost"] = command.pop("inspector_host")
+    if "inspector_port" in command:
+        command["inspectorPort"] = command.pop("inspector_port")
+    if "open_browser" in command:
+        command["openBrowser"] = command.pop("open_browser")
     if "session_command" in command:
         command["sessionCommand"] = command.pop("session_command")
     if "session_id" in command:

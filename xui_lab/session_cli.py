@@ -71,6 +71,7 @@ def public_session(record: SessionFile, request_id: str) -> dict[str, Any]:
         },
         "capabilities": list(record.capabilities),
         "socketPath": record.socket_path,
+        **({"inspector": record.inspector_url} if record.inspector_url else {}),
     }
 
 
@@ -189,6 +190,18 @@ def cmd_session_start(
     ]
     if command.timeout is not None:
         argv.extend(["--timeout", str(command.timeout)])
+    if command.inspector:
+        argv.extend(
+            [
+                "--inspector",
+                "--inspector-host",
+                command.inspector_host,
+                "--inspector-port",
+                str(command.inspector_port),
+            ]
+        )
+        if command.open_browser:
+            argv.append("--open")
     process = subprocess.Popen(
         argv,
         cwd=str(ROOT),
@@ -339,33 +352,10 @@ def cmd_session_serve(command: SessionServeCliCommand) -> int:
     )
     fixture = Path(record.fixture) if record.fixture else None
     try:
-        with lab.open(
-            artifact_id=record.session_id,
-            subject=record.subject,
-            viewport=Viewport(record.width, record.height, record.ui_scale),
-            capabilities=frozenset(Capability(value) for value in record.capabilities),
-            fixture=fixture,
-            request_id=record.request_id,
-            request_timeout=timeout,
-            shutdown_timeout=timeout,
-        ) as window:
-
-            def on_ready(pid: int) -> None:
-                write_session(
-                    record.model_copy(
-                        update={
-                            "status": "ready",
-                            "pid": pid,
-                            "viewer_pid": window.runtime.pid,
-                            "fork_commit": window._fork_commit,
-                        }
-                    )
-                )
-
-            def handler(inner: Any) -> dict[str, Any]:
-                return apply_window_command(window, inner)
-
-            serve_until_closed(record, handler, on_ready=on_ready)
+        if command.inspector:
+            _serve_with_inspector(command, record, lab, fixture)
+        else:
+            _serve_headless(record, lab, fixture, timeout)
     except Exception as error:
         write_session(
             record.model_copy(update={"status": "closed", "error": str(error)})
@@ -373,6 +363,110 @@ def cmd_session_serve(command: SessionServeCliCommand) -> int:
         raise
     remove_session(command.session_id)
     return 0
+
+
+def _serve_headless(
+    record: SessionFile,
+    lab: Lab,
+    fixture: Path | None,
+    timeout: float,
+) -> None:
+    with lab.open(
+        artifact_id=record.session_id,
+        subject=record.subject,
+        viewport=Viewport(record.width, record.height, record.ui_scale),
+        capabilities=frozenset(Capability(value) for value in record.capabilities),
+        fixture=fixture,
+        request_id=record.request_id,
+        request_timeout=timeout,
+        shutdown_timeout=timeout,
+    ) as window:
+
+        def on_ready(pid: int) -> None:
+            write_session(
+                record.model_copy(
+                    update={
+                        "status": "ready",
+                        "pid": pid,
+                        "viewer_pid": window.runtime.pid,
+                        "fork_commit": window._fork_commit,
+                    }
+                )
+            )
+
+        def handler(inner: Any) -> dict[str, Any]:
+            return apply_window_command(window, inner)
+
+        serve_until_closed(record, handler, on_ready=on_ready)
+
+
+def _serve_with_inspector(
+    command: SessionServeCliCommand,
+    record: SessionFile,
+    lab: Lab,
+    fixture: Path | None,
+) -> None:
+    from .cli import adapter_config
+    from .fixtures import discover_fixtures
+    from .inspector_http import start_inspector
+    from .interactive import InteractiveConfig, InteractiveSession
+    from .scenarios import discover_scenarios
+
+    adapter = adapter_config(lab.fork)
+    subjects = {
+        name: frozenset(Capability(value) for value in subject.required_capabilities)
+        for name, subject in adapter.subjects.items()
+    }
+    session = InteractiveSession(
+        lab,
+        InteractiveConfig(
+            subject=record.subject,
+            viewport=Viewport(record.width, record.height, record.ui_scale),
+            fixture=fixture,
+            artifact_id=record.session_id,
+            request_id=record.request_id,
+        ),
+        subjects,
+        discover_fixtures(ROOT),
+        discover_scenarios(ROOT, str(lab.fork.id)),
+        default_fixtures={
+            name: subject.default_fixture
+            for name, subject in adapter.subjects.items()
+            if subject.default_fixture is not None
+        },
+    )
+    try:
+        server = start_inspector(
+            session,
+            host=command.inspector_host,
+            port=command.inspector_port,
+            open_browser=command.open_browser,
+        )
+    except BaseException:
+        session.close()
+        raise
+
+    def on_ready(pid: int) -> None:
+        write_session(
+            record.model_copy(
+                update={
+                    "status": "ready",
+                    "pid": pid,
+                    "viewer_pid": session.window.runtime.pid,
+                    "fork_commit": session.window._fork_commit,
+                    "inspector_url": server.url,
+                }
+            )
+        )
+
+    def handler(inner: Any) -> dict[str, Any]:
+        return server.worker.run(lambda: apply_window_command(session.window, inner))
+
+    try:
+        serve_until_closed(record, handler, on_ready=on_ready)
+    finally:
+        server.stop()
+        session.close()
 
 
 def cmd_session_bound(command: Any) -> int:

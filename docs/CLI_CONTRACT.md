@@ -65,6 +65,13 @@ on status and close. `--dry-run` on `session close`, `reload`, and `run` shows
 the session, subject, or artifact directory that would change without
 reloading, pruning, or terminating. Input gestures do not accept `--dry-run`.
 
+`session start --inspector` also serves the browser inspector against the same
+viewer. `session start` and `session status` then add an `inspector` field with
+the loopback URL, and the socket and the browser drive one window through one
+worker thread. `--inspector-host` and `--inspector-port` bind the HTTP server,
+where port `0` picks a free port. `--open` opens the URL in a browser.
+`session close` stops the HTTP server with the session.
+
 `session jsonl SESSION_ID` reads one typed CLI command per stdin line and
 writes one result or `ErrorRecord` per stdout line. One-shot commands such as
 `tree`, `get`, `click`, `double-click`, `right-click`, `fill`, `press`,

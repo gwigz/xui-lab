@@ -33,6 +33,7 @@ from xui_lab.inspector_http import (
     inspector_openapi_hash,
     inspector_origin_allowed,
     inspector_public_url,
+    start_inspector,
 )
 
 SESSION_TOKEN = "test-inspector-token"
@@ -721,6 +722,65 @@ class InspectorAsgiTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual([], worker._subscribers)
         finally:
             worker.close()
+
+
+class InspectorWorkerRunTests(unittest.TestCase):
+    def test_run_executes_callable_on_the_worker_thread(self) -> None:
+        session = SessionStub()
+        worker = InspectorWorker(session)
+        worker.start()
+        seen: dict[str, Any] = {}
+
+        def call() -> dict[str, Any]:
+            seen["thread"] = threading.current_thread().name
+            session.state_value["recording"] = ["ran"]
+            return {"ok": True, "value": 7}
+
+        try:
+            result = worker.run(call, timeout=5)
+            state = worker.state()
+        finally:
+            worker.close()
+
+        self.assertEqual({"ok": True, "value": 7}, result)
+        self.assertEqual("xui-lab-inspector", seen["thread"])
+        # The call published state, so the recording change is visible.
+        self.assertEqual(["ran"], state["recording"])
+
+    def test_run_propagates_callable_errors(self) -> None:
+        worker = InspectorWorker(SessionStub())
+        worker.start()
+
+        def call() -> dict[str, Any]:
+            raise InputError("boom")
+
+        try:
+            with self.assertRaises(InputError):
+                worker.run(call, timeout=5)
+        finally:
+            worker.close()
+
+
+class StartInspectorTests(unittest.TestCase):
+    def test_serves_over_a_real_socket_and_shares_the_worker(self) -> None:
+        session = SessionStub()
+        server = start_inspector(session, host="127.0.0.1", port=0, open_browser=False)
+        try:
+            self.assertTrue(server.url.startswith("http://127.0.0.1:"))
+            client = httpx.Client(base_url=server.url)
+            index = client.get("/")
+            self.assertEqual(200, index.status_code)
+            self.assertIn("xui_lab_session", client.cookies)
+            state = client.get("/api/v1/state")
+            self.assertEqual(200, state.status_code)
+            self.assertEqual("root", state.json()["tree"]["control_id"])
+
+            marker = server.worker.run(lambda: {"driven": "by-socket"}, timeout=5)
+            self.assertEqual({"driven": "by-socket"}, marker)
+        finally:
+            server.stop()
+        self.assertFalse(server._thread.is_alive())
+        self.assertTrue(session.closed is False)  # start_inspector does not own it
 
 
 if __name__ == "__main__":

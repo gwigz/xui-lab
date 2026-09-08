@@ -186,6 +186,84 @@ class SessionStoreTests(unittest.TestCase):
         self.assertIsInstance(command, SessionStartCliCommand)
         assert isinstance(command, SessionStartCliCommand)
         self.assertEqual("test_widgets", command.subject)
+        self.assertFalse(command.inspector)
+        self.assertFalse(command.open_browser)
+        self.assertEqual(0, command.inspector_port)
+
+    def test_session_start_parses_inspector_flags(self) -> None:
+        command = parse_command(
+            [
+                "session",
+                "start",
+                "test_widgets",
+                "--runtime",
+                "/runtime",
+                "--inspector",
+                "--inspector-port",
+                "8899",
+                "--open",
+            ]
+        )
+        assert isinstance(command, SessionStartCliCommand)
+        self.assertTrue(command.inspector)
+        self.assertTrue(command.open_browser)
+        self.assertEqual("127.0.0.1", command.inspector_host)
+        self.assertEqual(8899, command.inspector_port)
+
+    def test_session_start_forwards_inspector_flags_to_serve(self) -> None:
+        executable = self.runtime / "xui-lab"
+        executable.write_text("runtime", encoding="utf-8")
+        command = parse_command(
+            [
+                "session",
+                "start",
+                "test_widgets",
+                "--runtime",
+                str(executable),
+                "--inspector",
+                "--inspector-port",
+                "7777",
+                "--open",
+            ]
+        )
+        assert isinstance(command, SessionStartCliCommand)
+        records: list[SessionFile] = []
+        captured: dict[str, list[str]] = {}
+
+        class ProcessStub:
+            pid = os.getpid()
+
+        def popen_stub(argv: list[str], **_kwargs: object) -> ProcessStub:
+            captured["argv"] = argv
+            return ProcessStub()
+
+        def ready(_session_id: str, _timeout: float) -> SessionFile:
+            return records[-1].model_copy(
+                update={"status": "ready", "inspector_url": "http://127.0.0.1:7777/"}
+            )
+
+        with (
+            patch("xui_lab.session_cli.write_session", side_effect=records.append),
+            patch("xui_lab.session_cli.subprocess.Popen", side_effect=popen_stub),
+            patch("xui_lab.session_cli.wait_until_ready", side_effect=ready),
+        ):
+            out = StringIO()
+            with redirect_stdout(out):
+                status = cmd_session_start(
+                    command,
+                    select_fork=select_fork,
+                    runtime_path=lambda _fork, _source, _explicit: executable,
+                    adapter_config=adapter_config,
+                )
+
+        self.assertEqual(0, status)
+        argv = captured["argv"]
+        self.assertIn("--inspector", argv)
+        self.assertEqual("7777", argv[argv.index("--inspector-port") + 1])
+        self.assertIn("--open", argv)
+        self.assertEqual(
+            "http://127.0.0.1:7777/", json.loads(out.getvalue())["inspector"]
+        )
 
     def test_session_start_uses_the_subject_default_fixture(self) -> None:
         executable = self.runtime / "xui-lab"

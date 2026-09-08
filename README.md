@@ -81,6 +81,12 @@ fresh session:
 The recording stores selectors and action arguments, not session IDs or
 request IDs. It is ordinary JSON intended for review and editing.
 
+Add `--inspector` to `session start` to also serve the browser inspector
+against that viewer. `session start` and `session status` then report an
+`inspector` URL, and the socket and the browser drive one window. `--open`
+opens the URL in a browser. `session close` stops the inspector with the
+session.
+
 `tree` and `get` return a short excerpt by default. The full tree lands in an
 artifact with path, size, and hash. `--include-tree` inlines the whole tree.
 `--fields` keeps a few keys. `--jq` runs a jq expression on the JSON

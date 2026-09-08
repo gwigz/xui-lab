@@ -44,6 +44,7 @@ class SessionFile(ContractModel):
     pid: int | None = None
     viewer_pid: int | None = Field(default=None, alias="viewerPid")
     fork_commit: str | None = Field(default=None, alias="forkCommit")
+    inspector_url: str | None = Field(default=None, alias="inspectorUrl")
     error: str | None = None
 
 

@@ -10,9 +10,10 @@ import queue
 import secrets
 import socket
 import threading
+import time
 import webbrowser
 from collections import deque
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from concurrent.futures import Future
 from concurrent.futures import TimeoutError as FutureTimeout
 from contextlib import asynccontextmanager
@@ -302,8 +303,9 @@ class _SessionEvent:
 
 @dataclass
 class _Job:
-    kind: Literal["state", "action"]
+    kind: Literal["state", "action", "call"]
     payload: dict[str, Any] | None = None
+    call: Callable[[], dict[str, Any]] | None = None
     future: Future[Any] = field(default_factory=Future)
 
 
@@ -443,6 +445,22 @@ class InspectorWorker:
             what="inspector action result",
         )
 
+    def run(
+        self,
+        call: Callable[[], dict[str, Any]],
+        *,
+        timeout: float = ACTION_TIMEOUT_SECONDS,
+    ) -> dict[str, Any]:
+        """Run a callable on the worker thread that owns the window.
+
+        Lets a second transport (the session Unix socket) drive the same
+        window as the browser inspector without racing it.
+        """
+        return require_object(
+            self._submit(_Job(kind="call", call=call), timeout=timeout),
+            what="session command result",
+        )
+
     def capture_path(self, version: int) -> Path | None:
         path = self._session.capture_path(version)
         if path is None:
@@ -532,6 +550,13 @@ class InspectorWorker:
                     raise InspectorLimitError(
                         "action result exceeds the inspector inline limit"
                     )
+                job.future.set_result(result)
+                return
+            if job.kind == "call":
+                if job.call is None:
+                    raise InputError("call job requires a callable")
+                result = freeze_json(job.call())
+                self._publish_state(request_id=None)
                 job.future.set_result(result)
                 return
             snapshot = self._publish_state(request_id=None)
@@ -1159,13 +1184,9 @@ def inspector_openapi_hash() -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def serve_inspector(
-    session: InspectorSession,
-    *,
-    host: str = "127.0.0.1",
-    port: int = 0,
-    open_browser: bool = True,
-) -> int:
+def _build_inspector(
+    session: InspectorSession, *, host: str, port: int, open_browser: bool
+) -> tuple[InspectorWorker, uvicorn.Server, socket.socket, str]:
     if not is_loopback_hostname(host):
         raise InputError("inspector must bind to a loopback address")
     assets_problem = inspector_assets_problem()
@@ -1194,7 +1215,19 @@ def serve_inspector(
         log_config=None,
         lifespan="on",
     )
-    server = uvicorn.Server(config)
+    return worker, uvicorn.Server(config), sock, url
+
+
+def serve_inspector(
+    session: InspectorSession,
+    *,
+    host: str = "127.0.0.1",
+    port: int = 0,
+    open_browser: bool = True,
+) -> int:
+    _unused_worker, server, sock, _url = _build_inspector(
+        session, host=host, port=port, open_browser=open_browser
+    )
     try:
         server.run(sockets=[sock])
     except KeyboardInterrupt:
@@ -1203,3 +1236,67 @@ def serve_inspector(
         sock.close()
         session.close()
     return 0
+
+
+class InspectorServer:
+    """A running inspector HTTP server on a background thread.
+
+    Unlike :func:`serve_inspector`, this does not own the session lifetime;
+    the caller closes the session after :meth:`stop`.
+    """
+
+    def __init__(
+        self,
+        *,
+        worker: InspectorWorker,
+        server: uvicorn.Server,
+        sock: socket.socket,
+        thread: threading.Thread,
+        url: str,
+    ) -> None:
+        self.worker = worker
+        self.url = url
+        self._server = server
+        self._sock = sock
+        self._thread = thread
+
+    def stop(self) -> None:
+        self._server.should_exit = True
+        self._thread.join(timeout=10)
+        self._sock.close()
+
+
+def start_inspector(
+    session: InspectorSession,
+    *,
+    host: str = "127.0.0.1",
+    port: int = 0,
+    open_browser: bool = False,
+    ready_timeout: float = 15.0,
+) -> InspectorServer:
+    worker, server, sock, url = _build_inspector(
+        session, host=host, port=port, open_browser=open_browser
+    )
+    # uvicorn's Server.install_signal_handlers() is already a no-op off the main
+    # thread, so running server.run in this worker thread leaves signals alone.
+    thread = threading.Thread(
+        target=server.run,
+        kwargs={"sockets": [sock]},
+        name="xui-lab-inspector-http",
+        daemon=True,
+    )
+    thread.start()
+    deadline = time.monotonic() + ready_timeout
+    while not server.started:
+        if not thread.is_alive():
+            sock.close()
+            raise RuntimeFailure("inspector HTTP server exited before it was ready")
+        if time.monotonic() > deadline:
+            server.should_exit = True
+            thread.join(timeout=5)
+            sock.close()
+            raise RuntimeFailure("inspector HTTP server did not become ready")
+        time.sleep(0.02)
+    return InspectorServer(
+        worker=worker, server=server, sock=sock, thread=thread, url=url
+    )
