@@ -7,7 +7,8 @@ namespace xui_lab
 enum class Subject
 {
     TestWidgets,
-    InventoryExplorer
+    InventoryExplorer,
+    Preferences
 };
 
 [[nodiscard]] constexpr std::string_view subjectName(Subject subject) noexcept
@@ -16,6 +17,8 @@ enum class Subject
     {
         case Subject::TestWidgets:
             return "test_widgets";
+        case Subject::Preferences:
+            return "preferences";
         case Subject::InventoryExplorer:
             return "inventory_explorer";
     }

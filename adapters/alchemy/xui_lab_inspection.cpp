@@ -5,6 +5,8 @@
 #include "xui_lab_error.h"
 #include "xui_lab_event_api.h"
 
+#include "llbutton.h"
+#include "llcheckboxctrl.h"
 #include "llfolderviewitem.h"
 #include "llfolderviewmodelinventory.h"
 #include "llinventorymodel.h"
@@ -45,9 +47,28 @@ constexpr std::array<std::string_view, 7> inventoryPanelNames()
              "all_items_grid" };
 }
 
+template<class Label>
+std::string folderLabel(const Label& label)
+{
+    if constexpr (std::is_same_v<Label, std::string>)
+        return label;
+    else
+        return wstring_to_utf8str(label);
+}
+
+template<class Thumbnail>
+void addThumbnailState(LLSD& node, Thumbnail& thumbnail)
+{
+    if constexpr (requires {
+                      thumbnail.hasImage();
+                      thumbnail.hasFallbackImage();
+                  })
+        node["thumbnail_state"] = thumbnail.hasImage() ? "image" : thumbnail.hasFallbackImage() ? "fallback" : "empty";
+}
+
 void addFolderState(LLSD& node, LLFolderViewItem* item)
 {
-    node["label"]    = wstring_to_utf8str(item->getLabel());
+    node["label"]    = folderLabel(item->getLabel());
     node["selected"] = item->isSelected();
     node["open"]     = item->isOpen();
     if (auto* model_item = dynamic_cast<LLFolderViewModelItemInventory*>(item->getViewModelItem()))
@@ -66,6 +87,22 @@ void addGalleryState(LLSD& node, LLInventoryGalleryItem* item)
 
 void addAccessibleState(LLSD& node, const LLView& view)
 {
+    // Older viewer builds expose only rect in getInfo(). Read the same
+    // production geometry directly when the optional inspection fields are absent.
+    if (!node.has("screen_rect"))
+    {
+        const auto encode_rect = [](const LLRect& rect)
+        {
+            return LLSDMap("left", rect.mLeft)("right", rect.mRight)("top", rect.mTop)("bottom", rect.mBottom);
+        };
+        node["local_rect"]    = encode_rect(view.getLocalRect());
+        node["screen_rect"]   = encode_rect(view.calcScreenRect());
+        node["clipping_rect"] = encode_rect(xui_lab::Inspection::clippedScreenRect(view));
+    }
+    if (const auto* checkbox = dynamic_cast<const LLCheckBoxCtrl*>(&view))
+        node["label"] = checkbox->getLabel();
+    else if (const auto* button = dynamic_cast<const LLButton*>(&view))
+        node["label"] = button->getLabelUnselected();
     const std::string tooltip = view.getToolTip();
     if (!tooltip.empty())
         node["tooltip"] = tooltip;
@@ -208,7 +245,7 @@ LLSD buildTree(LLView* view, const ControlIds& control_ids)
     if (auto* gallery_item = dynamic_cast<LLInventoryGalleryItem*>(view))
         addGalleryState(node, gallery_item);
     if (auto* thumbnail = dynamic_cast<LLThumbnailCtrl*>(view))
-        node["thumbnail_state"] = thumbnail->hasImage() ? "image" : thumbnail->hasFallbackImage() ? "fallback" : "empty";
+        addThumbnailState(node, *thumbnail);
     LLSD children  = LLSD::emptyArray();
     S32  hit_order = 0;
     if (auto* folder = dynamic_cast<LLFolderViewFolder*>(view))
@@ -367,7 +404,14 @@ void collectTextClipping(LLView* view, LLSD& issues, const ControlIds& control_i
             const S32         text_height = text->getTextPixelHeight();
             if (!control_id.empty() && text_width > 0 && text_height > 0)
             {
-                const LLRect clipped = xui_lab::Inspection::clippedScreenRect(*view);
+                // Checkbox labels can extend above their generated button box.
+                // LLCheckBoxCtrl does not clip them to its own rectangle.
+                LLRect clipped = view->calcScreenRect();
+                for (const LLView* ancestor = view->getParent(); ancestor; ancestor = ancestor->getParent())
+                {
+                    if (!dynamic_cast<const LLCheckBoxCtrl*>(ancestor))
+                        clipped.intersectWith(ancestor->calcScreenRect());
+                }
                 if (text_width > clipped.getWidth() || text_height > clipped.getHeight())
                 {
                     issues.append(LLSDMap("controlId", control_id)("path", view->getPathname())("class", view->getInfo()["class"])(

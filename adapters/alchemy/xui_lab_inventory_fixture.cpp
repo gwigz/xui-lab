@@ -21,6 +21,7 @@
 #include <utility>
 #include <variant>
 
+#if XUI_LAB_HAS_INVENTORY_EXPLORER
 class LLInventoryModelTestAccess final
 {
 public:
@@ -385,3 +386,14 @@ void InventoryFixture::cleanup() noexcept
     mActive = false;
 }
 } // namespace xui_lab
+
+#else
+namespace xui_lab
+{
+InventoryFixtureData parseInventoryFixture(const LLSD&)
+{ throw Error("missing_capability", "selected viewer lacks the offline inventory fixture boundary"); }
+InventoryFixture::InventoryFixture(InventoryFixtureData fixture) : mId(std::move(fixture.id))
+{ throw Error("missing_capability", "selected viewer lacks the offline inventory fixture boundary"); }
+InventoryFixture::~InventoryFixture() = default;
+} // namespace xui_lab
+#endif

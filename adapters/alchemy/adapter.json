@@ -16,6 +16,9 @@
     "test_widgets": {
       "requiredCapabilities": ["input", "inspection"]
     },
+    "preferences": {
+      "requiredCapabilities": ["input", "inspection"]
+    },
     "inventory_explorer": {
       "requiredCapabilities": [
         "input",

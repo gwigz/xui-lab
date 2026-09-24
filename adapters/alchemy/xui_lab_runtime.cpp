@@ -128,6 +128,8 @@ private:
     {
         if (!value.isString())
             throw LabError("subject", "subject must be a string");
+        if (value.asString() == "preferences")
+            return Subject::Preferences;
         if (value.asString() == "test_widgets")
             return Subject::TestWidgets;
         if (XUI_LAB_HAS_INVENTORY_EXPLORER && value.asString() == "inventory_explorer")

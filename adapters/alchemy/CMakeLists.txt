@@ -24,6 +24,14 @@ foreach (source IN LISTS alchemy_xui_inventory_explorer_sources)
   endif ()
 endforeach ()
 
+# A subject also needs the viewer's offline fixture boundary.
+file(READ "${alchemy_newview_source_dir}/llinventorymodel.h" alchemy_xui_inventory_header)
+file(READ "${alchemy_newview_source_dir}/../llmessage/llavatarnamecache.h" alchemy_xui_name_cache_header)
+if (NOT alchemy_xui_inventory_header MATCHES "LLInventoryModelTestAccess" OR
+    NOT alchemy_xui_name_cache_header MATCHES "initializeOffline")
+  set(alchemy_xui_has_inventory_explorer FALSE)
+endif ()
+
 set(alchemy_xui_subject_sources)
 if (alchemy_xui_has_inventory_explorer)
   set(alchemy_xui_subject_sources ${alchemy_xui_inventory_explorer_sources})
@@ -44,6 +52,9 @@ list(REMOVE_ITEM alchemy_xui_support_sources
   "${alchemy_newview_source_dir}/llvoicewebrtc.cpp"
   ${alchemy_xui_subject_sources}
   )
+
+# Feature layers may remap these sources into a generated viewer tree.
+list(FILTER alchemy_xui_support_sources EXCLUDE REGEX "/(llappviewersdl|llvoicewebrtc)\\.cpp$")
 
 list(FILTER alchemy_viewer_link_libraries EXCLUDE REGEX "llwebrtc")
 
@@ -113,6 +124,12 @@ list(TRANSFORM alchemy_xui_adapter_sources PREPEND "${alchemy_xui_adapter_source
 add_executable(xui-lab ${alchemy_xui_adapter_sources} "${xui_lab_fork_identity_cpp}")
 target_compile_features(xui-lab PRIVATE cxx_std_20)
 target_compile_definitions(xui-lab PRIVATE XUI_LAB_HAS_INVENTORY_EXPLORER=$<BOOL:${alchemy_xui_has_inventory_explorer}>)
+file(READ "${alchemy_newview_source_dir}/../llrender/lluiimage.h" alchemy_xui_image_header)
+set(alchemy_xui_has_raster_chrome FALSE)
+if (alchemy_xui_image_header MATCHES "EScaleStyle")
+  set(alchemy_xui_has_raster_chrome TRUE)
+endif ()
+target_compile_definitions(xui-lab PRIVATE XUI_LAB_HAS_RASTER_CHROME=$<BOOL:${alchemy_xui_has_raster_chrome}>)
 target_include_directories(xui-lab PRIVATE
   "${alchemy_xui_adapter_source_dir}"
   "${alchemy_newview_source_dir}"

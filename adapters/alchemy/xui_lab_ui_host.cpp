@@ -1,5 +1,21 @@
 #include "llviewerprecompiledheaders.h"
 
+#if __has_include("alchromeregistry.h")
+#include "alchromeregistry.h"
+#include "aluimodes.h"
+#include "alvectoruiimage.h"
+#define XUI_LAB_HAS_VECTOR_CHROME 1
+#else
+#define XUI_LAB_HAS_VECTOR_CHROME 0
+#endif
+
+#if __has_include("alsvgrasterizer.h")
+#include "alsvgrasterizer.h"
+#define XUI_LAB_HAS_SVG_ICONS 1
+#else
+#define XUI_LAB_HAS_SVG_ICONS 0
+#endif
+
 #include "xui_lab_ui_host.h"
 
 #include "xui_lab_error.h"
@@ -17,6 +33,7 @@
 #include "lldir.h"
 #include "llfloater.h"
 #include "llfloaterreg.h"
+#include "llfloaterpreference.h"
 #include "llfontfreetype.h"
 #include "llfontgl.h"
 #include "llfolderviewitem.h"
@@ -35,6 +52,8 @@
 #include "llmenugl.h"
 #include "llmortician.h"
 #include "llnotifications.h"
+#include "lltoast.h"
+#include "lltoastalertpanel.h"
 #include "llpanel.h"
 #include "llrender.h"
 #include "llrender2dutils.h"
@@ -50,8 +69,14 @@
 #include "lluiimage.h"
 #include "llvertexbuffer.h"
 #include "llview.h"
+#if __has_include("llviewereventrecorder.h")
 #include "llviewereventrecorder.h"
+#define XUI_LAB_HAS_EVENT_RECORDER 1
+#else
+#define XUI_LAB_HAS_EVENT_RECORDER 0
+#endif
 #include "llviewercontrol.h"
+#include "llviewercamera.h"
 #include "llviewermenu.h"
 #include "llwearabletype.h"
 #include "llwindow.h"
@@ -75,6 +100,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <type_traits>
 #include <utility>
 
 namespace
@@ -116,10 +142,12 @@ private:
 
 struct ImageDeclaration
 {
-    std::string            filename;
+    std::string filename;
+    LLRect      clip = LLRect::null;
+#if XUI_LAB_HAS_RASTER_CHROME
     LLRect                 scale       = LLRect::null;
-    LLRect                 clip        = LLRect::null;
     LLUIImage::EScaleStyle scale_style = LLUIImage::SCALE_INNER;
+#endif
 };
 
 class LabImageProvider final : public LLImageProviderInterface
@@ -155,28 +183,60 @@ public:
                 S32 top    = 0;
                 S32 right  = 0;
                 S32 bottom = 0;
+#if XUI_LAB_HAS_RASTER_CHROME
                 if (node->getAttributeS32("scale.left", left) && node->getAttributeS32("scale.top", top) &&
                     node->getAttributeS32("scale.right", right) && node->getAttributeS32("scale.bottom", bottom))
                 {
                     declaration.scale.set(left, top, right, bottom);
                 }
+#endif
                 if (node->getAttributeS32("clip.left", left) && node->getAttributeS32("clip.top", top) &&
                     node->getAttributeS32("clip.right", right) && node->getAttributeS32("clip.bottom", bottom))
                 {
                     declaration.clip.set(left, top, right, bottom);
                 }
+#if XUI_LAB_HAS_RASTER_CHROME
                 std::string scale_type;
                 if (node->getAttributeString("scale_type", scale_type) && scale_type == "scale_outer")
                 {
                     declaration.scale_style = LLUIImage::SCALE_OUTER;
                 }
+#endif
                 mDeclarations[name] = std::move(declaration);
             }
         }
     }
 
+#if XUI_LAB_HAS_VECTOR_CHROME
+    void loadChrome()
+    {
+        const auto colors = [](std::string_view name, LLColor4& value)
+        {
+            auto& table = LLUIColorTable::instance();
+            if (!table.colorExists(name))
+                return false;
+            value = table.getColor(name).get();
+            return true;
+        };
+        ALChromeRegistry registry(colors);
+        std::string error;
+        if (!registry.load(gDirUtilp->findSkinnedFilenames(LLDir::SKINBASE, "shapes.xml", LLDir::ALL_SKINS), "", error))
+            throw xui_lab::Error("chrome", error);
+        std::vector<const ALChromeRecipe*> recipes;
+        for (const auto& [name, recipe] : registry.recipes())
+            recipes.push_back(&recipe);
+        if (!mChrome.rebuild(recipes, error))
+            throw xui_lab::Error("chrome", error);
+        mChromeSkin = gDirUtilp->getSkinDir();
+    }
+#endif
+
     LLPointer<LLUIImage> getUIImage(std::string_view requested_name, S32) override
     {
+#if XUI_LAB_HAS_VECTOR_CHROME
+        if (mChromeSkin != gDirUtilp->getSkinDir())
+            loadChrome();
+#endif
         const std::string name(requested_name);
         if (const auto found = mImages.find(name); found != mImages.end())
             return found->second;
@@ -188,29 +248,63 @@ public:
             declaration.filename = name;
 
         const std::string path = gDirUtilp->findSkinnedFilename(LLDir::TEXTURES, declaration.filename);
+#if XUI_LAB_HAS_VECTOR_CHROME
+        const auto slot = mChrome.getSlot(name);
+        if (mChrome.get(slot))
+        {
+            LLPointer<LLUIImage> image = new ALVectorUIImage(name, mChrome, slot);
+            mImages.emplace(name, image);
+            return image;
+        }
+#endif
         if (path.empty())
             throw xui_lab::Error("texture", "production UI texture not found: " + name);
 
-        LLPointer<LLImageFormatted> formatted = LLImageFormatted::createFromExtension(path);
-        LLPointer<LLImageRaw>       raw       = new LLImageRaw();
-        if (formatted.isNull() || !formatted->load(path) || !formatted->decode(raw, 0.f))
+        LLPointer<LLImageRaw> raw = new LLImageRaw();
+#if XUI_LAB_HAS_SVG_ICONS
+        if (std::filesystem::path(path).extension() == ".svg")
         {
-            throw xui_lab::Error("texture", "failed to decode production UI texture: " + path);
+            std::ifstream     file(path);
+            const std::string svg(std::istreambuf_iterator<char>{ file }, {});
+            std::string       error;
+            const auto        raster = ALSvgRasterizer::rasterize(
+                svg, { 1.f, 1.f },
+                [](std::string_view key, LLColor4& color)
+                {
+                    auto& table = LLUIColorTable::instance();
+                    color       = table.getColor(key).get();
+                    return table.colorExists(key);
+                },
+                error);
+            if (!raster)
+                throw xui_lab::Error("texture", path + ": " + error);
+            raw = raster->mPixels;
+        }
+        else
+#endif
+        {
+            LLPointer<LLImageFormatted> formatted = LLImageFormatted::createFromExtension(path);
+            if (formatted.isNull() || !formatted->load(path) || !formatted->decode(raw, 0.f))
+                throw xui_lab::Error("texture", "failed to decode production UI texture: " + path);
         }
 
         LLPointer<LLGLTexture> texture = new LLGLTexture(raw, false);
         texture->setBoostLevel(LLGLTexture::BOOST_UI);
         texture->setNoDelete();
         LLPointer<LLUIImage> image = new LLUIImage(name, texture);
+#if XUI_LAB_HAS_RASTER_CHROME
         image->setScaleStyle(declaration.scale_style);
+#endif
         if (declaration.clip != LLRect::null)
         {
             image->setClipRegion(normalize(declaration.clip, texture->getWidth(), texture->getHeight()));
         }
+#if XUI_LAB_HAS_RASTER_CHROME
         if (declaration.scale != LLRect::null)
         {
             image->setScaleRegion(normalize(declaration.scale, image->getWidth(), image->getHeight()));
         }
+#endif
         mImages.emplace(name, image);
         return image;
     }
@@ -259,7 +353,9 @@ public:
     void cleanUp() override
     {
         ALTextureSlot::sWhiteTexture = 0;
+#if XUI_LAB_HAS_RASTER_CHROME
         LLUIImage::cleanupClass();
+#endif
         mImages.clear();
     }
 
@@ -272,8 +368,162 @@ private:
                  llclamp(static_cast<F32>(rect.mBottom) / static_cast<F32>(height), 0.f, 1.f) };
     }
 
+#if XUI_LAB_HAS_VECTOR_CHROME
+    ALVectorShapeStore mChrome;
+    std::string        mChromeSkin;
+#endif
     std::map<std::string, ImageDeclaration, std::less<>>     mDeclarations;
     std::map<std::string, LLPointer<LLUIImage>, std::less<>> mImages;
+};
+
+template<class Character>
+std::string characterText(Character character)
+{
+    if constexpr (requires { utf8str_from_cp(character); })
+        return utf8str_from_cp(character);
+    else
+        return ll_convert<std::string>(std::basic_string<Character>(1, character));
+}
+
+template<class Text>
+std::basic_string<llwchar> inputCharacters(const Text& text)
+{
+    if constexpr (requires { utf8str_decode_at(text, 0); })
+    {
+        std::basic_string<llwchar> characters;
+        for (size_t position = 0; position < text.size();)
+        {
+            const auto decoded = utf8str_decode_at(text, position);
+            characters.push_back(decoded.cp);
+            position = decoded.next;
+        }
+        return characters;
+    }
+    else
+        return utf8str_to_wstring(text);
+}
+
+template<class Window>
+constexpr U32 hiddenWindowFlag()
+{
+    if constexpr (requires { Window::WINDOW_FLAG_HIDDEN; })
+        return Window::WINDOW_FLAG_HIDDEN;
+    else
+        return 0;
+}
+
+template<typename Window>
+class LegacyWindowListener final : public LLWindowListener
+{
+public:
+    explicit LegacyWindowListener(Window* window) : LLWindowListener(nullptr, []() { return gKeyboard; })
+    {
+        // The lab routes keys through its native callbacks, without a viewer window.
+        remove("keyDown");
+        remove("keyUp");
+        for (const auto* operation : { "mouseDown", "mouseUp", "mouseDoubleClick", "mouseMove", "mouseScroll" })
+        {
+            remove(operation);
+            add(operation, "Dispatch through the lab window's input callbacks",
+                [window](const LLSD& request)
+                {
+                    Response        response(LLSD(), request);
+                    const auto      operation = request["op"].asString();
+                    const LLCoordGL position(request["x"].asInteger(), request["y"].asInteger());
+                    const auto      button  = request["button"].asString();
+                    bool            handled = false;
+                    if (operation == "mouseDown")
+                        handled = button == "RIGHT"    ? window->handleRightMouseDown(window->get(), position, MASK_NONE)
+                                  : button == "MIDDLE" ? window->handleMiddleMouseDown(window->get(), position, MASK_NONE)
+                                                       : window->handleMouseDown(window->get(), position, MASK_NONE);
+                    else if (operation == "mouseUp")
+                        handled = button == "RIGHT"    ? window->handleRightMouseUp(window->get(), position, MASK_NONE)
+                                  : button == "MIDDLE" ? window->handleMiddleMouseUp(window->get(), position, MASK_NONE)
+                                                       : window->handleMouseUp(window->get(), position, MASK_NONE);
+                    else if (operation == "mouseDoubleClick")
+                        handled = window->handleDoubleClick(window->get(), position, MASK_NONE);
+                    else if (operation == "mouseMove")
+                    {
+                        window->handleMouseMove(window->get(), position, MASK_NONE);
+                        handled = true;
+                    }
+                    else if (operation == "mouseScroll")
+                    {
+                        const S32 clicks = request["clicks"].asInteger();
+                        window->handleScrollWheel(window->get(), LLScrollDelta(clicks, static_cast<F32>(clicks)));
+                        handled = true;
+                    }
+                    response["handled"] = handled;
+                });
+        }
+    }
+};
+
+template<typename Window>
+std::unique_ptr<LLWindowListener> makeWindowListener(Window* window)
+{
+    if constexpr (std::is_constructible_v<LLWindowListener, Window*, LLWindowListener::KeyboardGetter>)
+        return std::make_unique<LLWindowListener>(window, []() { return gKeyboard; });
+    else
+        return std::make_unique<LegacyWindowListener<Window>>(window);
+}
+
+class LabAlerts
+{
+public:
+    LabAlerts()
+    {
+        mChanged.emplace(LLNotifications::instance().getChannel("Visible")->connectChanged(
+            [this](const LLSD& event)
+            {
+                const LLUUID id   = event["id"].asUUID();
+                const auto   type = event["sigtype"].asString();
+                if (type == "delete")
+                {
+                    const auto found = mToasts.find(id);
+                    if (found != mToasts.end())
+                    {
+                        if (auto* toast = found->second.get())
+                            toast->closeToast();
+                        mToasts.erase(found);
+                    }
+                    return false;
+                }
+                if (type != "add" && type != "load")
+                    return false;
+                const auto notification = LLNotifications::instance().find(id);
+                if (!notification || (notification->getType() != "alert" && notification->getType() != "alertmodal") ||
+                    mToasts.contains(id))
+                    return false;
+
+                const bool                         modal = notification->getType() == "alertmodal";
+                LLNotificationsUI::LLToast::Params params;
+                params.notif_id        = id;
+                params.notification    = notification;
+                params.panel           = new LLToastAlertPanel(notification, modal);
+                params.enable_hide_btn = false;
+                params.can_fade        = false;
+                params.is_modal        = modal;
+                auto* toast            = new LLNotificationsUI::LLToast(params);
+                mToasts.emplace(id, toast->getDerivedHandle<LLNotificationsUI::LLToast>());
+                gFloaterView->addChild(toast);
+                toast->center();
+                toast->setVisible(true);
+                return false;
+            }));
+    }
+
+    void close()
+    {
+        mChanged.reset();
+        for (const auto& [id, handle] : mToasts)
+            if (auto* toast = handle.get())
+                toast->closeToast();
+    }
+
+private:
+    std::optional<LLTempBoundListener>                     mChanged;
+    std::map<LLUUID, LLHandle<LLNotificationsUI::LLToast>> mToasts;
 };
 
 class LabWindow final : public LLWindowCallbacks
@@ -281,11 +531,12 @@ class LabWindow final : public LLWindowCallbacks
 public:
     LabWindow(S32 width, S32 height, bool interactive)
     {
-        const U32 flags = interactive ? 0 : LLWindow::WINDOW_FLAG_HIDDEN;
-        mWindow = LLWindowManager::createWindow(this, "Alchemy Viewer XUI Lab", "xui-lab", 0, 0, width, height, flags, false, true, false,
-                                                true, false);
+        const U32 flags = interactive ? 0 : hiddenWindowFlag<LLWindow>();
+        mWindow = LLWindowManager::createWindow(this, "Alchemy Viewer XUI Lab", "xui-lab", 0, 0, width, height, flags, false, true, false);
         if (!mWindow)
             throw xui_lab::Error("window", "failed to create the production LLWindow");
+        if (!interactive)
+            mWindow->hide();
         if (interactive)
             mWindow->show();
     }
@@ -557,8 +808,7 @@ private:
     {
         auto* view = dynamic_cast<LLView*>(focus);
         if (mGatheringInput && view && character >= 0x20 && character != 0x7f)
-            mInteractiveActions.append(
-                LLSDMap("action", "text")("path", view->getPathname())("text", wstring_to_utf8str(LLWString(1, character))));
+            mInteractiveActions.append(LLSDMap("action", "text")("path", view->getPathname())("text", characterText(character)));
     }
 
     LLCoordGL screenPosition(LLCoordGL position)
@@ -621,6 +871,11 @@ public:
         {
             LLFloaterReg::add("test_widgets", "floater_test_widgets.xml", &LLFloaterReg::build<LLFloater>);
         }
+        else if (subject == Subject::Preferences)
+        {
+            LLViewerCamera::createInstance();
+            LLFloaterReg::add("preferences", "floater_preferences.xml", &LLFloaterReg::build<LLFloaterPreference>);
+        }
 #if XUI_LAB_HAS_INVENTORY_EXPLORER
         else
         {
@@ -675,18 +930,39 @@ public:
         gUIProgram.mShaderFiles            = { { "interface/uiV.glsl", GL_VERTEX_SHADER }, { "interface/uiF.glsl", GL_FRAGMENT_SHADER } };
         gUIProgram.mShaderLevel            = 1;
         gUIProgram.mFeatures.attachNothing = true;
-        gSolidColorProgram.mName           = "xui-lab Solid Color Shader";
-        gSolidColorProgram.mShaderFiles    = { { "interface/solidcolorV.glsl", GL_VERTEX_SHADER },
-                                               { "interface/solidcolorF.glsl", GL_FRAGMENT_SHADER } };
-        gSolidColorProgram.mShaderLevel    = 1;
+#if XUI_LAB_HAS_VECTOR_CHROME
+        for (const auto& [name, value] : AL_UI_MODE_DEFINES)
+            gUIProgram.addPermutation(name, std::to_string(value));
+#endif
+        bool shaders_ready = gUIProgram.createShader();
+#if XUI_LAB_HAS_RASTER_CHROME
+        gSolidColorProgram.mName                   = "xui-lab Solid Color Shader";
+        gSolidColorProgram.mShaderFiles            = { { "interface/solidcolorV.glsl", GL_VERTEX_SHADER },
+                                                       { "interface/solidcolorF.glsl", GL_FRAGMENT_SHADER } };
+        gSolidColorProgram.mShaderLevel            = 1;
         gSolidColorProgram.mFeatures.attachNothing = true;
-        if (!gUIProgram.createShader() || !gSolidColorProgram.createShader())
+        shaders_ready                              = shaders_ready && gSolidColorProgram.createShader();
+#endif
+        if (!shaders_ready)
         {
             throw Error("shader", "failed to compile production LLUI shaders");
         }
 
+#if XUI_LAB_HAS_VECTOR_CHROME
+        gUIProgram.bind();
+        gUIProgram.uniform1i(LLStaticHashedString("curveMap"), 2);
+        gUIProgram.uniform1i(LLStaticHashedString("bandMap"), 3);
+        gUIProgram.uniform1i(LLStaticHashedString("recordMap"), 4);
+        gUIProgram.uniform1i(LLStaticHashedString("glassMap"), 5);
+        gUIProgram.uniform1i(LLStaticHashedString("glassSourceMap"), 6);
+        gUIProgram.unbind();
+#endif
+
         mImages = std::make_unique<LabImageProvider>();
         mImages->loadDeclarations();
+#if XUI_LAB_HAS_VECTOR_CHROME
+        mImages->loadChrome();
+#endif
         mImages->installWhiteTexture();
         LLUI::settings_map_t settings;
         settings["config"]  = &gSavedSettings;
@@ -701,10 +977,13 @@ public:
         std::set<std::string> default_args;
         LLTransUtil::parseStrings("strings.xml", default_args);
         LLTransUtil::parseLanguageStrings("language_settings.xml");
+        LLKeyboard::setStringTranslatorFunc(LLTrans::getKeyboardString);
         LLTranslationBridge::ptr_t translation = std::make_shared<LabTranslationBridge>();
         LLWearableType::initParamSingleton(translation);
         LLNotifications::instance();
+#if XUI_LAB_HAS_EVENT_RECORDER
         LLViewerEventRecorder::createInstance();
+#endif
         LLFloater::initClass();
         LLInitClassList::instance().fireCallbacks();
         initialize_edit_menu();
@@ -724,7 +1003,7 @@ public:
         mRoot = LLUICtrlFactory::create<LLPanel>(root_params);
         LLUI::getInstance()->setRootView(mRoot);
         mWindow->setRoot(mRoot);
-        mWindowListener = std::make_unique<LLWindowListener>(mWindow.get(), []() { return gKeyboard; });
+        mWindowListener = makeWindowListener(mWindow.get());
 
         LLFloaterView::Params floater_view_params;
         floater_view_params.name("Floater View");
@@ -743,6 +1022,7 @@ public:
         gMenuHolder = LLUICtrlFactory::create<LLViewerMenuHolderGL>(menu_holder_params);
         mRoot->addChild(gMenuHolder);
         LLMenuGL::sMenuContainer = gMenuHolder;
+        mAlerts                  = std::make_unique<LabAlerts>();
 
         gSavedSettings.setBOOL("LocalFileSystemBrowsingEnabled", false);
         gSavedSettings.setBOOL("DisableExternalBrowser", true);
@@ -779,7 +1059,9 @@ public:
         LLSmoothInterpolation::updateInterpolants();
         ++mFrameCount;
         LLImageGL::updateClass();
+#if XUI_LAB_HAS_RASTER_CHROME
         LLUIImage::updateClass();
+#endif
         gIdleCallbacks.callFunctions();
         LLMortician::updateClass();
         LLAccordionCtrl::updateClass();
@@ -926,7 +1208,7 @@ public:
     {
         LLRect rect;
         LLUI::getInstance()->screenRectToGL(target->calcScreenRect(), &rect);
-        gSolidColorProgram.bind();
+        gUIProgram.bind();
         gGL.getTextureSlot(0)->unbind();
         gGL.color4f(1.f, 0.2f, 0.1f, 1.f);
         gGL.begin(LLRender::LINES);
@@ -940,7 +1222,7 @@ public:
         gGL.vertex2i(rect.mLeft, rect.mBottom);
         gGL.end();
         gGL.flush();
-        gSolidColorProgram.unbind();
+        gUIProgram.unbind();
         return rect;
     }
 
@@ -1050,6 +1332,9 @@ public:
             }
         }
         mWindowListener.reset();
+        mAlerts->close();
+        mAlerts.reset();
+        LLViewerCamera::deleteSingleton();
         LLUI::getInstance()->setRootView(nullptr);
         delete mRoot;
         mRoot                    = nullptr;
@@ -1061,15 +1346,22 @@ public:
         LLFontGL::destroyAllGL();
         mImages->cleanUp();
         LLUI::deleteSingleton();
+        // The chrome store releases its textures in its destructor, which upstream's
+        // ALVectorShapeStore no longer exposes separately, so the provider has to die while the
+        // context is still current. Everything below this point works without it.
+        mImages.reset();
+#if XUI_LAB_HAS_EVENT_RECORDER
         LLViewerEventRecorder::deleteSingleton();
+#endif
+#if XUI_LAB_HAS_RASTER_CHROME
         gSolidColorProgram.unload();
+#endif
         gUIProgram.unload();
         LLImageGL::cleanupClass();
         LLVertexBuffer::cleanupClass();
         gGL.shutdown();
         mShaderMgr.reset();
         mWindow.reset();
-        mImages.reset();
         mInitialized = false;
     }
 
@@ -1124,7 +1416,7 @@ public:
             handled = mWindow->sendKey('A', MASK_CONTROL) || handled;
             handled = mWindow->sendKey(KEY_BACKSPACE, MASK_NONE) || handled;
         }
-        for (const llwchar character : utf8str_to_wstring(std::string(text)))
+        for (const llwchar character : inputCharacters(std::string(text)))
             handled = mWindow->sendUnicode(character) || handled;
         return LLSDMap("handled", handled)("text", std::string(text))("replace", replace);
     }
@@ -1142,6 +1434,7 @@ public:
 
     std::unique_ptr<LabWindow>        mWindow;
     std::unique_ptr<LLWindowListener> mWindowListener;
+    std::unique_ptr<LabAlerts>        mAlerts;
     std::unique_ptr<LabShaderMgr>     mShaderMgr;
     std::unique_ptr<LabImageProvider> mImages;
     LLPanel*                          mRoot    = nullptr;
