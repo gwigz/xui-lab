@@ -19,6 +19,7 @@ from xui_lab.contracts import (
     OperationsContract,
     PreflightCliCommand,
     PreflightContract,
+    RuntimeMetadataContract,
     SchemaCatalogContract,
     SubjectsCliCommand,
     SubjectsContract,
@@ -141,7 +142,13 @@ class CommandLineTests(unittest.TestCase):
         self.assertFalse(document.source.overridden)
         self.assertRegex(document.source.commit, r"^[0-9a-f]{40}$")
         self.assertEqual(
-            ["inventory_explorer", "test_widgets"],
+            sorted(
+                json.loads(
+                    (
+                        Path(__file__).parents[1] / "adapters/alchemy/adapter.json"
+                    ).read_text()
+                )["subjects"]
+            ),
             [subject.name for subject in document.subjects],
         )
         widgets = next(
@@ -410,6 +417,12 @@ class CommandLineTests(unittest.TestCase):
                     "xui_lab.cli.InteractiveSession", side_effect=interactive_session
                 ),
                 patch("xui_lab.cli.serve_inspector", return_value=0),
+                patch(
+                    "xui_lab.io.read_runtime_metadata",
+                    return_value=RuntimeMetadataContract(
+                        fork="alchemy", forkCommit="a" * 40, protocolVersion=1
+                    ),
+                ),
             ):
                 status = main(
                     [
@@ -526,7 +539,19 @@ class CommandLineTests(unittest.TestCase):
         with redirect_stdout(names):
             status = main(["subjects", "--json", "--jq", ".subjects[].name"])
         self.assertEqual(0, status)
-        self.assertEqual("inventory_explorer\ntest_widgets\n", names.getvalue())
+        self.assertEqual(
+            "".join(
+                name + "\n"
+                for name in sorted(
+                    json.loads(
+                        (
+                            Path(__file__).parents[1] / "adapters/alchemy/adapter.json"
+                        ).read_text()
+                    )["subjects"]
+                )
+            ),
+            names.getvalue(),
+        )
 
         selected = StringIO()
         with redirect_stdout(selected):
@@ -643,3 +668,50 @@ class CommandLineTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ExtensionDiscoveryTests(unittest.TestCase):
+    def test_runtime_subjects_join_the_adapter_catalog(self) -> None:
+        from xui_lab.cli import adapter_config, select_fork
+
+        fork, _ = select_fork(parse_command(["subjects", "--json"]))
+        with tempfile.TemporaryDirectory() as temporary:
+            runtime = fake_metadata_runtime(
+                Path(temporary),
+                fork="alchemy",
+                commit="a" * 40,
+                extra={
+                    "extensionSubjects": {
+                        "project_editor": {
+                            "requiredCapabilities": [
+                                "input",
+                                "inspection",
+                                "project_state",
+                            ]
+                        }
+                    }
+                },
+            )
+            catalog = adapter_config(fork, runtime)
+        self.assertIn("project_editor", catalog.subjects)
+        self.assertIn("project_state", catalog.capabilities)
+        self.assertIn("test_widgets", catalog.subjects)
+
+    def test_extension_cannot_replace_a_builtin_subject(self) -> None:
+        from xui_lab.cli import adapter_config, select_fork
+        from xui_lab.errors import InputError
+
+        fork, _ = select_fork(parse_command(["subjects", "--json"]))
+        with tempfile.TemporaryDirectory() as temporary:
+            runtime = fake_metadata_runtime(
+                Path(temporary),
+                fork="alchemy",
+                commit="a" * 40,
+                extra={
+                    "extensionSubjects": {
+                        "test_widgets": {"requiredCapabilities": ["input"]}
+                    }
+                },
+            )
+            with self.assertRaisesRegex(InputError, "shadows adapter subjects"):
+                adapter_config(fork, runtime)

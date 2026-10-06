@@ -149,12 +149,14 @@ class LayoutDiagnosticsTests(unittest.TestCase):
             ],
         }
 
-        layout = analyze_layout_diagnostics(tree, raw)
-
-        self.assertEqual(0, layout["actionableCount"])
-        self.assertEqual([], layout["overlaps"])
-        self.assertEqual([], layout["textClipping"])
-        self.assertEqual([], layout["outsideParent"])
+        for runtime_class in ("14LLFlatListView", "15LLAccordionCtrl"):
+            with self.subTest(runtime_class=runtime_class):
+                scroll["class"] = runtime_class
+                layout = analyze_layout_diagnostics(tree, raw)
+                self.assertEqual(0, layout["actionableCount"])
+                self.assertEqual([], layout["overlaps"])
+                self.assertEqual([], layout["textClipping"])
+                self.assertEqual([], layout["outsideParent"])
 
     def test_enriches_text_clipping_and_both_sides_of_an_overlap(self) -> None:
         left = node("left", "/Floater View/floater/left", "9LLTextBox")

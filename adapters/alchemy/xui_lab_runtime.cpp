@@ -44,6 +44,7 @@ using xui_lab::kFork;
 using xui_lab::kForkCommit;
 
 using LabError = xui_lab::Error;
+using xui_lab::BuiltinSubject;
 using xui_lab::callEventApi;
 using xui_lab::postEventApi;
 using xui_lab::Subject;
@@ -128,12 +129,18 @@ private:
     {
         if (!value.isString())
             throw LabError("subject", "subject must be a string");
-        if (value.asString() == "preferences")
-            return Subject::Preferences;
-        if (value.asString() == "test_widgets")
-            return Subject::TestWidgets;
-        if (XUI_LAB_HAS_INVENTORY_EXPLORER && value.asString() == "inventory_explorer")
-            return Subject::InventoryExplorer;
+        for (const Subject subject : { Subject{ BuiltinSubject::TestWidgets }, Subject{ BuiltinSubject::InventoryExplorer },
+                                       Subject{ BuiltinSubject::Preferences } })
+        {
+            if (subjectName(subject) != value.asString())
+                continue;
+            if (subject == Subject{ BuiltinSubject::InventoryExplorer } && !XUI_LAB_HAS_INVENTORY_EXPLORER)
+                break;
+            return subject;
+        }
+        for (const auto& subject : xui_lab::extensionSubjects())
+            if (subject.name == value.asString())
+                return &subject;
         throw LabError("subject", "unsupported registered subject: " + value.asString());
     }
 
@@ -171,7 +178,7 @@ private:
             .ui_scale      = viewport["uiScale"].asReal(),
             .interactive   = mInteractive,
         });
-        if (mSubject == Subject::InventoryExplorer)
+        if (mSubject == Subject{ BuiltinSubject::InventoryExplorer })
         {
             mInventoryFixture = std::make_unique<xui_lab::InventoryFixture>(xui_lab::parseInventoryFixture(command["fixture"]));
         }
@@ -190,7 +197,10 @@ private:
         capabilities.append("input");
         capabilities.append("inspection");
         capabilities.append("external_effects");
-        if (mSubject == Subject::InventoryExplorer)
+        if (const auto* extension = std::get_if<const xui_lab::ExtensionSubject*>(&mSubject))
+            for (const auto& capability : (*extension)->capabilities)
+                capabilities.append(capability);
+        if (mSubject == Subject{ BuiltinSubject::InventoryExplorer })
         {
             capabilities.append("inventory_model");
             capabilities.append("agent_identity");
@@ -793,7 +803,7 @@ private:
     bool                                       mDone        = false;
     bool                                       mInteractive = false;
     std::set<std::string>                      mCapabilities;
-    Subject                                    mSubject = Subject::TestWidgets;
+    Subject                                    mSubject = BuiltinSubject::TestWidgets;
 };
 
 LLSD failure(const std::string& code, const std::string& message)

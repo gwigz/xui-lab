@@ -38,3 +38,42 @@ select an unpushed branch without changing the submodule pointer.
 
 Pass the built executable to scenario or interactive commands with
 `--runtime`. Build and artifact locations remain local environment choices.
+
+## Project-owned subjects
+
+A project can supply subjects without changing the adapter. Append the absolute
+path of its CMake file to the production viewer target's
+`XUI_LAB_SUBJECT_PROVIDERS` property before the adapter runs. That file calls:
+
+```cmake
+xui_lab_add_subject_provider(
+  REGISTER registerProjectSubjects
+  SOURCES "${CMAKE_CURRENT_LIST_DIR}/subjects.cpp"
+)
+```
+
+Define `xui_lab::registerProjectSubjects(std::vector<ExtensionSubject>&)` using
+[`xui_lab_types.h`](xui_lab_types.h). Append each subject's name, required
+capabilities, and fixture factory. Registration only describes the subjects.
+Do not initialize LLUI or call the viewer from this function, because metadata
+discovery also calls it without a UI context.
+
+The host constructs a `SubjectFixture` after LLUI initialization. It calls
+`registerWindow()` before opening the floater, `opened()` after opening or
+reloading it, and `beforeFrame()` before drawing. The fixture is destroyed
+before the GL context. Use the supplied `EffectRecorder` to report intercepted
+external effects. Keep production controllers and their rules intact.
+
+The provider CMake file owns project libraries, definitions, and companion
+runtime files. Multiple providers can join one executable. Duplicate names,
+including names of built-in subjects, fail at startup. This is a source
+interface compiled against the selected fork, not a cross-fork binary ABI.
+
+The runtime reports `extensionSubjects` in `--metadata`. The Python CLI merges
+these declarations into subject discovery, preflight, sessions, and the
+interactive inspector. An older runtime without that field declares no
+extensions. The adapter manifest contains only its built-in subjects.
+
+Keep project scenarios, fixtures, and their runner in the project repository.
+They use the public `Lab`, `Scenario`, and `Window` APIs. Lab's own scenario
+suite remains independent of project extensions.

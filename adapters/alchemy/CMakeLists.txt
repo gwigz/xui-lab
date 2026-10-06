@@ -68,6 +68,10 @@ foreach (target IN LISTS alchemy_xui_newview_targets)
   target_include_directories(${target} PUBLIC
     "${alchemy_newview_source_dir}"
     "${alchemy_newview_binary_dir}"
+    $<TARGET_PROPERTY:${VIEWER_BINARY_NAME},INCLUDE_DIRECTORIES>
+    )
+  target_compile_definitions(${target} PRIVATE
+    $<TARGET_PROPERTY:${VIEWER_BINARY_NAME},COMPILE_DEFINITIONS>
     )
   target_precompile_headers(${target} PRIVATE "${alchemy_newview_source_dir}/llviewerprecompiledheaders.h")
   target_link_libraries(${target} PUBLIC ${alchemy_viewer_link_libraries})
@@ -117,6 +121,7 @@ set(alchemy_xui_adapter_sources
   xui_lab_inventory_fixture.cpp
   xui_lab_main.cpp
   xui_lab_runtime.cpp
+  xui_lab_types.cpp
   xui_lab_ui_host.cpp
   )
 list(TRANSFORM alchemy_xui_adapter_sources PREPEND "${alchemy_xui_adapter_source_dir}/")
@@ -136,6 +141,7 @@ target_include_directories(xui-lab PRIVATE
   "${alchemy_newview_binary_dir}"
   )
 target_link_libraries(xui-lab PRIVATE alchemy_newview_ui)
+include("${alchemy_xui_adapter_source_dir}/SubjectProviders.cmake")
 if (APPLE)
   target_link_options(xui-lab PRIVATE "LINKER:-force_load,$<TARGET_FILE:llui>")
 endif ()

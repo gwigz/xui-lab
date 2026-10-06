@@ -18,6 +18,7 @@ from xui_lab.contracts import (
     DoubleClickCliCommand,
     ReloadCliCommand,
     RightClickCliCommand,
+    RuntimeMetadataContract,
     SessionCloseCliCommand,
     SessionStartCliCommand,
     TreeCliCommand,
@@ -244,6 +245,12 @@ class SessionStoreTests(unittest.TestCase):
 
         with (
             patch("xui_lab.session_cli.write_session", side_effect=records.append),
+            patch(
+                "xui_lab.io.read_runtime_metadata",
+                return_value=RuntimeMetadataContract(
+                    fork="alchemy", forkCommit="a" * 40, protocolVersion=1
+                ),
+            ),
             patch("xui_lab.session_cli.subprocess.Popen", side_effect=popen_stub),
             patch("xui_lab.session_cli.wait_until_ready", side_effect=ready),
         ):
@@ -288,6 +295,12 @@ class SessionStoreTests(unittest.TestCase):
 
         with (
             patch("xui_lab.session_cli.write_session", side_effect=records.append),
+            patch(
+                "xui_lab.io.read_runtime_metadata",
+                return_value=RuntimeMetadataContract(
+                    fork="alchemy", forkCommit="a" * 40, protocolVersion=1
+                ),
+            ),
             patch("xui_lab.session_cli.subprocess.Popen", return_value=ProcessStub()),
             patch("xui_lab.session_cli.wait_until_ready", side_effect=ready),
         ):

@@ -10,6 +10,7 @@ Rect = Mapping[str, int]
 
 _SCROLL_CONTAINER_CLASSES = frozenset(
     {
+        "LLAccordionCtrl",
         "LLFlatListView",
         "LLFolderView",
         "LLInventoryGallery",

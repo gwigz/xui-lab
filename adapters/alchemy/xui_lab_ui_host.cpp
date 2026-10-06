@@ -56,6 +56,7 @@
 #include "lltoastalertpanel.h"
 #include "llpanel.h"
 #include "llrender.h"
+#include "llrendertarget.h"
 #include "llrender2dutils.h"
 #include "llsdjson.h"
 #include "llsdutil.h"
@@ -219,7 +220,7 @@ public:
             return true;
         };
         ALChromeRegistry registry(colors);
-        std::string error;
+        std::string      error;
         if (!registry.load(gDirUtilp->findSkinnedFilenames(LLDir::SKINBASE, "shapes.xml", LLDir::ALL_SKINS), "", error))
             throw xui_lab::Error("chrome", error);
         std::vector<const ALChromeRecipe*> recipes;
@@ -867,14 +868,21 @@ public:
         if (mSubject)
             throw Error("subject", "runtime subject may only be opened once");
         mSubject = subject;
-        if (subject == Subject::TestWidgets)
+        if (subject == Subject{ BuiltinSubject::TestWidgets })
         {
             LLFloaterReg::add("test_widgets", "floater_test_widgets.xml", &LLFloaterReg::build<LLFloater>);
         }
-        else if (subject == Subject::Preferences)
+        else if (subject == Subject{ BuiltinSubject::Preferences })
         {
             LLViewerCamera::createInstance();
             LLFloaterReg::add("preferences", "floater_preferences.xml", &LLFloaterReg::build<LLFloaterPreference>);
+        }
+        else if (const auto* extension = std::get_if<const ExtensionSubject*>(&subject))
+        {
+            mFixture = (*extension)->makeFixture([this](const LLSD& effect) { recordExternalEffect(effect); });
+            if (!mFixture)
+                throw Error("subject", "extension returned no fixture: " + (*extension)->name);
+            mFixture->registerWindow();
         }
 #if XUI_LAB_HAS_INVENTORY_EXPLORER
         else
@@ -894,6 +902,8 @@ public:
             throw Error("subject", "registered floater failed to instantiate: " + std::string(subjectName(subject)));
         }
         mFloater->center();
+        if (mFixture)
+            mFixture->opened(*mFloater);
     }
 
     void initializeUI()
@@ -931,8 +941,8 @@ public:
         gUIProgram.mShaderLevel            = 1;
         gUIProgram.mFeatures.attachNothing = true;
 #if XUI_LAB_HAS_VECTOR_CHROME
-        for (const auto& [name, value] : AL_UI_MODE_DEFINES)
-            gUIProgram.addPermutation(name, std::to_string(value));
+        for (const auto& [name, value] : alUIShaderDefines())
+            gUIProgram.addPermutation(name, value);
 #endif
         bool shaders_ready = gUIProgram.createShader();
 #if XUI_LAB_HAS_RASTER_CHROME
@@ -950,6 +960,8 @@ public:
 
 #if XUI_LAB_HAS_VECTOR_CHROME
         gUIProgram.bind();
+        gUIProgram.uniform1i(LLShaderMgr::TEXT_SHADOW_MODE, 0);
+        gUIProgram.uniform1i(LLStaticHashedString("iconMap"), 1);
         gUIProgram.uniform1i(LLStaticHashedString("curveMap"), 2);
         gUIProgram.uniform1i(LLStaticHashedString("bandMap"), 3);
         gUIProgram.uniform1i(LLStaticHashedString("recordMap"), 4);
@@ -1068,6 +1080,8 @@ public:
         LLLayoutStack::updateClass();
         mRoot->updateBoundingRect();
 
+        if (mFixture)
+            mFixture->beforeFrame(*mFloater);
         glViewport(0, 0, mWidth, mHeight);
         glClearColor(0.f, 0.f, 0.f, 1.f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
@@ -1148,9 +1162,17 @@ public:
         mWidth         = size.mX;
         mHeight        = size.mY;
         mSystemUIScale = mWindow->systemUIScale();
-        LLUI::setScaleFactor(LLVector2(displayScale(), displayScale()));
+        const LLVector2 scale(displayScale(), displayScale());
+        const bool      scale_changed = scale != LLUI::getScaleFactor();
+        LLUI::setScaleFactor(scale);
+        ++LLFontGL::sResolutionGeneration;
+        if (scale_changed)
+            LLFontGL::initClass(gSavedSettings.getF32("FontScreenDPI"), displayScale(), displayScale(), gDirUtilp->getAppRODataDir(),
+                                gSavedSettings.getLLSD("AlchemyUIFontOverrides"));
+        LLView::sForceReshape = scale_changed;
         mRoot->reshape(static_cast<S32>(ll_round(static_cast<F32>(mWidth) / displayScale())),
                        static_cast<S32>(ll_round(static_cast<F32>(mHeight) / displayScale())));
+        LLView::sForceReshape = false;
     }
 
     void pumpInteractive()
@@ -1176,6 +1198,8 @@ public:
             throw Error("subject", "registered floater failed to reload: " + std::string(subjectName(current_subject)));
         }
         mFloater->center();
+        if (mFixture)
+            mFixture->opened(*mFloater);
         advanceFrames(2);
         return LLSDMap("subject", std::string(subjectName(current_subject)))("view", mFloater->getInfo());
     }
@@ -1357,6 +1381,7 @@ public:
         gSolidColorProgram.unload();
 #endif
         gUIProgram.unload();
+        mFixture.reset();
         LLImageGL::cleanupClass();
         LLVertexBuffer::cleanupClass();
         gGL.shutdown();
@@ -1448,6 +1473,7 @@ public:
     F32                               mSystemUIScale = 1.f;
     bool                              mInitialized   = false;
     bool                              mInteractive   = false;
+    std::unique_ptr<SubjectFixture>   mFixture;
     std::optional<Subject>            mSubject;
     LLView*                           mHighlight       = nullptr;
     LLSD                              mRecordedActions = LLSD::emptyArray();

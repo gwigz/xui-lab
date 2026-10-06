@@ -1,6 +1,7 @@
 #include "llviewerprecompiledheaders.h"
 
 #include "xui_lab_runtime.h"
+#include "xui_lab_types.h"
 #include "xui_lab_fork_identity.h"
 
 #include "llcommon.h"
@@ -36,7 +37,17 @@ int main(int argc, char** argv)
         LLError::setDefaultLevel(LLError::LEVEL_WARN);
         if (argc == 2 && std::string_view(argv[1]) == "--metadata")
         {
-            std::cout << LlsdToJson(LLSDMap("fork", std::string(kFork))("forkCommit", std::string(kForkCommit))("protocolVersion", 1))
+            LLSD extensions = LLSD::emptyMap();
+            for (const auto& subject : xui_lab::extensionSubjects())
+            {
+                LLSD capabilities = LLSD::emptyArray();
+                for (const auto& capability : subject.capabilities)
+                    capabilities.append(capability);
+                extensions[subject.name] = LLSDMap("requiredCapabilities", capabilities);
+            }
+            std::cout << LlsdToJson(LLSDMap("fork", std::string(kFork))("forkCommit", std::string(kForkCommit))("protocolVersion",
+                                                                                                                1)("extensionSubjects",
+                                                                                                                   extensions))
                       << '\n';
             return 0;
         }

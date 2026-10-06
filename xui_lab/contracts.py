@@ -1008,6 +1008,10 @@ class RuntimeMetadataContract(ContractModel):
     fork_commit: NonEmptyString = Field(alias="forkCommit")
     protocol_version: Literal[1] = Field(alias="protocolVersion")
 
+    extension_subjects: dict[Identifier, SubjectDeclarationContract] = Field(
+        default_factory=dict, alias="extensionSubjects"
+    )
+
 
 class SubjectSourceContract(ContractModel):
     display_name: NonEmptyString = Field(alias="displayName")

@@ -14,10 +14,16 @@
   ],
   "subjects": {
     "test_widgets": {
-      "requiredCapabilities": ["input", "inspection"]
+      "requiredCapabilities": [
+        "input",
+        "inspection"
+      ]
     },
     "preferences": {
-      "requiredCapabilities": ["input", "inspection"]
+      "requiredCapabilities": [
+        "input",
+        "inspection"
+      ]
     },
     "inventory_explorer": {
       "requiredCapabilities": [

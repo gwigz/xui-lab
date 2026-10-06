@@ -140,13 +140,13 @@ def cmd_session_start(
     *,
     select_fork: Callable[[Any], tuple[Any, Path]],
     runtime_path: Callable[..., Path],
-    adapter_config: Callable[[Any], Any],
+    adapter_config: Callable[[Any, Path], Any],
 ) -> int:
     fork, source = select_fork(command)
     executable = runtime_path(fork, source, command.runtime)
     if not executable.is_file():
         raise InputError(f"runtime executable not found: {executable}")
-    adapter = adapter_config(fork)
+    adapter = adapter_config(fork, executable)
     if command.subject not in adapter.subjects:
         raise InputError(f"subject is not declared by the adapter: {command.subject}")
     subject = adapter.subjects[command.subject]
@@ -412,7 +412,7 @@ def _serve_with_inspector(
     from .interactive import InteractiveConfig, InteractiveSession
     from .scenarios import discover_scenarios
 
-    adapter = adapter_config(lab.fork)
+    adapter = adapter_config(lab.fork, lab.executable)
     subjects = {
         name: frozenset(Capability(value) for value in subject.required_capabilities)
         for name, subject in adapter.subjects.items()

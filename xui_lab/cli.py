@@ -188,8 +188,35 @@ def select_fork(command: CliCommandBase) -> tuple[Fork, Path]:
     return fork, resolved_source(fork, overrides)
 
 
-def adapter_config(fork: Fork) -> AdapterContract:
-    return parse_adapter(read_json(fork.adapter / "adapter.json"))
+def adapter_config(fork: Fork, runtime: Path | None = None) -> AdapterContract:
+    from .io import read_runtime_metadata
+
+    config = parse_adapter(read_json(fork.adapter / "adapter.json"))
+    if runtime is None:
+        return config
+    metadata = read_runtime_metadata(runtime)
+    if metadata.fork != fork.id:
+        raise InputError(f"runtime targets {metadata.fork}, selected fork is {fork.id}")
+    extensions = metadata.extension_subjects
+    duplicate = config.subjects.keys() & extensions.keys()
+    if duplicate:
+        raise InputError(
+            "runtime extension shadows adapter subjects: "
+            + ", ".join(sorted(duplicate))
+        )
+    value = config.model_dump(mode="json", by_alias=True)
+    value["subjects"].update(
+        {
+            name: subject.model_dump(mode="json", by_alias=True)
+            for name, subject in extensions.items()
+        }
+    )
+    value["capabilities"] = sorted(
+        set(config.capabilities).union(
+            *(subject.required_capabilities for subject in extensions.values())
+        )
+    )
+    return parse_adapter(value)
 
 
 def runtime_path(_fork: Fork, _source: Path, explicit: str | None) -> Path:
@@ -217,7 +244,7 @@ def cmd_subjects(command: SubjectsCliCommand) -> int:
     document = subjects_contract(
         fork=fork,
         source=source,
-        adapter=adapter_config(fork),
+        adapter=adapter_config(fork, optional_runtime(command.runtime)),
         repository_root=ROOT,
         overridden=fork.id in overrides,
         runtime=optional_runtime(command.runtime),
@@ -243,7 +270,7 @@ def cmd_preflight(command: PreflightCliCommand) -> int:
     document = preflight_contract(
         fork=fork,
         source=source,
-        adapter=adapter_config(fork),
+        adapter=adapter_config(fork, optional_runtime(command.runtime)),
         runtime=optional_runtime(command.runtime),
         subject=command.subject,
         operation=command.operation,
@@ -332,7 +359,7 @@ def cmd_interactive(command: InteractiveCliCommand) -> int:
     executable = runtime_path(fork, source, command.runtime)
     if not executable.is_file():
         raise InputError(f"runtime executable not found: {executable}")
-    config = adapter_config(fork)
+    config = adapter_config(fork, executable)
     subjects = {
         name: frozenset(Capability(value) for value in subject.required_capabilities)
         for name, subject in config.subjects.items()
