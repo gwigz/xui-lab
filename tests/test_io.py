@@ -1,13 +1,40 @@
 from __future__ import annotations
 
+import json
 import subprocess
 import tempfile
+import tracemalloc
 import unittest
 from pathlib import Path
 
 from xui_lab.contracts import RuntimeMetadataContract
 from xui_lab.domain import ForkId
-from xui_lab.io import git_commit, matching_runtime_commit
+from xui_lab.io import git_commit, matching_runtime_commit, write_json
+
+
+class JsonWriterTests(unittest.TestCase):
+    def test_preserves_sorted_indented_utf8_bytes_and_final_newline(self) -> None:
+        value = {"z": [None, True, 1.5, "café\n雪"], "a": {"b": []}}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "nested" / "trace.json"
+            write_json(path, value)
+            self.assertEqual(
+                (json.dumps(value, indent=2, sort_keys=True) + "\n").encode(),
+                path.read_bytes(),
+            )
+
+    def test_large_trace_serialization_has_bounded_memory(self) -> None:
+        trace = [{"response": {"result": "x" * (512 * 1024)}}] * 64
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "trace.json"
+            tracemalloc.start()
+            try:
+                write_json(path, trace)
+                _, peak = tracemalloc.get_traced_memory()
+            finally:
+                tracemalloc.stop()
+            self.assertGreater(path.stat().st_size, 32 * 1024 * 1024)
+            self.assertLess(peak, 4 * 1024 * 1024)
 
 
 class GitIdentityTests(unittest.TestCase):

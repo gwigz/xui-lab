@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
 import shutil
 import tempfile
@@ -16,7 +15,6 @@ from .contracts import (
     ArtifactEntry,
     ArtifactKind,
     ArtifactManifest,
-    RuntimeExchangeEvent,
     Selector,
     error_record,
     parse_capture_metadata,
@@ -39,6 +37,7 @@ from .errors import (
     RuntimeFailure,
 )
 from .io import (
+    file_digest,
     git_commit,
     matching_runtime_commit,
     read_json,
@@ -78,6 +77,7 @@ from .operations import (
 )
 from .protocol import RuntimeProcess
 from .selectors import excerpt_node, require_unique, wire_selector
+from .trace import EventTrace
 
 
 @dataclass(frozen=True)
@@ -252,6 +252,7 @@ class Lab:
         stability: WaitForStable = WaitForStable(),
         interactive: bool = False,
         strict_layout_diagnostics: bool = False,
+        keep_trace: bool = False,
         request_id: str | None = None,
         request_timeout: float = 10.0,
         shutdown_timeout: float = 10.0,
@@ -294,6 +295,7 @@ class Lab:
             subject=subject,
             fixture=fixture_contract.id if fixture is not None else None,
             strict_layout_diagnostics=strict_layout_diagnostics,
+            keep_trace=keep_trace,
             request_id=request_id,
         )
         try:
@@ -358,12 +360,13 @@ class Window:
         subject: str,
         fixture: str | None,
         strict_layout_diagnostics: bool = False,
+        keep_trace: bool = False,
         request_id: str | None = None,
     ):
         self.runtime = runtime
         self.artifact_dir = artifact_dir
         self.stability = stability
-        self.trace: list[dict[str, Any]] = []
+        self._trace = EventTrace(artifact_dir / "event-trace.json.gz")
         self.capabilities: frozenset[Capability] = frozenset()
         self.event_apis: dict[str, Any] = {}
         self.input_operations: frozenset[str] = frozenset()
@@ -373,6 +376,7 @@ class Window:
         self._subject = subject
         self._fixture = fixture
         self._strict_layout_diagnostics = strict_layout_diagnostics
+        self._keep_trace = keep_trace
         self._request_id = request_id
         self._finished = False
         self._capture_sequence = 0
@@ -398,18 +402,7 @@ class Window:
 
     def _request(self, command: dict[str, Any]) -> dict[str, Any]:
         response = self.runtime.request(command)
-        event = RuntimeExchangeEvent(
-            schemaVersion=SCHEMA_VERSION,
-            type="event",
-            event="runtimeExchange",
-            sequence=len(self.trace),
-            operation=str(command.get("op", "unknown")),
-            command={"schemaVersion": SCHEMA_VERSION, **command},
-            response=response,
-        )
-        self.trace.append(
-            event.model_dump(mode="json", by_alias=True, exclude_none=True)
-        )
+        self._trace.append(command, response)
         result = response["result"]
         assert isinstance(result, dict)
         return result
@@ -837,7 +830,8 @@ class Window:
         except RuntimeFailure as error:
             if failure is None:
                 close_failure = error
-        write_json(self.artifact_dir / "event-trace.json", self.trace)
+        self._trace.close()
+        prune_trace = failure is None and close_failure is None and not self._keep_trace
         if failure is None and close_failure is None:
             write_json(self.artifact_dir / "diagnostics.json", {"passed": True})
         elif failure is None and close_failure is not None:
@@ -851,7 +845,9 @@ class Window:
                     mode="json", by_alias=True, exclude_none=True
                 ),
             )
-        self._write_artifact_manifest()
+        self._write_artifact_manifest(exclude_trace=prune_trace)
+        if prune_trace:
+            self._trace.path.unlink()
         self._finished = True
         if close_failure is not None:
             raise close_failure
@@ -921,6 +917,7 @@ class Window:
             "ui-tree.json": "tree",
             "ui-tree-export.json": "tree",
             "event-trace.json": "eventTrace",
+            "event-trace.json.gz": "eventTrace",
             "diagnostics.json": "diagnostics",
             "diagnostics-runtime.json": "diagnostics",
             "error.json": "error",
@@ -928,12 +925,14 @@ class Window:
         }
         return kinds.get(path.name, "other")
 
-    def _write_artifact_manifest(self) -> None:
+    def _write_artifact_manifest(self, *, exclude_trace: bool = False) -> None:
         entries = []
         for path in sorted(self.artifact_dir.rglob("*")):
             if not path.is_file() or path.name == "artifact-manifest.json":
                 continue
-            data = path.read_bytes()
+            if exclude_trace and path == self._trace.path:
+                continue
+            size, sha256 = file_digest(path)
             kind = self._artifact_kind(path)
             record = next(
                 (item for item in self._capture_records if item.path == path.resolve()),
@@ -943,8 +942,8 @@ class Window:
                 ArtifactEntry(
                     kind=kind,
                     path=str(path.resolve()),
-                    size=len(data),
-                    sha256=hashlib.sha256(data).hexdigest(),
+                    size=size,
+                    sha256=sha256,
                     action=record.action
                     if record is not None and kind == "frame"
                     else None,

@@ -83,6 +83,10 @@ class CommandLineTests(unittest.TestCase):
 
         self.assertTrue(command.strict_layout_diagnostics)
 
+    def test_run_can_keep_a_successful_trace(self) -> None:
+        self.assertFalse(parse_command(["run"]).keep_trace)
+        self.assertTrue(parse_command(["run", "--keep-trace"]).keep_trace)
+
     def test_operations_json_discovers_queries_inputs_and_arguments(self) -> None:
         stdout = StringIO()
         stderr = StringIO()

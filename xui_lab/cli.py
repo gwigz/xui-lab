@@ -340,6 +340,7 @@ def cmd_run(command: RunCliCommand) -> int:
                 capabilities=scenario.capabilities,
                 fixture=scenario.fixture,
                 strict_layout_diagnostics=command.strict_layout_diagnostics,
+                keep_trace=command.keep_trace,
                 request_id=command.request_id,
             ) as window:
                 scenario.run(window)
@@ -625,6 +626,11 @@ def parser() -> argparse.ArgumentParser:
     run.add_argument("--runtime")
     run.add_argument("--artifacts", default=str(default_artifact_root()))
     run.add_argument("--strict-layout-diagnostics", action="store_true")
+    run.add_argument(
+        "--keep-trace",
+        action="store_true",
+        help="Keep the compressed event trace after a successful scenario.",
+    )
     _add_dry_run(run)
     interactive = commands.add_parser("interactive")
     interactive.add_argument("subject")

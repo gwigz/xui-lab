@@ -112,6 +112,36 @@ with actionable findings and to check once more when the scenario finishes.
 The failing capture and its sidecar remain available in the scenario artifact
 directory.
 
+### Artifact retention
+
+A successful scenario keeps its captures, capture metadata, diagnostics, runtime
+log, and artifact manifest. The runner removes its event trace after successful
+runtime shutdown. Pass `run --keep-trace` or `Lab.open(keep_trace=True)` to keep
+the trace. A scenario or shutdown failure always retains the trace, even when
+`keep_trace` is false.
+
+Traces now use `event-trace.json.gz` instead of `event-trace.json`. Decompression
+returns the same JSON array of `runtimeExchange` events, with compact whitespace
+instead of indentation. Each event follows `schemas/event.schema.json`. Commands,
+responses, full widget trees, and event sequence numbers are preserved. Events
+are serialized and compressed as they arrive, so memory does not grow with the
+number of exchanges. Compression also limits disk use during the scenario.
+
+The manifest labels the compressed file `eventTrace`. Its size and SHA-256 refer
+to the compressed bytes. `xui_lab.io.read_json(path)` accepts both JSON and gzip
+JSON files and loads the document into memory. For large traces, use a streaming
+parser. This command lists recorded operations without loading the whole trace:
+
+```sh
+gzip -dc artifacts/readme-example/readme_example/event-trace.json.gz |
+  jq --stream 'select(.[0] == [.[0][0], "operation"]) | .[1]'
+```
+
+Other JSON artifacts retain their sorted keys, two-space indentation, and final
+newline. Their writer streams JSON, and manifest hashing reads files in chunks.
+
+### Record and replay
+
 `record --session SESSION_ID --output FILE` reads the runtime's input history
 and current production tree. It ranks each transient control ID into the same
 selector contract used by one-shot commands, then writes a versioned recording

@@ -134,6 +134,15 @@ pass.
 readme_example: passed [artifacts/readme-example/readme_example]
 ```
 
+Successful scenarios keep captures, sidecars, diagnostics, and the artifact
+manifest. Pass `--keep-trace` to also keep the compressed event trace. Failed
+scenarios always keep the trace and failure artifacts.
+
+`event-trace.json.gz` contains the complete runtime exchanges as a compact JSON
+array. The runner compresses events as they arrive instead of retaining every
+widget tree in memory. See [artifact retention](docs/CLI_CONTRACT.md#artifact-retention)
+for the format and Python API.
+
 `Locator.scroll()` routes wheel input through `LLWindowCallbacks`.
 `Locator.drag_to()` offers cargo through `LLView::handleDragAndDrop` and drops
 only if the production handler accepts it. Use `Locator.drag_by()` or

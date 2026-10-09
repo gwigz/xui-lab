@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import sys
 from pathlib import Path
 from typing import Any
@@ -32,7 +31,7 @@ from .contracts import (
     TreeCliCommand,
 )
 from .errors import InputError
-from .io import write_json
+from .io import file_digest, write_json
 from .selectors import (
     excerpt_node,
     project_fields,
@@ -73,11 +72,11 @@ def _result(command: Any, data: dict[str, Any]) -> dict[str, Any]:
 def _write_tree_artifact(window: Window, tree: dict[str, Any]) -> dict[str, Any]:
     path = window.artifact_dir / "ui-tree.json"
     write_json(path, tree)
-    data = path.read_bytes()
+    size, sha256 = file_digest(path)
     return {
         "path": str(path.resolve()),
-        "size": len(data),
-        "sha256": hashlib.sha256(data).hexdigest(),
+        "size": size,
+        "sha256": sha256,
     }
 
 
@@ -168,11 +167,11 @@ def apply_window_command(window: Window, command: Any) -> dict[str, Any]:
         if isinstance(path, str):
             file_path = Path(path)
             if file_path.is_file():
-                blob = file_path.read_bytes()
+                size, sha256 = file_digest(file_path)
                 data = {
                     **data,
-                    "size": len(blob),
-                    "sha256": hashlib.sha256(blob).hexdigest(),
+                    "size": size,
+                    "sha256": sha256,
                 }
         return _result(command, data)
     if isinstance(command, ReloadCliCommand):

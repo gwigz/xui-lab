@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
 import textwrap
+import tracemalloc
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -295,6 +297,7 @@ class PlaywrightApiTests(unittest.TestCase):
         request_id: str | None = None,
         *,
         strict_layout_diagnostics: bool = False,
+        keep_trace: bool = False,
     ):
         return self.lab.open(
             artifact_id=f"python_api_{subject}",
@@ -310,6 +313,7 @@ class PlaywrightApiTests(unittest.TestCase):
             ),
             request_id=request_id,
             strict_layout_diagnostics=strict_layout_diagnostics,
+            keep_trace=keep_trace,
         )
 
     def commands(self) -> list[dict[str, object]]:
@@ -348,7 +352,7 @@ class PlaywrightApiTests(unittest.TestCase):
         self.assertEqual(self.fork_commit, manifest.fork_commit)
 
     def test_locator_resolves_before_each_action_and_expectation(self) -> None:
-        with self.open() as window:
+        with self.open(keep_trace=True) as window:
             checkbox = window.get_by_path(CHECKBOX_PATH)
             checkbox.expect_visible()
             checkbox.expect_enabled()
@@ -387,7 +391,7 @@ class PlaywrightApiTests(unittest.TestCase):
                 self.directory
                 / "artifacts"
                 / "python_api_test_widgets"
-                / "event-trace.json"
+                / "event-trace.json.gz"
             ).is_file()
         )
 
@@ -458,7 +462,83 @@ class PlaywrightApiTests(unittest.TestCase):
         self.assertEqual("python_api_test_widgets", manifest.artifact_id)
         self.assertEqual("alchemy", manifest.fork)
         self.assertEqual("req_manifest", manifest.request_id)
-        self.assertIn("eventTrace", {entry.kind for entry in manifest.artifacts})
+        self.assertNotIn("eventTrace", {entry.kind for entry in manifest.artifacts})
+        self.assertFalse((manifest_path.parent / "event-trace.json.gz").exists())
+
+    def test_kept_trace_is_complete_and_manifest_hash_matches_compressed_file(
+        self,
+    ) -> None:
+        with self.open(keep_trace=True) as window:
+            window.get_by_path(CHECKBOX_PATH).click().expect_handled()
+            window.get_by_path(CHECKBOX_PATH).expect_value(True)
+        path = window.artifact_dir / "event-trace.json.gz"
+        events = read_json(path)
+        self.assertEqual(list(range(len(events))), [e["sequence"] for e in events])
+        self.assertEqual("initialize", events[0]["operation"])
+        self.assertEqual("query", events[-1]["operation"])
+        self.assertEqual(True, events[-1]["response"]["result"]["children"][0]["value"])
+        manifest = ArtifactManifest.model_validate(
+            read_json(window.artifact_dir / "artifact-manifest.json")
+        )
+        entry = next(item for item in manifest.artifacts if item.kind == "eventTrace")
+        self.assertEqual(str(path), entry.path)
+        self.assertEqual(path.stat().st_size, entry.size)
+        self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), entry.sha256)
+
+    def test_failed_scenario_keeps_trace_and_failure_artifacts(self) -> None:
+        with self.assertRaisesRegex(AssertionError, "scenario failed"):
+            with self.open() as window:
+                window.get_by_path(CHECKBOX_PATH).click()
+                (window.artifact_dir / "review.png").write_bytes(b"capture")
+                raise AssertionError("scenario failed")
+        path = window.artifact_dir / "event-trace.json.gz"
+        events = read_json(path)
+        self.assertIn("input", [e["operation"] for e in events])
+        self.assertEqual("diagnostics", events[-1]["operation"])
+        self.assertTrue((window.artifact_dir / "ui-tree.json").is_file())
+        self.assertEqual(b"capture", (window.artifact_dir / "review.png").read_bytes())
+        self.assertIn("capture", [e["operation"] for e in events])
+        self.assertFalse(read_json(window.artifact_dir / "diagnostics.json")["passed"])
+
+    def test_failed_shutdown_keeps_trace(self) -> None:
+        for failure in (7, RuntimeFailure("shutdown failed")):
+            with self.subTest(failure=failure):
+                window = self.open()
+                window.runtime.close()
+                with patch.object(window.runtime, "close") as close:
+                    if isinstance(failure, int):
+                        close.return_value = failure
+                    else:
+                        close.side_effect = failure
+                    with self.assertRaises(RuntimeFailure):
+                        window.close()
+                self.assertTrue(read_json(window.artifact_dir / "event-trace.json.gz"))
+                self.assertFalse(
+                    read_json(window.artifact_dir / "diagnostics.json")["passed"]
+                )
+
+    def test_manifest_hashes_large_artifacts_with_bounded_memory(self) -> None:
+        with self.open() as window:
+            path = window.artifact_dir / "large.bin"
+            block = bytes(range(256)) * 4096
+            expected = hashlib.sha256()
+            with path.open("wb") as stream:
+                for _ in range(16):
+                    stream.write(block)
+                    expected.update(block)
+            tracemalloc.start()
+            try:
+                window._write_artifact_manifest()
+                _, peak = tracemalloc.get_traced_memory()
+            finally:
+                tracemalloc.stop()
+            manifest = ArtifactManifest.model_validate(
+                read_json(window.artifact_dir / "artifact-manifest.json")
+            )
+            entry = next(item for item in manifest.artifacts if item.path == str(path))
+            self.assertEqual(16 * len(block), entry.size)
+            self.assertEqual(expected.hexdigest(), entry.sha256)
+            self.assertLess(peak, 3 * 1024 * 1024)
 
     def test_default_artifact_root_stays_outside_the_checkout(self) -> None:
         root = default_artifact_root()

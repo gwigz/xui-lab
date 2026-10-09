@@ -690,6 +690,7 @@ class RunCliCommand(CliCommandBase):
     strict_layout_diagnostics: bool = Field(
         default=False, alias="strictLayoutDiagnostics"
     )
+    keep_trace: bool = Field(default=False, alias="keepTrace")
 
 
 class InteractiveCliCommand(CliCommandBase):

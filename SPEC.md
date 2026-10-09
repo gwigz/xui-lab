@@ -158,6 +158,10 @@ branches without changing the submodule commit.
 - Scenario artifacts consist of a rendered frame, a UI tree, an event trace,
   and diagnostics. The runner writes all artifacts before it exits after a
   failure.
+- The runner streams complete runtime exchanges to a compressed JSON trace.
+  A successful scenario removes that trace unless retention was requested.
+  Failed scenarios retain it. Captures, diagnostics, and the artifact manifest
+  remain available after either outcome.
 
 ## Testing decisions
 

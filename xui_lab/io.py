@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import gzip
+import hashlib
 import json
 import re
 import subprocess
@@ -20,7 +22,12 @@ from .errors import InputError, RuntimeFailure
 
 def read_json(path: Path) -> Any:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        with (
+            gzip.open(path, "rt", encoding="utf-8")
+            if path.suffix == ".gz"
+            else path.open(encoding="utf-8")
+        ) as stream:
+            return json.load(stream)
     except OSError as error:
         raise InputError(f"cannot read {path}: {error}") from error
     except json.JSONDecodeError as error:
@@ -29,9 +36,19 @@ def read_json(path: Path) -> Any:
 
 def write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    with path.open("w", encoding="utf-8") as stream:
+        json.dump(value, stream, indent=2, sort_keys=True)
+        stream.write("\n")
+
+
+def file_digest(path: Path) -> tuple[int, str]:
+    digest = hashlib.sha256()
+    size = 0
+    with path.open("rb") as stream:
+        while block := stream.read(1024 * 1024):
+            digest.update(block)
+            size += len(block)
+    return size, digest.hexdigest()
 
 
 def parse_manifest(root: Path, raw: Any) -> Manifest:
